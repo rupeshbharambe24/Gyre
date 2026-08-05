@@ -47,7 +47,11 @@ The build is measurement-gated: each step ends with a number against a baseline.
   independent exponential (Poisson) delay before forwarding, so packets can leave in
   a different order than they arrived; clients emit Loopix cover "loops" that are
   byte-for-byte indistinguishable on the wire from real traffic.
-- [ ] S3 — erasure-coded multipath (the novel core)
+- [x] **S3 — erasure-coded multipath (the novel core).** A message is Reed–Solomon
+  split into `m`-of-`k` fragments, each wrapped in its own onion and sent along a
+  disjoint path; the destination reassembles from any `m`. Honest framing (**D7**):
+  this hardens the *middle path* against a partial observer — it is **not** a
+  reconstruction-threshold guarantee, and endpoints stay exposed.
 - [ ] S4 — FAST / MIX adaptive lanes
 - [ ] GATE — adversary-emulation harness: measure correlation vs. a baseline
 - [ ] S5 — QUIC/MASQUE transport upgrade, then the inbound rotor
@@ -55,7 +59,7 @@ The build is measurement-gated: each step ends with a number against a baseline.
 ## Quickstart
 
 ```bash
-# Run the S2 demo: mixing + cover traffic across a localhost testnet
+# Run the S3 demo: erasure-coded multipath with one path dropped
 cargo run -p whirl-node
 
 # Tests, format, lint
@@ -64,19 +68,20 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-Example S2 output (relays hold each packet for a Poisson delay; #77 is cover
-traffic, #42 is the real message — indistinguishable on the wire):
+Example S3 output (three disjoint paths, path 1 dropped, still rebuilt from 2 of 3):
 
 ```text
-Whirlpool · S2 — Poisson mixing + cover traffic  (3 hops, lane=mix)
-client  send real packet (45 bytes) with Poisson per-hop delay; cover loops running
-[relay #1] hold 48ms -> forward to #2
-[relay #1] hold 10ms -> forward to #2
-[relay #2] hold 22ms -> forward to #3
-[relay #3] EXIT -> deliver 20 bytes to dest #77
-[relay #3] EXIT -> deliver 45 bytes to dest #42
-delivered: "a real message, mixed among the cover traffic"
-OK  real packet mixed among cover, held by Poisson delays, delivered intact.
+Whirlpool · S3 — erasure-coded multipath  (2-of-3 across disjoint paths, lane=mix)
+path 0: relays [1, 2, 3] -> dest #200
+path 1: relays [4, 5, 6] -> dest #200
+path 2: relays [7, 8, 9] -> dest #200
+client  split 54 bytes into 3 fragments; sending all but path 1 (dropped)
+[relay #1] hold 27ms -> forward to #2
+[relay #7] hold 23ms -> forward to #8
+[relay #3] EXIT -> deliver 45 bytes to dest #200
+[relay #9] EXIT -> deliver 45 bytes to dest #200
+delivered: "a message split across branches, rebuilt from a subset"
+OK  path 1 was dropped, yet 2-of-3 fragments rebuilt the message.
 ```
 
 ## Layout
@@ -85,8 +90,9 @@ OK  real packet mixed among cover, held by Poisson delays, delivered intact.
 |---|---|
 | `whirl-common` | Shared constants and types (e.g. `FlowClass`) |
 | `whirl-sphinx` | Typed wrapper over the audited Sphinx mix-packet format |
-| `whirl-net` | Async transport, directory, and relay server (carries onions over the wire) |
-| `whirl-node` | Demo: spin up a testnet and route an onion across it |
+| `whirl-fec` | Reed–Solomon erasure coding: fragment a message, reassemble from any `m` |
+| `whirl-net` | Async transport, directory, relay server, mixing, cover traffic |
+| `whirl-node` | Demo: spin up a testnet and route traffic across it |
 
 ## Design principle
 

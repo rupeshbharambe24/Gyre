@@ -15,5 +15,6 @@ path = "src/main.rs"
 [dependencies]
 whirl-common = { path = "../whirl-common" }
 whirl-sphinx = { path = "../whirl-sphinx" }
+whirl-fec = { path = "../whirl-fec" }
 whirl-net = { path = "../whirl-net" }
 tokio.workspace = true

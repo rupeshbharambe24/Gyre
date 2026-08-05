@@ -112,6 +112,23 @@ pub async fn send_to(addr: SocketAddr, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// Wrap `payload` in a Sphinx onion through `route` — with an exponential per-hop
+/// mixing delay of mean `per_hop_mean` — to `dest`, and send it to `first_hop`.
+///
+/// This is the per-fragment send used by multipath (S3): the caller loops over
+/// disjoint paths, one fragment each.
+pub async fn send_onion(
+    first_hop: SocketAddr,
+    route: &[Node],
+    dest: [u8; DEST_ADDRESS_LEN],
+    payload: &[u8],
+    per_hop_mean: Duration,
+) -> Result<()> {
+    let delays = exponential_delays(route.len(), per_hop_mean);
+    let packet = wrap_with_delays(payload, route, dest, null_surb(), &delays)?;
+    send_to(first_hop, &packet_to_bytes(&packet)).await
+}
+
 // ---------------------------------------------------------------------------
 // Cover traffic (Loopix loops).
 // ---------------------------------------------------------------------------
