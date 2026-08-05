@@ -10,19 +10,27 @@
 //! in the audited [`sphinx_packet`] crate (Nym's implementation of the Sphinx paper,
 //! Danezis–Goldberg). This crate only adds an ergonomic, well-typed wrapper.
 //!
-//! What is *not* here yet (later milestones): per-hop Poisson mixing delay (S2),
-//! erasure-coded multipath (S3), the FAST/MIX lanes (S4), and the real transport.
+//! Per-hop Poisson mixing delays (S2) are supported here via [`wrap_with_delays`]
+//! and [`exponential_delays`]; still to come are erasure-coded multipath (S3) and
+//! the FAST/MIX lanes (S4).
+
+use std::time::Duration;
 
 use sphinx_packet::constants::{
     DESTINATION_ADDRESS_LENGTH, IDENTIFIER_LENGTH, NODE_ADDRESS_LENGTH,
 };
-use sphinx_packet::header::delays::Delay;
+use sphinx_packet::header::delays::generate_from_average_duration;
 use sphinx_packet::packet::ProcessedPacketData;
 use sphinx_packet::route::{
-    Destination, DestinationAddressBytes, Node, NodeAddressBytes, SURBIdentifier,
+    Destination, DestinationAddressBytes, NodeAddressBytes, SURBIdentifier,
 };
 use sphinx_packet::SphinxPacket;
 use x25519_dalek::{PublicKey, StaticSecret};
+
+/// Re-exported so callers can build routes and delay schedules without depending
+/// on `sphinx-packet` directly.
+pub use sphinx_packet::header::delays::Delay;
+pub use sphinx_packet::route::Node;
 
 /// Length, in bytes, of a relay address label in the Sphinx format we use.
 pub const ADDRESS_LEN: usize = NODE_ADDRESS_LENGTH;
@@ -111,23 +119,51 @@ pub fn null_surb() -> SURBIdentifier {
 }
 
 /// Wrap `payload` into a Sphinx onion routed through `route` (in order) to
-/// `dest_address`.
+/// `dest_address`, with an explicit per-hop mixing-delay schedule.
 ///
-/// S0 uses zero mixing delay at every hop; per-hop Poisson delay is added in S2.
+/// `delays.len()` must equal `route.len()`: `delays[i]` is how long hop `i` holds
+/// the packet before forwarding (the exit hop's delay is unused).
+pub fn wrap_with_delays(
+    payload: &[u8],
+    route: &[Node],
+    dest_address: [u8; DESTINATION_ADDRESS_LENGTH],
+    surb_id: SURBIdentifier,
+    delays: &[Delay],
+) -> Result<SphinxPacket> {
+    let destination = Destination::new(DestinationAddressBytes::from_bytes(dest_address), surb_id);
+    Ok(SphinxPacket::new(
+        payload.to_vec(),
+        route,
+        &destination,
+        delays,
+    )?)
+}
+
+/// Wrap `payload` with zero mixing delay at every hop — a FAST-lane or test packet.
 pub fn wrap(
     payload: &[u8],
     route: &[Node],
     dest_address: [u8; DESTINATION_ADDRESS_LENGTH],
     surb_id: SURBIdentifier,
 ) -> Result<SphinxPacket> {
-    let destination = Destination::new(DestinationAddressBytes::from_bytes(dest_address), surb_id);
-    let delays: Vec<Delay> = route.iter().map(|_| Delay::new_from_nanos(0)).collect();
-    Ok(SphinxPacket::new(
-        payload.to_vec(),
-        route,
-        &destination,
-        &delays,
-    )?)
+    let delays = vec![Delay::new_from_nanos(0); route.len()];
+    wrap_with_delays(payload, route, dest_address, surb_id, &delays)
+}
+
+/// Sample `n` independent exponential per-hop mixing delays with the given mean
+/// (Loopix-style Poisson mixing — the memoryless delay is what breaks the ordering
+/// an observer could otherwise use). A zero mean yields zero delays.
+pub fn exponential_delays(n: usize, mean: Duration) -> Vec<Delay> {
+    generate_from_average_duration(n, mean)
+}
+
+/// Sample one exponential interval with the given mean, used to pace Poisson
+/// cover-traffic emission.
+pub fn exponential_interval(mean: Duration) -> Duration {
+    generate_from_average_duration(1, mean)
+        .first()
+        .map(Delay::to_duration)
+        .unwrap_or_default()
 }
 
 /// Process one packet with a relay secret key. Prefer [`Relay::process`]; this is
@@ -167,6 +203,36 @@ pub fn packet_from_bytes(bytes: &[u8]) -> Result<SphinxPacket> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Cover traffic only works if it is indistinguishable from real traffic on the
+    /// wire. Sphinx pads every payload to a fixed size, so a tiny cover marker and a
+    /// longer real message serialize to exactly the same number of bytes.
+    #[test]
+    fn real_and_cover_packets_are_the_same_wire_size() {
+        let relays: Vec<Relay> = (1u8..=3)
+            .map(|i| Relay::new([i; NODE_ADDRESS_LENGTH]))
+            .collect();
+        let route: Vec<Node> = relays.iter().map(Relay::as_node).collect();
+        let dest = [7u8; DESTINATION_ADDRESS_LENGTH];
+
+        let real = wrap(b"a short but real message", &route, dest, null_surb()).unwrap();
+        let cover = wrap(b"x", &route, dest, null_surb()).unwrap();
+
+        assert_eq!(
+            packet_to_bytes(&real).len(),
+            packet_to_bytes(&cover).len(),
+            "cover and real packets must be indistinguishable by length"
+        );
+    }
+
+    /// The delay sampler returns one delay per hop, and a zero mean is safe (no
+    /// division-by-zero) and yields all-zero delays.
+    #[test]
+    fn exponential_delays_respect_count_and_zero_mean() {
+        assert_eq!(exponential_delays(3, Duration::from_millis(50)).len(), 3);
+        let zeros = exponential_delays(4, Duration::ZERO);
+        assert!(zeros.iter().all(|d| d.to_nanos() == 0));
+    }
 
     /// The core S0 guarantee: a 3-hop onion delivers the exact payload, and every
     /// middle relay learns only the *next* hop's address — never both ends.

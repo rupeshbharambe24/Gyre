@@ -43,7 +43,10 @@ The build is measurement-gated: each step ends with a number against a baseline.
   travels client → relay → relay → exit → destination over the network, resolving
   next hops through a directory. (Transport is length-prefixed frames over async
   TCP for now; the QUIC/MASQUE upgrade is a later milestone.)
-- [ ] S2 — per-hop Poisson mixing + cover loops
+- [x] **S2 — mixing + cover traffic.** Each relay holds every packet for an
+  independent exponential (Poisson) delay before forwarding, so packets can leave in
+  a different order than they arrived; clients emit Loopix cover "loops" that are
+  byte-for-byte indistinguishable on the wire from real traffic.
 - [ ] S3 — erasure-coded multipath (the novel core)
 - [ ] S4 — FAST / MIX adaptive lanes
 - [ ] GATE — adversary-emulation harness: measure correlation vs. a baseline
@@ -52,7 +55,7 @@ The build is measurement-gated: each step ends with a number against a baseline.
 ## Quickstart
 
 ```bash
-# Run the S1 demo: route a Sphinx onion across a localhost testnet of relays
+# Run the S2 demo: mixing + cover traffic across a localhost testnet
 cargo run -p whirl-node
 
 # Tests, format, lint
@@ -61,20 +64,19 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-Example S1 output:
+Example S2 output (relays hold each packet for a Poisson delay; #77 is cover
+traffic, #42 is the real message — indistinguishable on the wire):
 
 ```text
-Whirlpool · S1 — Sphinx onion over the network  (3 hops, lane=fast)
-relay #1  listening on 127.0.0.1:63771
-relay #2  listening on 127.0.0.1:63772
-relay #3  listening on 127.0.0.1:63773
-dest  #42 listening on 127.0.0.1:63774
-client  wrap 51 bytes -> send to first hop 127.0.0.1:63771
-[relay #1] forward -> #2
-[relay #2] forward -> #3
-[relay #3] EXIT -> deliver 51 bytes to dest #42
-delivered: "hello from the client, across the whirlpool network"
-OK  onion crossed 3 networked hops; no relay saw both ends.
+Whirlpool · S2 — Poisson mixing + cover traffic  (3 hops, lane=mix)
+client  send real packet (45 bytes) with Poisson per-hop delay; cover loops running
+[relay #1] hold 48ms -> forward to #2
+[relay #1] hold 10ms -> forward to #2
+[relay #2] hold 22ms -> forward to #3
+[relay #3] EXIT -> deliver 20 bytes to dest #77
+[relay #3] EXIT -> deliver 45 bytes to dest #42
+delivered: "a real message, mixed among the cover traffic"
+OK  real packet mixed among cover, held by Poisson delays, delivered intact.
 ```
 
 ## Layout

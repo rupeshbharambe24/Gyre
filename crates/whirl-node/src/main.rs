@@ -1,34 +1,35 @@
-//! **S1 demo.** Spins up a small localhost testnet of relays, then wraps a message
-//! into a Sphinx onion at the "client" and sends it in — watching it cross real
-//! sockets, hop by hop, until the destination receives the exact payload.
+//! **S2 demo.** Routes a real onion across a localhost testnet while a stream of
+//! Loopix cover "loops" runs alongside it, and each relay holds every packet for an
+//! exponential (Poisson) delay before forwarding. On the wire, cover and real look
+//! identical; the delays reorder traffic so timing can't line packets up.
 //!
 //! Run it with:
 //!
 //! ```text
 //! cargo run -p whirl-node
 //! ```
-//!
-//! Each relay only ever learns the *next* hop; the relay lines (on stderr) show the
-//! forwarding, and the client/destination lines (on stdout) show the round trip.
 
 use std::net::SocketAddr;
+use std::time::Duration;
 
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use whirl_common::{FlowClass, DEFAULT_HOPS};
-use whirl_net::{read_frame, send_to, Directory, RelayServer};
-use whirl_sphinx::{null_surb, packet_to_bytes, wrap, Relay, ADDRESS_LEN, DEST_ADDRESS_LEN};
+use whirl_net::{emit_loops, read_frame, send_to, Directory, RelayServer};
+use whirl_sphinx::{
+    exponential_delays, null_surb, packet_to_bytes, wrap_with_delays, Relay, ADDRESS_LEN,
+    DEST_ADDRESS_LEN,
+};
 
 #[tokio::main]
 async fn main() {
     println!(
-        "Whirlpool · S1 — Sphinx onion over the network  ({} hops, lane={})",
+        "Whirlpool · S2 — Poisson mixing + cover traffic  ({} hops, lane={})",
         DEFAULT_HOPS,
-        FlowClass::Fast
+        FlowClass::Mix
     );
     println!("{}", "-".repeat(64));
 
-    // A localhost circuit of DEFAULT_HOPS relays, address-labelled 1..=N.
     let relays: Vec<Relay> = (1..=DEFAULT_HOPS as u8)
         .map(|i| Relay::new([i; ADDRESS_LEN]))
         .collect();
@@ -38,23 +39,25 @@ async fn main() {
     for relay in &relays {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind relay");
         let addr = listener.local_addr().unwrap();
-        println!("relay #{:<2} listening on {addr}", relay.address()[0]);
+        println!("relay #{:<2} on {addr}", relay.address()[0]);
         entries.push((relay.address(), addr));
         listeners.push(listener);
     }
 
-    // The destination sink.
+    // Real destination (#42) and a loop sink (#77) for the cover traffic.
     let dest_label = [42u8; DEST_ADDRESS_LEN];
-    let sink = TcpListener::bind("127.0.0.1:0").await.expect("bind sink");
-    let sink_addr = sink.local_addr().unwrap();
-    println!("dest  #{:<2} listening on {sink_addr}", dest_label[0]);
-    entries.push((dest_label, sink_addr));
+    let sink = TcpListener::bind("127.0.0.1:0").await.expect("bind dest");
+    entries.push((dest_label, sink.local_addr().unwrap()));
+    let loop_label = [77u8; DEST_ADDRESS_LEN];
+    let loop_sink = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind loop sink");
+    entries.push((loop_label, loop_sink.local_addr().unwrap()));
 
     let first_hop = entries[0].1;
     let dir = Directory::from_entries(entries);
     let route: Vec<_> = relays.iter().map(Relay::as_node).collect();
 
-    // Start every relay (verbose, so the demo prints each forward).
     for (relay, listener) in relays.into_iter().zip(listeners) {
         let server = RelayServer::new(relay, dir.clone()).verbose(true);
         tokio::spawn(async move {
@@ -62,32 +65,56 @@ async fn main() {
         });
     }
 
-    // The destination waits for one delivered frame.
+    // Real destination: wait for one delivered frame.
     let (tx, rx) = oneshot::channel();
     tokio::spawn(async move {
         let (mut conn, _) = sink.accept().await.unwrap();
         let delivered = read_frame(&mut conn).await.unwrap().unwrap();
         let _ = tx.send(delivered);
     });
+    // Loop sink: silently drain cover packets.
+    tokio::spawn(async move {
+        while let Ok((mut conn, _)) = loop_sink.accept().await {
+            tokio::spawn(async move {
+                let _ = read_frame(&mut conn).await;
+            });
+        }
+    });
 
-    let message = b"hello from the client, across the whirlpool network";
+    // Cover traffic: a few Loopix loops, indistinguishable from real on the wire.
+    let cover_route = route.clone();
+    tokio::spawn(async move {
+        let _ = emit_loops(
+            first_hop,
+            &cover_route,
+            loop_label,
+            Duration::from_millis(15),
+            Duration::from_millis(10),
+            3,
+        )
+        .await;
+    });
+
+    // The real message, with exponential per-hop mixing delays.
+    let message = b"a real message, mixed among the cover traffic";
     println!("{}", "-".repeat(64));
     println!(
-        "client  wrap {} bytes -> send to first hop {first_hop}",
+        "client  send real packet ({} bytes) with Poisson per-hop delay; cover loops running",
         message.len()
     );
-    let packet = wrap(message, &route, dest_label, null_surb()).expect("wrap onion");
+    let delays = exponential_delays(route.len(), Duration::from_millis(40));
+    let packet = wrap_with_delays(message, &route, dest_label, null_surb(), &delays).expect("wrap");
     send_to(first_hop, &packet_to_bytes(&packet))
         .await
-        .expect("send to first hop");
+        .expect("send");
 
-    let delivered = tokio::time::timeout(std::time::Duration::from_secs(5), rx)
+    let delivered = tokio::time::timeout(Duration::from_secs(5), rx)
         .await
         .expect("delivery timed out")
         .expect("sink dropped the sender");
 
     println!("{}", "-".repeat(64));
-    assert_eq!(delivered, message, "payload survived the network intact");
+    assert_eq!(delivered, message, "payload survived mixing + cover intact");
     println!("delivered: {:?}", String::from_utf8_lossy(&delivered));
-    println!("OK  onion crossed {DEFAULT_HOPS} networked hops; no relay saw both ends.");
+    println!("OK  real packet mixed among cover, held by Poisson delays, delivered intact.");
 }

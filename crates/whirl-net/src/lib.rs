@@ -19,10 +19,14 @@
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use whirl_sphinx::{packet_from_bytes, packet_to_bytes, Relay, Unwrapped, ADDRESS_LEN};
+use whirl_sphinx::{
+    exponential_delays, exponential_interval, null_surb, packet_from_bytes, packet_to_bytes,
+    wrap_with_delays, Node, Relay, Unwrapped, ADDRESS_LEN, DEST_ADDRESS_LEN,
+};
 
 /// Largest frame we will read, as a denial-of-service guard. Real onion packets
 /// are a few kilobytes; this is generous headroom.
@@ -109,6 +113,36 @@ pub async fn send_to(addr: SocketAddr, bytes: &[u8]) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
+// Cover traffic (Loopix loops).
+// ---------------------------------------------------------------------------
+
+/// Emit `count` Loopix-style "loop" packets at exponential intervals (mean
+/// `interval`) through `route` to a client-controlled `loop_dest`.
+///
+/// Each loop is a fixed-size Sphinx packet indistinguishable on the wire from real
+/// traffic, so relays cannot tell cover from payload; the stream of loops is what
+/// makes an idle user look like an active one and inflates the effective anonymity
+/// set. In the full design a loop returns to the sender via a SURB so the client can
+/// notice dropped/blocked packets; here it routes to a loop sink the client owns.
+pub async fn emit_loops(
+    first_hop: SocketAddr,
+    route: &[Node],
+    loop_dest: [u8; DEST_ADDRESS_LEN],
+    interval: Duration,
+    per_hop_delay: Duration,
+    count: usize,
+) -> Result<()> {
+    const COVER_MARKER: &[u8] = b"whirlpool-cover-loop";
+    for _ in 0..count {
+        tokio::time::sleep(exponential_interval(interval)).await;
+        let delays = exponential_delays(route.len(), per_hop_delay);
+        let packet = wrap_with_delays(COVER_MARKER, route, loop_dest, null_surb(), &delays)?;
+        send_to(first_hop, &packet_to_bytes(&packet)).await?;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Relay server: accept onions, unwrap one layer, forward or deliver.
 // ---------------------------------------------------------------------------
 
@@ -168,15 +202,22 @@ async fn handle_conn(
             Unwrapped::Forward {
                 next_address,
                 packet,
-                delay_nanos: _, // honoured in S2 (Poisson mixing)
+                delay_nanos,
             } => {
                 let next = dir.lookup(&next_address).ok_or(Error::UnknownAddress)?;
                 if verbose {
                     eprintln!(
-                        "[relay #{}] forward -> #{}",
+                        "[relay #{}] hold {}ms -> forward to #{}",
                         relay.address()[0],
+                        delay_nanos / 1_000_000,
                         next_address[0]
                     );
+                }
+                // Loopix-style mixing: hold the packet for its per-hop exponential
+                // delay before forwarding, so packets arriving in one order can
+                // leave in another and an observer cannot match them by timing.
+                if delay_nanos > 0 {
+                    tokio::time::sleep(Duration::from_nanos(delay_nanos)).await;
                 }
                 send_to(next, &packet_to_bytes(&packet)).await?;
             }
