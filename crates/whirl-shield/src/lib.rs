@@ -27,6 +27,8 @@ use std::time::Duration;
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
 
+pub mod rendezvous;
+
 /// Length, in bytes, of an ingress relay address label (matches the fabric).
 pub const ADDR_LEN: usize = 32;
 

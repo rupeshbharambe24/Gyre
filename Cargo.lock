@@ -694,6 +694,9 @@ version = "0.0.1"
 dependencies = [
  "hmac",
  "sha2",
+ "thiserror",
+ "tokio",
+ "whirl-net",
 ]
 
 [[package]]

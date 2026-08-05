@@ -1,13 +1,18 @@
-//! Inbound-shield demo: watch the ingress hop (authorized client + origin agree, a
-//! scanner does not), and watch PoW admission cost rise with load while verification
-//! stays a single hash. Run it with `cargo run -p whirl-shield`.
+//! Inbound-shield demo: the ingress hops (authorized client + origin agree, a scanner
+//! does not), PoW admission cost rises with load while verification stays one hash, and
+//! a rendezvous lets the origin be reached without publishing any inbound address. Run
+//! it with `cargo run -p whirl-shield`.
 
 use std::time::Duration;
 
+use tokio::net::TcpListener;
+use whirl_net::{read_frame, write_frame};
+use whirl_shield::rendezvous::{dial, RendezvousRelay};
 use whirl_shield::{difficulty_for_load, IngressSchedule, Puzzle};
 
-fn main() {
-    println!("Whirlpool · Inbound Shield — MTD ingress hopping + PoW admission");
+#[tokio::main]
+async fn main() {
+    println!("Whirlpool · Inbound Shield — MTD hopping + PoW admission + rendezvous");
     println!("{}", "-".repeat(70));
 
     // ---- Moving-target-defense ingress hopping ----
@@ -46,9 +51,44 @@ fn main() {
         );
     }
     println!("{}", "-".repeat(70));
-    println!("Honest ceiling (D22): MTD serves an authorized/closed client set, not the open web;");
+
+    // ---- Rendezvous origin-hiding ----
+    println!("Rendezvous — the origin dials OUT; a client reaches it via a meeting point:");
+    let rp_listener = TcpListener::bind("127.0.0.1:0").await.expect("bind rp");
+    let rp_addr = rp_listener.local_addr().unwrap();
+    tokio::spawn(RendezvousRelay::new().serve(rp_listener));
+
+    let cookie = b"demo-rendezvous-cookie".to_vec();
+    let origin_cookie = cookie.clone();
+    let origin_task = tokio::spawn(async move {
+        let mut stream = dial(rp_addr, &origin_cookie).await.unwrap();
+        let request = read_frame(&mut stream).await.unwrap().unwrap();
+        let mut response = b"pong: ".to_vec();
+        response.extend_from_slice(&request);
+        write_frame(&mut stream, &response).await.unwrap();
+    });
+
+    let mut client_stream = dial(rp_addr, &cookie).await.expect("client dial");
+    write_frame(&mut client_stream, b"ping")
+        .await
+        .expect("send");
+    let response = read_frame(&mut client_stream).await.unwrap().unwrap();
+    origin_task.await.unwrap();
+
     println!(
-        "PoW re-prices asymmetry but a botnet outcomputes mobile clients, and it does nothing"
+        "  origin published NO inbound address; met the client at rendezvous :{}",
+        rp_addr.port()
     );
-    println!("for L3/L4 volumetric floods. A trust-topology win for tunnels, not raw capacity.");
+    println!(
+        "  client sent \"ping\" and received {:?} (the relay copied opaque bytes only)",
+        String::from_utf8_lossy(&response)
+    );
+    println!("{}", "-".repeat(70));
+    println!(
+        "Honest ceiling (D22): MTD + rendezvous serve an authorized/closed client set, not the"
+    );
+    println!(
+        "open web; PoW re-prices asymmetry but does nothing for L3/L4 floods. A trust-topology"
+    );
+    println!("win for authenticated tunnels, not raw scrubbing capacity.");
 }

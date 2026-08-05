@@ -67,7 +67,12 @@ The build is measurement-gated: each step ends with a number against a baseline.
   (server verifies in one hash). Honest ceiling (**D22**): MTD serves a *closed*,
   authorized client set (not the open web), and PoW re-prices asymmetry but does nothing
   for L3/L4 volumetric floods.
-- [ ] Inbound shield (rest) — rendezvous origin-hiding + anonymous capability tokens
+- [x] **Rendezvous origin-hiding.** The origin dials *out* to a rendezvous relay and
+  waits behind a shared cookie; the relay splices it to a client that presents the same
+  cookie, copying opaque bytes between them. The origin publishes **no inbound address**,
+  and the relay never learns either endpoint or the (end-to-end encrypted) content — the
+  trust topology a reverse-proxy CDN structurally cannot offer.
+- [ ] Inbound shield (rest) — anonymous capability tokens (fast-path past PoW, unlinkably)
 - [ ] S5 — QUIC/MASQUE transport upgrade (deferred: TCP framing works for now)
 
 **P0 (the core data plane) is complete: S0 → S4, plus the measurement GATE. The

@@ -13,5 +13,8 @@ name = "whirl-shield"
 path = "src/main.rs"
 
 [dependencies]
+whirl-net = { path = "../whirl-net" }
 hmac.workspace = true
 sha2.workspace = true
+tokio.workspace = true
+thiserror.workspace = true
