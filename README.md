@@ -58,12 +58,44 @@ The build is measurement-gated: each step ends with a number against a baseline.
   but note the honest ceiling (**D8**/**D21**): a partial observer can still separate
   the lanes by their observable delay distribution, so FAST and MIX partition the
   anonymity set rather than sharing one crowd.
-- [ ] GATE — adversary-emulation harness: measure correlation vs. a baseline
+- [x] **GATE — adversary-emulation harness.** A deterministic timing model runs a
+  *partial observer* correlation attack over many concurrent flows and measures it
+  against a baseline. **This is the go/no-go, and the numbers are honest** (see below).
 - [ ] S5 — QUIC/MASQUE transport upgrade, then the inbound rotor
+
+**P0 (the core data plane) is complete: S0 → S4, plus the measurement GATE.**
+
+## The GATE: what the measurement actually says
+
+```text
+ flows   window   mix/hop   accuracy   chance   note
+   50    1000ms      0ms      1.00     0.02   baseline: no mixing (FAST lane)
+   50    1000ms     50ms      0.11     0.02   MIX lane, healthy crowd
+   50    1000ms    150ms      0.04     0.02   more mixing
+    5    1000ms    150ms      0.44     0.20   same mixing, tiny crowd -> barely helps
+
+multipath exposure — fraction of flows a partial observer (on 20% of paths) touches:
+  single-path (k=1): 0.23
+  multipath  (k=3): 0.56
+```
+
+The honest verdict this produces — and it matches the design analysis:
+
+- **Mixing works, and it is the real correlation-resistance lever** — with no mixing a
+  timing observer links flows *perfectly* (1.00); with MIX-lane delay it collapses to
+  near chance.
+- **But it is gated on the crowd.** The same mixing with only a handful of concurrent
+  flows barely helps (0.44). Cleverness never manufactures anonymity — concurrent
+  traffic does.
+- **Multipath does *not* buy partial-observer correlation resistance** — it *widens*
+  exposure (0.23 → 0.56). It buys availability and content-splitting, per **D7**.
 
 ## Quickstart
 
 ```bash
+# Run the GATE report: the correlation sweep + multipath exposure
+cargo run -p whirl-adversary
+
 # Run the S4 demo: FAST vs MIX lanes on the same route, timed
 cargo run -p whirl-node
 
@@ -71,15 +103,6 @@ cargo run -p whirl-node
 cargo test --workspace
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
-```
-
-Example S4 output (same 3-hop route; the lane only changes the delay policy):
-
-```text
-Whirlpool · S4 — FAST / MIX adaptive lanes  (3 hops)
-FAST lane   mean/hop   0ms   ->   delivered in   15ms
- MIX lane   mean/hop  50ms   ->   delivered in  114ms
-OK  same route, two lanes: FAST trades anonymity for latency, MIX the reverse.
 ```
 
 ## Layout
@@ -91,6 +114,7 @@ OK  same route, two lanes: FAST trades anonymity for latency, MIX the reverse.
 | `whirl-fec` | Reed–Solomon erasure coding: fragment a message, reassemble from any `m` |
 | `whirl-net` | Async transport, directory, relay server, mixing, cover traffic |
 | `whirl-node` | Demo: spin up a testnet and route traffic across it |
+| `whirl-adversary` | The GATE: partial-observer correlation harness + measured verdict |
 
 ## Design principle
 

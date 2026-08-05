@@ -6,6 +6,7 @@ members = [
     "crates/whirl-fec",
     "crates/whirl-net",
     "crates/whirl-node",
+    "crates/whirl-adversary",
 ]
 
 [workspace.package]
