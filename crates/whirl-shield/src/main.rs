@@ -84,6 +84,20 @@ async fn main() {
         String::from_utf8_lossy(&response)
     );
     println!("{}", "-".repeat(70));
+
+    // ---- Anonymous capability tokens ----
+    println!("Capability tokens — redeem an unlinkable token to skip the PoW:");
+    let mut issuer = whirl_shield::token::Issuer::new();
+    let (state, blinded) = whirl_shield::token::blind();
+    let issued = issuer.issue(blinded).expect("issue");
+    let token = whirl_shield::token::unblind(state, issued).expect("unblind");
+    println!("  issuer saw only a blinded point (never the token)");
+    println!(
+        "  redeem #1: {}   redeem #2 (double-spend): {}",
+        issuer.redeem(&token),
+        issuer.redeem(&token)
+    );
+    println!("{}", "-".repeat(70));
     println!(
         "Honest ceiling (D22): MTD + rendezvous serve an authorized/closed client set, not the"
     );

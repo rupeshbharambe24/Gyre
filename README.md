@@ -72,11 +72,17 @@ The build is measurement-gated: each step ends with a number against a baseline.
   cookie, copying opaque bytes between them. The origin publishes **no inbound address**,
   and the relay never learns either endpoint or the (end-to-end encrypted) content — the
   trust topology a reverse-proxy CDN structurally cannot offer.
-- [ ] Inbound shield (rest) — anonymous capability tokens (fast-path past PoW, unlinkably)
+- [x] **Anonymous capability tokens.** A blind VOPRF (RFC 9497 shape) over ristretto:
+  a client that paid once obtains a token it can later redeem to skip the PoW, and the
+  issuer — which only ever saw a random *blinded* point — cannot link the redemption to
+  the issuance. Single-use (double-spend rejected). Built on the audited
+  `curve25519-dalek` primitives; the construction is an unaudited prototype.
 - [ ] S5 — QUIC/MASQUE transport upgrade (deferred: TCP framing works for now)
+- [ ] P3 — the six orthogonal additions (obfuscation, endpoint, decentralization, …)
 
-**P0 (the core data plane) is complete: S0 → S4, plus the measurement GATE. The
-inbound rotor's admission layer (MTD + PoW) is in.**
+**Both rotors have working cores.** P0 (the outbound data plane, S0 → S4) is complete
+with a measurement GATE; the inbound rotor (MTD hopping + PoW admission + rendezvous
+origin-hiding + unlinkable capability tokens) is complete.
 
 ## The GATE: what the measurement actually says
 
