@@ -689,6 +689,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "whirl-shield"
+version = "0.0.1"
+dependencies = [
+ "hmac",
+ "sha2",
+]
+
+[[package]]
 name = "whirl-sphinx"
 version = "0.0.1"
 dependencies = [

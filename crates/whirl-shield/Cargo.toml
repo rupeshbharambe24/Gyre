@@ -1,0 +1,17 @@
+[package]
+name = "whirl-shield"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "The inbound rotor: moving-target-defense ingress hopping and proof-of-work admission."
+
+[[bin]]
+name = "whirl-shield"
+path = "src/main.rs"
+
+[dependencies]
+hmac.workspace = true
+sha2.workspace = true

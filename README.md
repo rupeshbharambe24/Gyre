@@ -61,9 +61,17 @@ The build is measurement-gated: each step ends with a number against a baseline.
 - [x] **GATE — adversary-emulation harness.** A deterministic timing model runs a
   *partial observer* correlation attack over many concurrent flows and measures it
   against a baseline. **This is the go/no-go, and the numbers are honest** (see below).
-- [ ] S5 — QUIC/MASQUE transport upgrade, then the inbound rotor
+- [x] **Inbound shield (admission) — MTD hopping + PoW.** The other rotor. The public
+  ingress is `HMAC(key, window)` so an authorized client and the origin agree while a
+  scanner cannot pre-target it; proof-of-work admission scales its difficulty with load
+  (server verifies in one hash). Honest ceiling (**D22**): MTD serves a *closed*,
+  authorized client set (not the open web), and PoW re-prices asymmetry but does nothing
+  for L3/L4 volumetric floods.
+- [ ] Inbound shield (rest) — rendezvous origin-hiding + anonymous capability tokens
+- [ ] S5 — QUIC/MASQUE transport upgrade (deferred: TCP framing works for now)
 
-**P0 (the core data plane) is complete: S0 → S4, plus the measurement GATE.**
+**P0 (the core data plane) is complete: S0 → S4, plus the measurement GATE. The
+inbound rotor's admission layer (MTD + PoW) is in.**
 
 ## The GATE: what the measurement actually says
 
@@ -93,6 +101,9 @@ The honest verdict this produces — and it matches the design analysis:
 ## Quickstart
 
 ```bash
+# Run the inbound-shield demo: MTD ingress hopping + PoW admission
+cargo run -p whirl-shield
+
 # Run the GATE report: the correlation sweep + multipath exposure
 cargo run -p whirl-adversary
 
@@ -115,6 +126,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 | `whirl-net` | Async transport, directory, relay server, mixing, cover traffic |
 | `whirl-node` | Demo: spin up a testnet and route traffic across it |
 | `whirl-adversary` | The GATE: partial-observer correlation harness + measured verdict |
+| `whirl-shield` | The inbound rotor: MTD ingress hopping + proof-of-work admission |
 
 ## Design principle
 
