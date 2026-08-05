@@ -1,0 +1,14 @@
+[package]
+name = "gyre-sphinx"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "S0: ergonomic wrapper over the audited Sphinx mix-packet format for Gyre."
+
+[dependencies]
+sphinx-packet.workspace = true
+x25519-dalek.workspace = true
+thiserror.workspace = true

@@ -269,6 +269,109 @@ dependencies = [
 ]
 
 [[package]]
+name = "gyre-adversary"
+version = "0.0.1"
+
+[[package]]
+name = "gyre-common"
+version = "0.0.1"
+
+[[package]]
+name = "gyre-crowd"
+version = "0.0.1"
+
+[[package]]
+name = "gyre-directory"
+version = "0.0.1"
+dependencies = [
+ "ed25519-dalek",
+ "getrandom 0.3.4",
+]
+
+[[package]]
+name = "gyre-endpoint"
+version = "0.0.1"
+dependencies = [
+ "hmac",
+ "sha2",
+ "zeroize",
+]
+
+[[package]]
+name = "gyre-fec"
+version = "0.0.1"
+dependencies = [
+ "reed-solomon-erasure",
+ "thiserror",
+]
+
+[[package]]
+name = "gyre-net"
+version = "0.0.1"
+dependencies = [
+ "gyre-sphinx",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "gyre-node"
+version = "0.0.1"
+dependencies = [
+ "gyre-common",
+ "gyre-fec",
+ "gyre-net",
+ "gyre-sphinx",
+ "tokio",
+]
+
+[[package]]
+name = "gyre-obfs"
+version = "0.0.1"
+dependencies = [
+ "getrandom 0.3.4",
+ "hmac",
+ "sha2",
+ "thiserror",
+]
+
+[[package]]
+name = "gyre-pir"
+version = "0.0.1"
+dependencies = [
+ "getrandom 0.3.4",
+]
+
+[[package]]
+name = "gyre-shield"
+version = "0.0.1"
+dependencies = [
+ "curve25519-dalek",
+ "getrandom 0.3.4",
+ "gyre-net",
+ "hmac",
+ "sha2",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "gyre-sphinx"
+version = "0.0.1"
+dependencies = [
+ "sphinx-packet",
+ "thiserror",
+ "x25519-dalek",
+]
+
+[[package]]
+name = "gyre-stego"
+version = "0.0.1"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -706,109 +809,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b67efb37e106e55ce722a510d6b5f9c17f083e5fc79afc2badeb12cc313d9487"
 dependencies = [
  "wit-bindgen",
-]
-
-[[package]]
-name = "whirl-adversary"
-version = "0.0.1"
-
-[[package]]
-name = "whirl-common"
-version = "0.0.1"
-
-[[package]]
-name = "whirl-crowd"
-version = "0.0.1"
-
-[[package]]
-name = "whirl-directory"
-version = "0.0.1"
-dependencies = [
- "ed25519-dalek",
- "getrandom 0.3.4",
-]
-
-[[package]]
-name = "whirl-endpoint"
-version = "0.0.1"
-dependencies = [
- "hmac",
- "sha2",
- "zeroize",
-]
-
-[[package]]
-name = "whirl-fec"
-version = "0.0.1"
-dependencies = [
- "reed-solomon-erasure",
- "thiserror",
-]
-
-[[package]]
-name = "whirl-net"
-version = "0.0.1"
-dependencies = [
- "thiserror",
- "tokio",
- "whirl-sphinx",
-]
-
-[[package]]
-name = "whirl-node"
-version = "0.0.1"
-dependencies = [
- "tokio",
- "whirl-common",
- "whirl-fec",
- "whirl-net",
- "whirl-sphinx",
-]
-
-[[package]]
-name = "whirl-obfs"
-version = "0.0.1"
-dependencies = [
- "getrandom 0.3.4",
- "hmac",
- "sha2",
- "thiserror",
-]
-
-[[package]]
-name = "whirl-pir"
-version = "0.0.1"
-dependencies = [
- "getrandom 0.3.4",
-]
-
-[[package]]
-name = "whirl-shield"
-version = "0.0.1"
-dependencies = [
- "curve25519-dalek",
- "getrandom 0.3.4",
- "hmac",
- "sha2",
- "thiserror",
- "tokio",
- "whirl-net",
-]
-
-[[package]]
-name = "whirl-sphinx"
-version = "0.0.1"
-dependencies = [
- "sphinx-packet",
- "thiserror",
- "x25519-dalek",
-]
-
-[[package]]
-name = "whirl-stego"
-version = "0.0.1"
-dependencies = [
- "thiserror",
 ]
 
 [[package]]

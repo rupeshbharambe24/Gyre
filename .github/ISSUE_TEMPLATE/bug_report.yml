@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a defect, crash, or incorrect behavior in a Whirlpool crate.
+description: Report a defect, crash, or incorrect behavior in a Gyre crate.
 title: "[Bug]: "
 labels: ["bug"]
 body:
@@ -9,20 +9,20 @@ body:
         Thanks for taking the time to file a report.
 
         > [!IMPORTANT]
-        > Whirlpool is **early research — EXPERIMENTAL and UNAUDITED**. Do **not** rely on it
+        > Gyre is **early research — EXPERIMENTAL and UNAUDITED**. Do **not** rely on it
         > for real anonymity or safety yet. A "bug" here is a defect against the project's
         > *measured* claims, not a shortfall against anonymity guarantees it has never made.
 
         > [!WARNING]
         > **Do not report security vulnerabilities here.** Use GitHub's private vulnerability
-        > reporting instead: https://github.com/rupeshbharambe24/Whirlpool/security
+        > reporting instead: https://github.com/rupeshbharambe24/Gyre/security
         > Public issues are world-readable the moment you submit them.
   - type: textarea
     id: summary
     attributes:
       label: Summary
       description: A clear, concise description of the bug.
-      placeholder: "cargo test -p whirl-shield panics on a fresh checkout because ..."
+      placeholder: "cargo test -p gyre-shield panics on a fresh checkout because ..."
     validations:
       required: true
   - type: dropdown
@@ -31,19 +31,19 @@ body:
       label: Crate / area
       description: Which part of the workspace does this affect?
       options:
-        - whirl-common
-        - whirl-sphinx
-        - whirl-fec
-        - whirl-net
-        - whirl-node
-        - whirl-adversary
-        - whirl-shield
-        - whirl-obfs
-        - whirl-endpoint
-        - whirl-directory
-        - whirl-pir
-        - whirl-stego
-        - whirl-crowd
+        - gyre-common
+        - gyre-sphinx
+        - gyre-fec
+        - gyre-net
+        - gyre-node
+        - gyre-adversary
+        - gyre-shield
+        - gyre-obfs
+        - gyre-endpoint
+        - gyre-directory
+        - gyre-pir
+        - gyre-stego
+        - gyre-crowd
         - build/CI
         - docs
         - other
@@ -56,7 +56,7 @@ body:
       description: The exact commands and inputs. A minimal reproduction is worth ten descriptions.
       placeholder: |
         1. `git clone` at commit <sha>
-        2. `cargo run -p whirl-adversary`
+        2. `cargo run -p gyre-adversary`
         3. Observe the panic below
       render: bash
     validations:

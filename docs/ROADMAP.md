@@ -1,13 +1,13 @@
-# Whirlpool — Roadmap
+# Gyre — Roadmap
 
-![CI](https://github.com/rupeshbharambe24/Whirlpool/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![MSRV](https://img.shields.io/badge/rustc-1.85%2B-orange.svg)
 ![crates](https://img.shields.io/badge/crates-13-informational.svg)
 ![tests](https://img.shields.io/badge/tests-55%20green-success.svg)
 ![status](https://img.shields.io/badge/status-experimental-red.svg)
 
-Where Whirlpool has been, what is actually finished, and the one thing that no
+Where Gyre has been, what is actually finished, and the one thing that no
 amount of code can finish. This is a research roadmap, not a release plan.
 
 > [!NOTE]
@@ -15,11 +15,11 @@ amount of code can finish. This is a research roadmap, not a release plan.
 > of an idea, a diagram, or a passing unit test alone — it advances when a
 > **number** says it works. The go/no-go for the whole project lives in the
 > [GATE](#the-gate-the-gono-go-number): a partial-observer correlation harness
-> (`whirl-adversary`) that reports accuracy vs. chance. If a mechanism cannot move
+> (`gyre-adversary`) that reports accuracy vs. chance. If a mechanism cannot move
 > a measured number in the right direction, it does not ship as a claim.
 
 > [!WARNING]
-> Whirlpool is **early research, EXPERIMENTAL, and UNAUDITED.** Do not rely on it
+> Gyre is **early research, EXPERIMENTAL, and UNAUDITED.** Do not rely on it
 > for real anonymity or safety. It cannot beat a global passive observer at low
 > latency (nobody can), and it cannot manufacture anonymity without a **crowd** —
 > anonymity *is* the size of the concurrent anonymity set. These ceilings are
@@ -58,20 +58,20 @@ Milestone by milestone, with the one-line result that closed it:
 
 | ✓ | Milestone | Crate(s) | Result that closed it |
 |---|---|---|---|
-| [x] | **S0 — Sphinx echo** | `whirl-sphinx` | A message wraps and unwraps through a typed 3-layer Sphinx onion in-process — no relay learns both ends. |
-| [x] | **S1 — networked relays** | `whirl-net` | Async transport + directory + relay server carry Sphinx packets over TCP length-prefixed frames across a multi-relay testnet. |
-| [x] | **S2 — mixing + cover** | `whirl-net` | Per-hop Poisson mixing plus Loopix cover-traffic loops run on the live path; timing decorrelation becomes measurable. |
-| [x] | **S3 — erasure multipath** | `whirl-fec`, `whirl-net` | Reed–Solomon fragments a message and reassembles it from **any `m` of `k`** fragments sent over disjoint paths. |
-| [x] | **S4 — FAST/MIX lanes** | `whirl-node` | Adaptive per-flow lane, sealed inside the onion, timed FAST-vs-MIX on the same route — an honest menu of trilemma points. |
-| [x] | **GATE — adversary harness** | `whirl-adversary` | A partial-observer timing-correlation harness emits a verdict: mixing drops accuracy `1.00 → 0.04`, and it is **gated on the crowd**. |
-| [x] | **Inbound rotor** | `whirl-shield` (11 tests) | MTD address hopping via `HMAC(key, time_window)`, PoW admission, rendezvous origin-hiding, and unlinkable VOPRF capability tokens. |
-| [x] | **P3 · obfuscation** | `whirl-obfs` | Pluggable-transport framework + transports + an entropy meter — **appearance only, zero anonymity effect.** |
-| [x] | **P3 · endpoint** | `whirl-endpoint` | Forward-secret ratchet, compartmentalised personas, one **uniform client fingerprint** so real users blend. |
-| [x] | **P3 · anonymous credentials** | `whirl-shield` | Delivered **as** the VOPRF capability token (RFC 9497 *shape*, hand-built **prototype, UNAUDITED**) — proves "authorised" with zero identity. |
-| [x] | **P3 · directory** | `whirl-directory` | Threshold-signed consensus, equivocation detection, and build attestation — **detection, not prevention.** |
-| [x] | **P3 · PIR** | `whirl-pir` | 2-server IT-PIR for directory retrieval, **default OFF** — a full signed download is leak-free and cheaper at this scale. |
-| [x] | **P3 · steganography** | `whirl-stego` | LSB steganography for deniability — **situational; trivially detectable**, stated in the crate's own output. |
-| [x] | **P4 · crowd / incentives** | `whirl-crowd` | k-anonymity admission governor + a staking Sybil-*pricing* model (staking adds no intrinsic Sybil resistance — the scarce resource does). |
+| [x] | **S0 — Sphinx echo** | `gyre-sphinx` | A message wraps and unwraps through a typed 3-layer Sphinx onion in-process — no relay learns both ends. |
+| [x] | **S1 — networked relays** | `gyre-net` | Async transport + directory + relay server carry Sphinx packets over TCP length-prefixed frames across a multi-relay testnet. |
+| [x] | **S2 — mixing + cover** | `gyre-net` | Per-hop Poisson mixing plus Loopix cover-traffic loops run on the live path; timing decorrelation becomes measurable. |
+| [x] | **S3 — erasure multipath** | `gyre-fec`, `gyre-net` | Reed–Solomon fragments a message and reassembles it from **any `m` of `k`** fragments sent over disjoint paths. |
+| [x] | **S4 — FAST/MIX lanes** | `gyre-node` | Adaptive per-flow lane, sealed inside the onion, timed FAST-vs-MIX on the same route — an honest menu of trilemma points. |
+| [x] | **GATE — adversary harness** | `gyre-adversary` | A partial-observer timing-correlation harness emits a verdict: mixing drops accuracy `1.00 → 0.04`, and it is **gated on the crowd**. |
+| [x] | **Inbound rotor** | `gyre-shield` (11 tests) | MTD address hopping via `HMAC(key, time_window)`, PoW admission, rendezvous origin-hiding, and unlinkable VOPRF capability tokens. |
+| [x] | **P3 · obfuscation** | `gyre-obfs` | Pluggable-transport framework + transports + an entropy meter — **appearance only, zero anonymity effect.** |
+| [x] | **P3 · endpoint** | `gyre-endpoint` | Forward-secret ratchet, compartmentalised personas, one **uniform client fingerprint** so real users blend. |
+| [x] | **P3 · anonymous credentials** | `gyre-shield` | Delivered **as** the VOPRF capability token (RFC 9497 *shape*, hand-built **prototype, UNAUDITED**) — proves "authorised" with zero identity. |
+| [x] | **P3 · directory** | `gyre-directory` | Threshold-signed consensus, equivocation detection, and build attestation — **detection, not prevention.** |
+| [x] | **P3 · PIR** | `gyre-pir` | 2-server IT-PIR for directory retrieval, **default OFF** — a full signed download is leak-free and cheaper at this scale. |
+| [x] | **P3 · steganography** | `gyre-stego` | LSB steganography for deniability — **situational; trivially detectable**, stated in the crate's own output. |
+| [x] | **P4 · crowd / incentives** | `gyre-crowd` | k-anonymity admission governor + a staking Sybil-*pricing* model (staking adds no intrinsic Sybil resistance — the scarce resource does). |
 
 > [!NOTE]
 > **VOPRF caveat, restated wherever tokens appear:** the capability-token
@@ -81,7 +81,7 @@ Milestone by milestone, with the one-line result that closed it:
 
 ### The GATE: the go/no-go number
 
-The GATE is why this roadmap can say "done" without overclaiming. `whirl-adversary`
+The GATE is why this roadmap can say "done" without overclaiming. `gyre-adversary`
 plays a **partial network observer** — sees some links, correlates flows by timing —
 and reports how often it guesses the true `sender ↔ destination` pairing.
 
@@ -178,11 +178,11 @@ refuses to pretend otherwise.
 
 | Lever | Crate | What it honestly does | What it does **not** do |
 |---|---|---|---|
-| **Loopix cover traffic** | `whirl-net` | Inflates the *apparent* traffic set; provides global-observer resistance **only at mix latency**. | It is **not** real senders; at low latency it buys nothing, and a cover-inflated "effective set" is never a concurrent-sender count. |
-| **Uniform client fingerprint** | `whirl-endpoint` | One indistinguishable client shape, so the real users that *do* exist blend into each other. | Adds zero users — it lets the crowd you have count for its full size, no more. |
-| **k-anonymity admission governor** | `whirl-crowd` | Refuses to admit traffic until a threshold-sized set exists, so users are never exposed in a too-small crowd. | Protects the crowd; it does not *create* one. |
+| **Loopix cover traffic** | `gyre-net` | Inflates the *apparent* traffic set; provides global-observer resistance **only at mix latency**. | It is **not** real senders; at low latency it buys nothing, and a cover-inflated "effective set" is never a concurrent-sender count. |
+| **Uniform client fingerprint** | `gyre-endpoint` | One indistinguishable client shape, so the real users that *do* exist blend into each other. | Adds zero users — it lets the crowd you have count for its full size, no more. |
+| **k-anonymity admission governor** | `gyre-crowd` | Refuses to admit traffic until a threshold-sized set exists, so users are never exposed in a too-small crowd. | Protects the crowd; it does not *create* one. |
 | **Bridge-to-Tor** | (integration) | Borrows an existing, live crowd instead of pretending to have our own. | Our fabric still has no independent crowd of its own. |
-| **Inbound-shield seeding** | `whirl-shield` | Gives operators a standalone reason (origin-hiding, admission control) to run relays, seeding the fabric. | Inbound-protected clients are a **different population** — they are **never** summed into the outbound anonymity-set number. |
+| **Inbound-shield seeding** | `gyre-shield` | Gives operators a standalone reason (origin-hiding, admission control) to run relays, seeding the fabric. | Inbound-protected clients are a **different population** — they are **never** summed into the outbound anonymity-set number. |
 
 > [!IMPORTANT]
 > The crowd is the hardest problem (**D12**), and it is a *people* problem, not a
@@ -193,7 +193,7 @@ refuses to pretend otherwise.
 
 ## What would make this real
 
-Non-promissory by design: these are the conditions that *would* move Whirlpool from
+Non-promissory by design: these are the conditions that *would* move Gyre from
 "measured research artifact" to "something to rely on." They are named as
 requirements, not as a schedule.
 
@@ -203,10 +203,10 @@ requirements, not as a schedule.
 - **A live crowd.** Real concurrent senders at mix latency — the single number no
   code change can fake, and the one the GATE says everything depends on.
 - **QUIC/MASQUE transport (S5).** The deferred, modest latency win that would let
-  Whirlpool *compete with* — explicitly **not** "beat" — modern Tor on speed (**D21**),
+  Gyre *compete with* — explicitly **not** "beat" — modern Tor on speed (**D21**),
   while Tor's crowd remains decisive.
 
-None of these is promised here. Each is a precondition for a claim Whirlpool does not
+None of these is promised here. Each is a precondition for a claim Gyre does not
 yet get to make.
 
 ---

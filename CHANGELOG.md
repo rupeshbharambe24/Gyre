@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to **Whirlpool** are documented here.
+All notable changes to **Gyre** are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project aims to adhere to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -12,7 +12,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 ![MSRV](https://img.shields.io/badge/MSRV-1.85-blue.svg)
 ![Crates](https://img.shields.io/badge/crates-13-informational.svg)
 ![Tests](https://img.shields.io/badge/tests-55%20green-success.svg)
-[![CI](https://github.com/rupeshbharambe24/Whirlpool/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Whirlpool/actions/workflows/ci.yml)
+[![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 
 > [!NOTE]
 > This is a **pre-1.0 research build**. No version has been **tagged or released**,
@@ -21,7 +21,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 > The current workspace version is `0.0.1`.
 
 > [!WARNING]
-> Whirlpool is **early-stage and UNAUDITED**. Do **not** rely on it for real
+> Gyre is **early-stage and UNAUDITED**. Do **not** rely on it for real
 > anonymity or safety yet. Every claim here is *measured before it is trusted*,
 > and the honest ceilings live inline with the entries that earn them — not at the
 > bottom. See [`docs/DESIGN.md`](docs/DESIGN.md) for the full threat model.
@@ -40,7 +40,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ## [Unreleased]
 
-Whirlpool has been built **milestone by milestone**, entirely in the open. The
+Gyre has been built **milestone by milestone**, entirely in the open. The
 build history below is the real thing — a layered privacy-and-defense fabric with
 **two rotors**: an *outbound* mixer that dissolves a person into a crowd, and an
 *inbound* shield that hides and protects a system.
@@ -72,17 +72,17 @@ honest ceiling inline, wherever one applies.
 
 **P0 — Outbound data plane (protect a person)**
 
-- **S0 — Sphinx onion echo.** `whirl-sphinx`, a typed wrapper over the audited
+- **S0 — Sphinx onion echo.** `gyre-sphinx`, a typed wrapper over the audited
   `sphinx-packet` mix-packet format, with end-to-end onion encrypt/echo. Shared
-  constants and types land in `whirl-common` (`FlowClass`, `DEFAULT_HOPS = 3`).
-- **S1 — Networked relays.** `whirl-net` async transport, directory, and relay
+  constants and types land in `gyre-common` (`FlowClass`, `DEFAULT_HOPS = 3`).
+- **S1 — Networked relays.** `gyre-net` async transport, directory, and relay
   server carry the Sphinx onion over the wire (TCP length-prefixed frames). No
   single relay learns both ends; the onion is capped at 3 hops (D5).
 - **S2 — Mixing + cover.** Per-hop Poisson mixing and Loopix shared cover traffic
-  in `whirl-net`.
+  in `gyre-net`.
   *Ceiling:* Loopix global-observer resistance holds **only at mix latency**,
   never at low latency.
-- **S3 — Erasure-coded multipath.** `whirl-fec` Reed–Solomon fragmentation and
+- **S3 — Erasure-coded multipath.** `gyre-fec` Reed–Solomon fragmentation and
   reassembly across paths.
   *Ceiling (D7):* this is **probabilistic middle-path hardening** against a
   *partial* observer — **not** a reconstruction threshold. Endpoints stay exposed,
@@ -90,12 +90,12 @@ honest ceiling inline, wherever one applies.
   (measured under the GATE). It buys availability and content-splitting, not
   correlation resistance.
 - **S4 — FAST / MIX adaptive lanes.** Per-flow choice between a low-latency **FAST**
-  lane and a mixing **MIX** lane, sealed inside the onion (D8). The `whirl-node`
+  lane and a mixing **MIX** lane, sealed inside the onion (D8). The `gyre-node`
   demo spins up a testnet and times both lanes on the same route.
 
 **The GATE (the go/no-go)**
 
-- **GATE — adversary-emulation harness.** `whirl-adversary`, a partial-observer
+- **GATE — adversary-emulation harness.** `gyre-adversary`, a partial-observer
   timing-correlation harness that emits a verdict. It is the instrument every
   later claim is checked against.
   <details>
@@ -119,7 +119,7 @@ honest ceiling inline, wherever one applies.
 
 **Inbound rotor (protect a system)**
 
-- **MTD ingress hopping + PoW admission.** `whirl-shield` moving-target-defense
+- **MTD ingress hopping + PoW admission.** `gyre-shield` moving-target-defense
   address hopping via `HMAC(key, time_window)`, plus proof-of-work admission.
   *Ceiling (D2):* rotation is **defense, not anonymity**.
 - **Rendezvous origin-hiding.** Rendezvous-based origin hiding for the protected
@@ -134,29 +134,29 @@ honest ceiling inline, wherever one applies.
 a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition 3
 (anonymous credentials) had already shipped as the VOPRF token above.
 
-- **Addition 1 — Obfuscation / pluggable transports.** `whirl-obfs`: a
+- **Addition 1 — Obfuscation / pluggable transports.** `gyre-obfs`: a
   pluggable-transport framework, transports, and an entropy meter.
   *Ceiling:* appearance only, **zero anonymity effect**. "Unblockable" is not
   claimed — obfuscation only makes blocking *more expensive than a censor will pay
   today*, and random-byte transports are themselves a positive entropy-DPI
   fingerprint.
-- **Addition 2 — Endpoint hardening + data minimization.** `whirl-endpoint`:
+- **Addition 2 — Endpoint hardening + data minimization.** `gyre-endpoint`:
   forward-secret ratchet, personas, uniform fingerprint.
   *Ceiling:* endpoint compromise (a login, a device, a fingerprint) deanonymises
   regardless of the network.
-- **Addition 4 — Decentralization + attestation.** `whirl-directory`:
+- **Addition 4 — Decentralization + attestation.** `gyre-directory`:
   threshold-signed consensus, equivocation detection, build attestation.
   *Ceiling:* **detection, not prevention** — reproducible builds prove
   *binary == source*, not that a relay actually runs that binary.
-- **Addition 6 — Private directory retrieval.** `whirl-pir`: 2-server IT-PIR.
+- **Addition 6 — Private directory retrieval.** `gyre-pir`: 2-server IT-PIR.
   *Ceiling:* **default OFF** — a full signed directory download is leak-free and
   cheaper; PIR is surgical, not the default path (D18).
-- **Addition 5 — Deniability / steganography.** `whirl-stego`: LSB steganography.
+- **Addition 5 — Deniability / steganography.** `gyre-stego`: LSB steganography.
   *Ceiling:* **situational** — LSB stego is trivially detectable.
 
 **P4 — Crowd / incentive layer**
 
-- **Crowd admission + Sybil pricing.** `whirl-crowd`: a k-anonymity admission
+- **Crowd admission + Sybil pricing.** `gyre-crowd`: a k-anonymity admission
   governor and a staking Sybil-pricing model.
   *Ceiling:* the crowd is the binding constraint everywhere (D12, D20). Staking is
   **wealth concentration, not user-decentralization**, and adds no intrinsic Sybil
@@ -192,6 +192,6 @@ No release has been cut. When one is, it will appear here as a dated
 research build and precise per-commit dates are not part of this record, entries
 are undated (or attributed to **2026**) rather than assigned specific days.
 
-Whirlpool's whole identity is refusing to overclaim. The recurring lesson across
+Gyre's whole identity is refusing to overclaim. The recurring lesson across
 every milestone above is the same one the GATE measured: **anonymity is the size
 of the concurrent crowd**, and no amount of engineering manufactures it.

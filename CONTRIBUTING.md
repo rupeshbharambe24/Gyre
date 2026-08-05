@@ -1,19 +1,19 @@
-# Contributing to Whirlpool
+# Contributing to Gyre
 
-[![CI](https://github.com/rupeshbharambe24/Whirlpool/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Whirlpool/actions/workflows/ci.yml)
+[![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MSRV](https://img.shields.io/badge/rustc-1.85%2B-orange.svg)](Cargo.toml)
 [![Crates](https://img.shields.io/badge/crates-13-blue.svg)](#the-workspace-at-a-glance)
 [![Tests](https://img.shields.io/badge/tests-55%20green-brightgreen.svg)](#the-workspace-at-a-glance)
 [![Status](https://img.shields.io/badge/status-experimental-yellow.svg)](#project-ethos)
 
-Thanks for your interest in **Whirlpool** — a layered privacy-and-defense network
+Thanks for your interest in **Gyre** — a layered privacy-and-defense network
 fabric with two rotors: an **outbound mixer** that dissolves a person into a crowd,
 and an **inbound shield** that hides and protects a system. This guide covers how we
 build, what we measure, and the bar a change has to clear before it merges.
 
 > [!IMPORTANT]
-> Whirlpool is **early research and EXPERIMENTAL. It is UNAUDITED.** Do **not** rely
+> Gyre is **early research and EXPERIMENTAL. It is UNAUDITED.** Do **not** rely
 > on it for real anonymity or safety yet. Contributions are welcome precisely because
 > the project is being built in the open, milestone by milestone — every claim is
 > measured before it is trusted.
@@ -45,7 +45,7 @@ whether a change is allowed in.
 **Every step ends with a number against a baseline.** A feature is not "done" because
 it compiles and the story sounds good; it is done when a test or a demo prints a
 measurement that shows what it bought — and, just as importantly, what it did *not*.
-The canonical example is the adversary harness (`whirl-adversary`, "THE GATE"): it
+The canonical example is the adversary harness (`gyre-adversary`, "THE GATE"): it
 runs a partial-observer timing-correlation sweep and emits a verdict. Mixing takes an
 attacker's correlation accuracy from `1.00` (no mixing) down toward chance — but only
 in a healthy crowd. That number is the point, not the prose around it.
@@ -53,7 +53,7 @@ in a healthy crowd. That number is the point, not the prose around it.
 ### 2. Never roll your own crypto or transport
 
 **Integrate audited crates; do not reinvent primitives** (design decision **D11**).
-Whirlpool is an *integration*, not a from-scratch cryptosystem. We build on top of:
+Gyre is an *integration*, not a from-scratch cryptosystem. We build on top of:
 
 | Concern | Crate we integrate |
 | --- | --- |
@@ -67,7 +67,7 @@ Whirlpool is an *integration*, not a from-scratch cryptosystem. We build on top 
 
 > [!WARNING]
 > The one hand-built cryptographic construction is the **VOPRF capability token** in
-> `whirl-shield` — a prototype on `curve25519-dalek` primitives following the RFC 9497
+> `gyre-shield` — a prototype on `curve25519-dalek` primitives following the RFC 9497
 > shape. It is **UNAUDITED**. Any doc, comment, or PR that mentions tokens must say so.
 
 ### 3. Honesty over hype
@@ -75,7 +75,7 @@ Whirlpool is an *integration*, not a from-scratch cryptosystem. We build on top 
 The project's whole identity is **refusing to overclaim**. Physics ceilings go
 **in-line, next to the claim**, never buried in a footnote:
 
-- Whirlpool **cannot** beat a **global passive observer** at low latency. Nobody can.
+- Gyre **cannot** beat a **global passive observer** at low latency. Nobody can.
 - Anonymity **is** the size of the concurrent anonymity set — cleverness never
   manufactures a crowd.
 - The [anonymity trilemma](docs/DESIGN.md) is real: strong anonymity, low latency, low
@@ -95,19 +95,19 @@ Thirteen crates, **one crate per orthogonal concern**, 55 tests, all green.
 
 | Crate | Purpose | Tests |
 | --- | --- | :---: |
-| `whirl-common` | shared constants & types (`FlowClass`, `DEFAULT_HOPS = 3`) | 3 |
-| `whirl-sphinx` | typed wrapper over the audited Sphinx mix-packet format | 5 |
-| `whirl-fec` | Reed-Solomon erasure coding: fragment a message, reassemble any *m* | 4 |
-| `whirl-net` | async transport, directory, relay server, mixing, cover traffic | 4 |
-| `whirl-node` | demo binary: spin up a testnet + integration tests (lanes, multipath) | 2 |
-| `whirl-adversary` | **THE GATE**: partial-observer timing-correlation harness + verdict | 4 |
-| `whirl-shield` | inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens | 11 |
-| `whirl-obfs` | pluggable-transport framework + transports + an entropy meter | 4 |
-| `whirl-endpoint` | endpoint hardening: forward-secret ratchet, personas, uniform fingerprint | 3 |
-| `whirl-directory` | threshold-signed consensus, equivocation detection, build attestation | 5 |
-| `whirl-pir` | private directory retrieval: 2-server IT-PIR (default is full download) | 3 |
-| `whirl-stego` | deniability: LSB steganography (situational; honest limits) | 4 |
-| `whirl-crowd` | k-anonymity admission governor + staking Sybil-pricing model | 3 |
+| `gyre-common` | shared constants & types (`FlowClass`, `DEFAULT_HOPS = 3`) | 3 |
+| `gyre-sphinx` | typed wrapper over the audited Sphinx mix-packet format | 5 |
+| `gyre-fec` | Reed-Solomon erasure coding: fragment a message, reassemble any *m* | 4 |
+| `gyre-net` | async transport, directory, relay server, mixing, cover traffic | 4 |
+| `gyre-node` | demo binary: spin up a testnet + integration tests (lanes, multipath) | 2 |
+| `gyre-adversary` | **THE GATE**: partial-observer timing-correlation harness + verdict | 4 |
+| `gyre-shield` | inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens | 11 |
+| `gyre-obfs` | pluggable-transport framework + transports + an entropy meter | 4 |
+| `gyre-endpoint` | endpoint hardening: forward-secret ratchet, personas, uniform fingerprint | 3 |
+| `gyre-directory` | threshold-signed consensus, equivocation detection, build attestation | 5 |
+| `gyre-pir` | private directory retrieval: 2-server IT-PIR (default is full download) | 3 |
+| `gyre-stego` | deniability: LSB steganography (situational; honest limits) | 4 |
+| `gyre-crowd` | k-anonymity admission governor + staking Sybil-pricing model | 3 |
 | **Total** | | **55** |
 
 These three numbers — **13 crates / 55 tests / the GATE verdict** — are ground truth.
@@ -142,8 +142,8 @@ components = ["rustfmt", "clippy"]
 
 ```bash
 # 1. Clone
-git clone https://github.com/rupeshbharambe24/Whirlpool.git
-cd Whirlpool
+git clone https://github.com/rupeshbharambe24/Gyre.git
+cd Gyre
 
 # 2. Build the whole workspace (rustup auto-selects the pinned stable toolchain)
 cargo build --workspace
@@ -152,18 +152,18 @@ cargo build --workspace
 cargo test --workspace
 
 # 4. Run a single crate's tests while iterating (example: the inbound rotor)
-cargo test -p whirl-shield
+cargo test -p gyre-shield
 
 # 5. Run the demos — each prints its mechanism and its HONEST ceiling
-cargo run -p whirl-adversary   # THE GATE: correlation sweep + multipath exposure report
-cargo run -p whirl-shield      # inbound rotor: MTD ingress hopping + PoW admission
-cargo run -p whirl-node        # FAST vs MIX lanes on the same route, timed
-cargo run -p whirl-crowd       # k-anon admission governor + staking Sybil-pricing
-cargo run -p whirl-obfs        # pluggable transport + entropy meter (appearance only)
-cargo run -p whirl-endpoint    # forward-secret ratchet, personas, uniform fingerprint
-cargo run -p whirl-directory   # threshold-signed consensus + equivocation detection
-cargo run -p whirl-pir         # 2-server IT-PIR (default OFF: full signed download)
-cargo run -p whirl-stego       # LSB steganography (situational; trivially detectable)
+cargo run -p gyre-adversary   # THE GATE: correlation sweep + multipath exposure report
+cargo run -p gyre-shield      # inbound rotor: MTD ingress hopping + PoW admission
+cargo run -p gyre-node        # FAST vs MIX lanes on the same route, timed
+cargo run -p gyre-crowd       # k-anon admission governor + staking Sybil-pricing
+cargo run -p gyre-obfs        # pluggable transport + entropy meter (appearance only)
+cargo run -p gyre-endpoint    # forward-secret ratchet, personas, uniform fingerprint
+cargo run -p gyre-directory   # threshold-signed consensus + equivocation detection
+cargo run -p gyre-pir         # 2-server IT-PIR (default OFF: full signed download)
+cargo run -p gyre-stego       # LSB steganography (situational; trivially detectable)
 ```
 
 <details>
@@ -172,15 +172,15 @@ cargo run -p whirl-stego       # LSB steganography (situational; trivially detec
 Nine crates ship a `main.rs` demo binary (the nine `cargo run -p …` lines above). Four
 are **lib-only** and have no demo — exercise them through `cargo test`:
 
-- `whirl-common`
-- `whirl-sphinx`
-- `whirl-fec`
-- `whirl-net`
+- `gyre-common`
+- `gyre-sphinx`
+- `gyre-fec`
+- `gyre-net`
 
 </details>
 
 > [!NOTE]
-> The GATE demo (`cargo run -p whirl-adversary`) is the one to read first. It shows,
+> The GATE demo (`cargo run -p gyre-adversary`) is the one to read first. It shows,
 > with numbers, why mixing is the real correlation-resistance lever, why a tiny crowd
 > guts it, and why multipath **widens** partial-observer exposure rather than shrinking
 > it. If your change touches the data plane, its story has to survive that report.
@@ -241,14 +241,14 @@ Pre-PR checklist:
 
 ## Adding a milestone or crate
 
-Whirlpool grows by **milestones**, and the unit of a milestone is usually a crate. The
+Gyre grows by **milestones**, and the unit of a milestone is usually a crate. The
 pattern is deliberate — follow it so the workspace stays legible.
 
 ### The pattern
 
-1. **One crate per orthogonal concern.** Whirlpool is a *matrix* of independent
+1. **One crate per orthogonal concern.** Gyre is a *matrix* of independent
    defenses, not a stack (decision **D10**). A new concern gets its own crate under
-   `crates/whirl-<name>` and its own line in the workspace `members` list; it should
+   `crates/gyre-<name>` and its own line in the workspace `members` list; it should
    not bolt itself onto an existing crate's responsibilities.
 2. **A `lib.rs` with an honest module doc-comment that states the ceiling.** The very
    top of the crate (`//!` doc) says what the mechanism does *and* what it cannot do.
@@ -260,13 +260,13 @@ pattern is deliberate — follow it so the workspace stays legible.
    in a test assertion.
 4. **An optional `main.rs` demo that prints the honest ceiling.** If the crate benefits
    from a runnable story, add a demo that prints its mechanism *and* the ceiling in the
-   same breath. Lib-only crates (like `whirl-common`, `whirl-sphinx`, `whirl-fec`,
-   `whirl-net`) skip this and prove themselves through tests.
+   same breath. Lib-only crates (like `gyre-common`, `gyre-sphinx`, `gyre-fec`,
+   `gyre-net`) skip this and prove themselves through tests.
 
 ### Skeleton for a new crate
 
 ```rust
-//! # whirl-foo — <one honest line: what this concern is>
+//! # gyre-foo — <one honest line: what this concern is>
 //!
 //! Mechanism: <what it actually does>.
 //!
@@ -274,7 +274,7 @@ pattern is deliberate — follow it so the workspace stays legible.
 //! For example: "appearance only; zero anonymity effect", or "detection, not
 //! prevention", or "situational — trivially detectable under <condition>".
 //!
-//! This crate is EXPERIMENTAL and UNAUDITED like the rest of Whirlpool.
+//! This crate is EXPERIMENTAL and UNAUDITED like the rest of Gyre.
 
 // ... public API ...
 
@@ -290,9 +290,9 @@ mod tests {
 ```
 
 ```toml
-# crates/whirl-foo/Cargo.toml — inherit workspace-pinned versions
+# crates/gyre-foo/Cargo.toml — inherit workspace-pinned versions
 [package]
-name = "whirl-foo"
+name = "gyre-foo"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -312,10 +312,10 @@ repository.workspace = true
 
 ## Commit & PR conventions
 
-- **Concise, imperative subject line.** "Add entropy meter to whirl-obfs", not "Added…"
+- **Concise, imperative subject line.** "Add entropy meter to gyre-obfs", not "Added…"
   or "This commit adds…". Aim for ~50 characters; put detail in the body.
 - **Reference the milestone.** Mention the phase/milestone or the crate the change
-  belongs to (e.g. `P3`, `GATE`, `whirl-shield`) in the subject or body so history stays
+  belongs to (e.g. `P3`, `GATE`, `gyre-shield`) in the subject or body so history stays
   navigable.
 - **Keep diffs focused.** One concern per PR. Formatting churn, drive-by renames, and an
   unrelated feature do not belong in the same diff — they make review and `git bisect`
@@ -323,9 +323,9 @@ repository.workspace = true
 
 | Do | Don't |
 | --- | --- |
-| `Add PoW admission threshold to whirl-shield` | `updates` |
-| `Fix off-by-one in whirl-fec reassembly (any m)` | `fixed a bug and also reformatted everything` |
-| `whirl-crowd: gate admission on k-anon set size` | `WIP misc changes` |
+| `Add PoW admission threshold to gyre-shield` | `updates` |
+| `Fix off-by-one in gyre-fec reassembly (any m)` | `fixed a bug and also reformatted everything` |
+| `gyre-crowd: gate admission on k-anon set size` | `WIP misc changes` |
 
 **Pull requests** should say what changed, which milestone/crate it touches, and — in
 keeping with the ethos — **what you measured**. If the change affects the data plane,
@@ -356,7 +356,7 @@ Docs are held to the same honesty bar as code.
 
 ### The GATE — the numbers, quoted exactly
 
-These are the go/no-go measurements. Reproduce them with `cargo run -p whirl-adversary`.
+These are the go/no-go measurements. Reproduce them with `cargo run -p gyre-adversary`.
 
 | flows | window | mix/hop | accuracy | chance | note |
 | :---: | :---: | :---: | :---: | :---: | --- |
@@ -408,7 +408,7 @@ expectations.
 
 ## License
 
-Whirlpool is licensed under the **MIT License** — see [`LICENSE`](LICENSE).
+Gyre is licensed under the **MIT License** — see [`LICENSE`](LICENSE).
 
 **By contributing, you agree that your contributions are licensed under MIT** © 2026
 rupeshbharambe24. If you are not able to license your contribution under these terms,
@@ -417,6 +417,6 @@ please do not submit it.
 ---
 
 <sub>Maintainer: <a href="https://github.com/rupeshbharambe24">@rupeshbharambe24</a> ·
-Repo: <a href="https://github.com/rupeshbharambe24/Whirlpool">rupeshbharambe24/Whirlpool</a> ·
+Repo: <a href="https://github.com/rupeshbharambe24/Gyre">rupeshbharambe24/Gyre</a> ·
 Status: experimental, unaudited · See <a href="README.md">README</a> and
 <a href="docs/DESIGN.md">docs/DESIGN.md</a>.</sub>

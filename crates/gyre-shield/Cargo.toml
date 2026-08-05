@@ -1,0 +1,22 @@
+[package]
+name = "gyre-shield"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "The inbound rotor: moving-target-defense ingress hopping and proof-of-work admission."
+
+[[bin]]
+name = "gyre-shield"
+path = "src/main.rs"
+
+[dependencies]
+gyre-net = { path = "../gyre-net" }
+hmac.workspace = true
+sha2.workspace = true
+curve25519-dalek.workspace = true
+getrandom.workspace = true
+tokio.workspace = true
+thiserror.workspace = true

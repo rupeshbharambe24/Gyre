@@ -1,21 +1,21 @@
-# Whirlpool
+# Gyre
 
 **A layered privacy-and-defense network fabric — one fabric, two rotors.**
 
-[![CI](https://github.com/rupeshbharambe24/Whirlpool/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Whirlpool/actions/workflows/ci.yml)
+[![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Rust: 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)
 ![Crates: 13](https://img.shields.io/badge/crates-13-informational.svg)
 ![Tests: 55 passing](https://img.shields.io/badge/tests-55%20passing-brightgreen.svg)
 ![Status: experimental](https://img.shields.io/badge/status-experimental-red.svg)
 
-Whirlpool is a single relay fabric that spins two ways at once: an **outbound
+Gyre is a single relay fabric that spins two ways at once: an **outbound
 mixer** that dissolves a person into a crowd, and an **inbound shield** that
 hides and protects a system. Tor is the proof-of-concept that one relay fabric
 can host both — client anonymity *and* onion-service origin-hiding.
 
 > [!WARNING]
-> **Early research. Experimental. Unaudited.** Do **not** rely on Whirlpool for
+> **Early research. Experimental. Unaudited.** Do **not** rely on Gyre for
 > real anonymity or safety yet. It is being built in the open, milestone by
 > milestone, and every claim is *measured* before it is trusted. The one
 > hand-built cryptographic construction (the VOPRF capability token) is an
@@ -42,7 +42,7 @@ can host both — client anonymity *and* onion-service origin-hiding.
 
 ## What it is (honestly)
 
-Whirlpool is **not** a magic anonymity box, and it cannot beat physics. The
+Gyre is **not** a magic anonymity box, and it cannot beat physics. The
 ceilings come first, on purpose:
 
 - It **cannot beat a global passive observer at low latency.** Nobody can.
@@ -78,7 +78,7 @@ a *person* by dissolving them into a crowd; the **inbound** path protects a
 flowchart LR
     C["Client (sender)"]
 
-    subgraph Fabric["One Whirlpool relay fabric"]
+    subgraph Fabric["One Gyre relay fabric"]
       direction TB
 
       subgraph Outbound["Outbound rotor — protect a person"]
@@ -171,28 +171,28 @@ cargo clippy --workspace --all-targets -- -D warnings
 # --- Runnable demos (each prints its mechanism + the honest ceiling) ---
 
 # The GATE: partial-observer correlation sweep + multipath exposure
-cargo run -p whirl-adversary
+cargo run -p gyre-adversary
 
 # Inbound rotor: MTD ingress hopping + PoW admission
-cargo run -p whirl-shield
+cargo run -p gyre-shield
 
 # FAST vs MIX lanes on the same route, timed
-cargo run -p whirl-node
+cargo run -p gyre-node
 
 # k-anonymity admission governor + staking Sybil-pricing model
-cargo run -p whirl-crowd
+cargo run -p gyre-crowd
 
 # Hardening demos
-cargo run -p whirl-obfs        # pluggable transport + entropy meter
-cargo run -p whirl-endpoint    # forward-secret ratchet + personas
-cargo run -p whirl-directory   # threshold-signed consensus + attestation
-cargo run -p whirl-pir         # 2-server IT-PIR directory retrieval
-cargo run -p whirl-stego       # LSB steganography (situational)
+cargo run -p gyre-obfs        # pluggable transport + entropy meter
+cargo run -p gyre-endpoint    # forward-secret ratchet + personas
+cargo run -p gyre-directory   # threshold-signed consensus + attestation
+cargo run -p gyre-pir         # 2-server IT-PIR directory retrieval
+cargo run -p gyre-stego       # LSB steganography (situational)
 ```
 
 > [!NOTE]
-> Four crates are library-only and have **no demo binary**: `whirl-common`,
-> `whirl-sphinx`, `whirl-fec`, `whirl-net`. Exercise them with
+> Four crates are library-only and have **no demo binary**: `gyre-common`,
+> `gyre-sphinx`, `gyre-fec`, `gyre-net`. Exercise them with
 > `cargo test --workspace`.
 
 ---
@@ -203,19 +203,19 @@ Thirteen crates, 55 tests, all green.
 
 | Crate | Purpose | Tests |
 |---|---|:--:|
-| `whirl-common` | Shared constants & types (`FlowClass`, `DEFAULT_HOPS = 3`) | 3 |
-| `whirl-sphinx` | Typed wrapper over the audited Sphinx mix-packet format | 5 |
-| `whirl-fec` | Reed–Solomon erasure coding: fragment a message, reassemble any `m` | 4 |
-| `whirl-net` | Async transport, directory, relay server, mixing, cover traffic | 4 |
-| `whirl-node` | Demo binary: spin up a testnet + integration tests (lanes, multipath) | 2 |
-| `whirl-adversary` | **The GATE:** partial-observer timing-correlation harness + verdict | 4 |
-| `whirl-shield` | Inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens | 11 |
-| `whirl-obfs` | Pluggable-transport framework + transports + an entropy meter | 4 |
-| `whirl-endpoint` | Endpoint hardening: forward-secret ratchet, personas, uniform fingerprint | 3 |
-| `whirl-directory` | Threshold-signed consensus, equivocation detection, build attestation | 5 |
-| `whirl-pir` | Private directory retrieval: 2-server IT-PIR (default is full download) | 3 |
-| `whirl-stego` | Deniability: LSB steganography (situational; honest limits) | 4 |
-| `whirl-crowd` | P4: k-anonymity admission governor + staking Sybil-pricing model | 3 |
+| `gyre-common` | Shared constants & types (`FlowClass`, `DEFAULT_HOPS = 3`) | 3 |
+| `gyre-sphinx` | Typed wrapper over the audited Sphinx mix-packet format | 5 |
+| `gyre-fec` | Reed–Solomon erasure coding: fragment a message, reassemble any `m` | 4 |
+| `gyre-net` | Async transport, directory, relay server, mixing, cover traffic | 4 |
+| `gyre-node` | Demo binary: spin up a testnet + integration tests (lanes, multipath) | 2 |
+| `gyre-adversary` | **The GATE:** partial-observer timing-correlation harness + verdict | 4 |
+| `gyre-shield` | Inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens | 11 |
+| `gyre-obfs` | Pluggable-transport framework + transports + an entropy meter | 4 |
+| `gyre-endpoint` | Endpoint hardening: forward-secret ratchet, personas, uniform fingerprint | 3 |
+| `gyre-directory` | Threshold-signed consensus, equivocation detection, build attestation | 5 |
+| `gyre-pir` | Private directory retrieval: 2-server IT-PIR (default is full download) | 3 |
+| `gyre-stego` | Deniability: LSB steganography (situational; honest limits) | 4 |
+| `gyre-crowd` | P4: k-anonymity admission governor + staking Sybil-pricing model | 3 |
 | **Total** | | **55** |
 
 ---
@@ -285,16 +285,16 @@ bearing on anonymity properties.
 - [x] **Unlinkable VOPRF capability tokens** (RFC 9497 shape; unaudited prototype).
 
 ### P3 — six orthogonal hardening additions (add by threat, not by default)
-- [x] **1 · Obfuscation / pluggable transport** (`whirl-obfs`) — appearance only;
+- [x] **1 · Obfuscation / pluggable transport** (`gyre-obfs`) — appearance only;
   zero anonymity effect. Entropy meter shows the honest ceiling.
-- [x] **2 · Endpoint isolation + data minimization** (`whirl-endpoint`).
+- [x] **2 · Endpoint isolation + data minimization** (`gyre-endpoint`).
 - [x] **3 · Anonymous credentials** — delivered *as* the VOPRF token in
-  `whirl-shield`.
-- [x] **4 · Decentralization + attestation** (`whirl-directory`) — detection, not
+  `gyre-shield`.
+- [x] **4 · Decentralization + attestation** (`gyre-directory`) — detection, not
   prevention.
-- [x] **5 · Deniability / steganography** (`whirl-stego`) — situational; LSB stego
+- [x] **5 · Deniability / steganography** (`gyre-stego`) — situational; LSB stego
   is trivially detectable.
-- [x] **6 · PIR for directory lookups** (`whirl-pir`) — **default OFF**; the full
+- [x] **6 · PIR for directory lookups** (`gyre-pir`) — **default OFF**; the full
   signed download is leak-free and cheaper.
 
 ### P4 — crowd / incentive layer (the binding constraint)
@@ -332,7 +332,7 @@ bearing on anonymity properties.
 
 > [!IMPORTANT]
 > **Never roll your own crypto or transport (D11).** The risky parts are audited
-> crates we integrate, not code we invent. Whirlpool's value is in *combining*
+> crates we integrate, not code we invent. Gyre's value is in *combining*
 > known-good primitives well and *measuring* honestly.
 
 Integrated known-good building blocks: `sphinx-packet 0.7.0` (Nym-audited
@@ -357,12 +357,12 @@ cargo fmt   --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-Discussion and bug reports go through repo [Issues](https://github.com/rupeshbharambe24/Whirlpool/issues).
+Discussion and bug reports go through repo [Issues](https://github.com/rupeshbharambe24/Gyre/issues).
 Maintainer: [@rupeshbharambe24](https://github.com/rupeshbharambe24).
 
 ## Security
 
-Whirlpool is **unaudited** and must not be trusted for real-world anonymity yet.
+Gyre is **unaudited** and must not be trusted for real-world anonymity yet.
 If you find a vulnerability, please report it privately via GitHub's private
 vulnerability reporting (Security Advisories) — see [`SECURITY.md`](SECURITY.md).
 Do not open a public issue for a security report.

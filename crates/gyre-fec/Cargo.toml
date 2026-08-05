@@ -1,0 +1,13 @@
+[package]
+name = "gyre-fec"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "S3: erasure-coded fragmentation (Reed-Solomon m-of-k) for Gyre multipath."
+
+[dependencies]
+reed-solomon-erasure.workspace = true
+thiserror.workspace = true

@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Proposals are welcome. Whirlpool grows **milestone by milestone**, and **every claim is
+        Proposals are welcome. Gyre grows **milestone by milestone**, and **every claim is
         measured before it is trusted**. A good proposal states not just what it buys, but where
         its ceiling is.
 
@@ -27,7 +27,7 @@ body:
     attributes:
       label: Proposed approach
       description: How would it work? Sketch the mechanism. Reference existing crates or decisions (D1–D22) where relevant.
-      placeholder: "Add a per-flow ... in whirl-net, gated behind ..."
+      placeholder: "Add a per-flow ... in gyre-net, gated behind ..."
     validations:
       required: false
   - type: dropdown
@@ -67,7 +67,7 @@ body:
     attributes:
       label: Honesty
       options:
-        - label: I understand Whirlpool refuses to overclaim, and this proposal states its limits / ceiling.
+        - label: I understand Gyre refuses to overclaim, and this proposal states its limits / ceiling.
           required: true
   - type: checkboxes
     id: no-new-crypto

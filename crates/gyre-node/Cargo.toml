@@ -1,0 +1,20 @@
+[package]
+name = "gyre-node"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "S0 demo: build a Sphinx onion and echo it through an in-process circuit."
+
+[[bin]]
+name = "gyre-node"
+path = "src/main.rs"
+
+[dependencies]
+gyre-common = { path = "../gyre-common" }
+gyre-sphinx = { path = "../gyre-sphinx" }
+gyre-fec = { path = "../gyre-fec" }
+gyre-net = { path = "../gyre-net" }
+tokio.workspace = true

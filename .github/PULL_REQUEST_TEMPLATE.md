@@ -1,5 +1,5 @@
 <!--
-Thanks for contributing to Whirlpool. Keep it honest: every claim is measured before it is trusted.
+Thanks for contributing to Gyre. Keep it honest: every claim is measured before it is trusted.
 Fill each section, then check every REQUIRED box before you request review. Delete this comment.
 -->
 

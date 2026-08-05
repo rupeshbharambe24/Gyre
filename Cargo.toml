@@ -1,19 +1,19 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/whirl-common",
-    "crates/whirl-sphinx",
-    "crates/whirl-fec",
-    "crates/whirl-net",
-    "crates/whirl-node",
-    "crates/whirl-adversary",
-    "crates/whirl-shield",
-    "crates/whirl-obfs",
-    "crates/whirl-endpoint",
-    "crates/whirl-directory",
-    "crates/whirl-pir",
-    "crates/whirl-stego",
-    "crates/whirl-crowd",
+    "crates/gyre-common",
+    "crates/gyre-sphinx",
+    "crates/gyre-fec",
+    "crates/gyre-net",
+    "crates/gyre-node",
+    "crates/gyre-adversary",
+    "crates/gyre-shield",
+    "crates/gyre-obfs",
+    "crates/gyre-endpoint",
+    "crates/gyre-directory",
+    "crates/gyre-pir",
+    "crates/gyre-stego",
+    "crates/gyre-crowd",
 ]
 
 [workspace.package]
@@ -21,7 +21,7 @@ version = "0.0.1"
 edition = "2021"
 rust-version = "1.85"
 license = "MIT"
-repository = "https://github.com/rupeshbharambe24/Whirlpool"
+repository = "https://github.com/rupeshbharambe24/Gyre"
 authors = ["rupeshbharambe24 <rupeshbharambe2004@gmail.com>"]
 
 [workspace.dependencies]

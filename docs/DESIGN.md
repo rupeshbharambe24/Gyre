@@ -1,18 +1,18 @@
-# Whirlpool — Design
+# Gyre — Design
 
 ![Status](https://img.shields.io/badge/status-experimental-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Rust](https://img.shields.io/badge/rust-1.85%2B-informational.svg)
 ![Crates](https://img.shields.io/badge/crates-13-blue.svg)
 ![Tests](https://img.shields.io/badge/tests-55%20passing-brightgreen.svg)
-[![CI](https://github.com/rupeshbharambe24/Whirlpool/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Whirlpool/actions/workflows/ci.yml)
+[![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 
 A condensed, public design summary. It states what the system is, the adversary
 it targets, the mechanisms it uses, and — just as importantly — the limits it
 does not cross.
 
 > [!WARNING]
-> Whirlpool is **early research: experimental and UNAUDITED**. Do **not** rely on
+> Gyre is **early research: experimental and UNAUDITED**. Do **not** rely on
 > it for real anonymity or safety yet. It is built in the open, milestone by
 > milestone, and every claim is *measured before it is trusted*. Nothing here beats
 > a global passive observer at low latency — nobody's design can (see
@@ -270,7 +270,7 @@ are reproduced here verbatim.
 
 ---
 
-<sub>Whirlpool is MIT-licensed ([../LICENSE](../LICENSE)) and experimental. Start
+<sub>Gyre is MIT-licensed ([../LICENSE](../LICENSE)) and experimental. Start
 at the [project README](../README.md). Report issues via the repo's GitHub Issues;
 report vulnerabilities privately via GitHub Security Advisories. Maintainer:
 [@rupeshbharambe24](https://github.com/rupeshbharambe24).</sub>

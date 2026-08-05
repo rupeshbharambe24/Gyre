@@ -66,13 +66,13 @@ reported to the maintainer responsible for enforcement.
 > **privately to the maintainer [@rupeshbharambe24](https://github.com/rupeshbharambe24)**
 > through a direct private channel via their GitHub profile. As a fallback only —
 > and purely because no dedicated conduct address exists yet — a
-> [GitHub private security advisory](https://github.com/rupeshbharambe24/Whirlpool/security/advisories/new)
+> [GitHub private security advisory](https://github.com/rupeshbharambe24/Gyre/security/advisories/new)
 > can also carry a confidential report, though that form is really meant for
 > software vulnerabilities. Please do **not** open a public issue for a conduct
 > report.
 
 > [!NOTE]
-> Whirlpool is an early-stage, solo-maintained research project. There is no
+> Gyre is an early-stage, solo-maintained research project. There is no
 > enforcement team or on-call rotation — responses are **best-effort** and may
 > take time. The maintainer will still review and act on every report as
 > promptly as circumstances allow.

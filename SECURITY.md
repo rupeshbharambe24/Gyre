@@ -10,7 +10,7 @@ only thing a privacy tool actually sells. So it is written to be **brutally
 honest** rather than reassuring. Read the caution below before anything else.
 
 > [!CAUTION]
-> **Whirlpool is experimental, UNAUDITED research. Do not use it to protect real
+> **Gyre is experimental, UNAUDITED research. Do not use it to protect real
 > people or real systems today.**
 >
 > - No third party has audited this code, its protocols, or its assumptions.
@@ -22,7 +22,7 @@ honest** rather than reassuring. Read the caution below before anything else.
 >   it issues as a demonstration, not a security boundary.
 > - If your safety, freedom, or a production system depends on the outcome, use a
 >   mature, audited tool (Tor, a reviewed mixnet, a real DDoS provider) instead.
->   Whirlpool is a research fabric for studying how these mechanisms compose, not
+>   Gyre is a research fabric for studying how these mechanisms compose, not
 >   a shield you should hide behind yet.
 
 ---
@@ -39,7 +39,7 @@ honest** rather than reassuring. Read the caution below before anything else.
 
 ## Supported versions
 
-Whirlpool is **pre-1.0**. There are no stable releases, no long-term support
+Gyre is **pre-1.0**. There are no stable releases, no long-term support
 branches, and no backported security fixes. The only thing that receives fixes is
 the current tip of `main`. If you are running anything older, the fix is to update.
 
@@ -67,7 +67,7 @@ Please report suspected security issues **privately**.
 **Use GitHub's private vulnerability reporting** (Security Advisories) on the
 repository:
 
-1. Go to <https://github.com/rupeshbharambe24/Whirlpool>.
+1. Go to <https://github.com/rupeshbharambe24/Gyre>.
 2. Open the **Security** tab → **Report a vulnerability** (GitHub Private
    Vulnerability Reporting).
 3. Include: affected crate(s), the commit hash you tested, a description, and a
@@ -87,14 +87,14 @@ What to expect, stated plainly:
   people depend on. That is the honest framing.
 
 For non-security bugs, ordinary questions, and design discussion, a normal public
-[GitHub issue](https://github.com/rupeshbharambe24/Whirlpool/issues) is the right
+[GitHub issue](https://github.com/rupeshbharambe24/Gyre/issues) is the right
 place.
 
 ---
 
 ## Threat model and scope
 
-Whirlpool is a two-rotor fabric — an **outbound** mixer that dissolves a person
+Gyre is a two-rotor fabric — an **outbound** mixer that dissolves a person
 into a crowd, and an **inbound** shield that hides and protects a system. The
 adversary it is *designed against* is deliberately narrow, and the things it does
 **not** defend against are listed explicitly so researchers are not surprised.
@@ -105,9 +105,9 @@ The primary target is a **partial network observer**: an adversary who sees *som
 links of the network and tries to correlate flows by timing. Also in scope:
 
 - A **censoring ISP or organization** — addressed by obfuscation / pluggable
-  transports (`whirl-obfs`), on an appearance level only.
+  transports (`gyre-obfs`), on an appearance level only.
 - **Sybil relay operators** — priced (never prevented) by a scarce resource:
-  proof-of-work, stake, and reputation (`whirl-shield`, `whirl-crowd`).
+  proof-of-work, stake, and reputation (`gyre-shield`, `gyre-crowd`).
 
 ```mermaid
 flowchart LR
@@ -127,7 +127,7 @@ observer rather than pretend the ceiling does not exist.
 
 > [!WARNING]
 > The following are **not** defended against. This is by design and by physics,
-> not by omission. If your adversary is on this list, Whirlpool is the wrong tool.
+> not by omission. If your adversary is on this list, Gyre is the wrong tool.
 
 - **The global passive observer at low latency.** An adversary who can watch
   *every* link simultaneously and correlate at low latency defeats this (and every
@@ -136,7 +136,7 @@ observer rather than pretend the ceiling does not exist.
   latency of the FAST lane.
 - **Endpoint compromise.** A stolen device, a malicious binary on the host, a
   logged-in session, or a browser/OS fingerprint deanonymizes the user regardless
-  of anything the network does. `whirl-endpoint` *mitigates* this; it never solves
+  of anything the network does. `gyre-endpoint` *mitigates* this; it never solves
   it.
 - **L3/L4 volumetric floods.** The inbound rotor's moving-target defense serves an
   **authorized client set** and is a trust-topology mechanism. It provides **no**
@@ -157,7 +157,7 @@ what the mechanisms can and cannot do. Each corresponds to a standing
 anti-overclaim rule the project treats as law.
 
 - **Multipath widens exposure; it is not a reconstruction threshold.** Reed–Solomon
-  erasure-coded multipath (`whirl-fec`) hardens the *middle path* probabilistically
+  erasure-coded multipath (`gyre-fec`) hardens the *middle path* probabilistically
   and buys availability and content-splitting. It does **not** require an attacker
   to collect *m* fragments to learn anything, and it does **not** hide the
   endpoints. Measured against a partial observer on 20% of paths, going from a
@@ -173,17 +173,17 @@ anti-overclaim rule the project treats as law.
   user-decentralization and it is not a Sybil proof. Credentials
   (the VOPRF token) authorize access — they do not make identities scarce.
 - **Reproducible builds prove `binary == source`, not what a relay runs.** Build
-  attestation (`whirl-directory`) lets you verify that a published binary matches
+  attestation (`gyre-directory`) lets you verify that a published binary matches
   its source. It cannot prove that a given relay operator is actually *running*
   that binary rather than a modified one. Attestation is **detection, not
   prevention**.
 - **PIR is information-theoretically secure only if the two servers do not
-  collude.** The 2-server IT-PIR in `whirl-pir` is **off by default** — a full,
+  collude.** The 2-server IT-PIR in `gyre-pir` is **off by default** — a full,
   threshold-signed directory download is already leak-free and cheaper. When PIR
   *is* used, its guarantee collapses entirely the moment the two servers collude
   (Decision D18).
 - **The VOPRF capability token is an unaudited prototype.** Restating the caution
-  because it matters wherever tokens appear: `whirl-shield`'s token is hand-built
+  because it matters wherever tokens appear: `gyre-shield`'s token is hand-built
   on `curve25519-dalek` in the RFC 9497 shape and has had no cryptographic review.
 - **Cover traffic is not concurrent real senders.** A cover-inflated "effective
   set" must never be read as the number of real people actually present. The
