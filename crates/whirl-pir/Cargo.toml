@@ -1,0 +1,16 @@
+[package]
+name = "whirl-pir"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Addition 6: private directory retrieval — 2-server information-theoretic PIR (surgical; default is full download)."
+
+[[bin]]
+name = "whirl-pir"
+path = "src/main.rs"
+
+[dependencies]
+getrandom.workspace = true

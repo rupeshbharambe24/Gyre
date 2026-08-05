@@ -11,6 +11,7 @@ members = [
     "crates/whirl-obfs",
     "crates/whirl-endpoint",
     "crates/whirl-directory",
+    "crates/whirl-pir",
 ]
 
 [workspace.package]

@@ -772,6 +772,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "whirl-pir"
+version = "0.0.1"
+dependencies = [
+ "getrandom 0.3.4",
+]
+
+[[package]]
 name = "whirl-shield"
 version = "0.0.1"
 dependencies = [

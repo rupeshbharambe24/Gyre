@@ -97,7 +97,13 @@ The build is measurement-gated: each step ends with a number against a baseline.
   and reproducible-build attestation (a build hash is blessed only by enough independent
   rebuilders). Honest ceiling: **detection, not prevention**; reproducible builds prove
   binary == source, not that a relay *runs* that binary.
-- [ ] P3 — the remaining additions (deniability, PIR — situational/surgical)
+- [x] **P3 · Addition 6 — private directory retrieval.** Default is **PIR OFF** (download
+  the full signed consensus — leak-free, no non-collusion assumption). The surgical
+  alternative is a 2-server information-theoretic XOR PIR for the one lookup whose target
+  leaks (the rendezvous descriptor): the client recovers record `i` without either server
+  learning `i`. Honest ceiling: information-theoretic **only if the two servers don't
+  collude** — and Sybil infra is in the threat model.
+- [ ] P3 · Addition 5 — deniability (situational)
 - [ ] P4 — the crowd / incentive layer (the binding constraint the GATE measured)
 - [ ] S5 — QUIC/MASQUE transport upgrade (deferred: TCP framing works for now)
 
@@ -162,6 +168,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 | `whirl-obfs` | Pluggable-transport framework + transports + an entropy meter |
 | `whirl-endpoint` | Endpoint hardening: forward-secret ratchet, personas, uniform fingerprint |
 | `whirl-directory` | Threshold-signed consensus, equivocation detection, build attestation |
+| `whirl-pir` | Private directory retrieval: 2-server IT-PIR (default is full download) |
 
 ## Design principle
 
