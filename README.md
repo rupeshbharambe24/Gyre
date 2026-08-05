@@ -77,12 +77,18 @@ The build is measurement-gated: each step ends with a number against a baseline.
   issuer — which only ever saw a random *blinded* point — cannot link the redemption to
   the issuance. Single-use (double-spend rejected). Built on the audited
   `curve25519-dalek` primitives; the construction is an unaudited prototype.
+- [x] **P3 · Addition 1 — obfuscation / pluggable transports.** A swappable `Obfuscator`
+  framework (agility is the real defense) with `Identity`, a `Polymorphic`
+  "looks-like-nothing" transport, and a `TlsMimic`. The honest ceiling is *measured*, not
+  just asserted: an entropy meter shows the polymorphic output is near-max entropy —
+  exactly the fingerprint modern entropy-DPI flags. Appearance only; zero effect on
+  anonymity, the trilemma, or a global observer.
+- [ ] P3 — the other five additions (endpoint hardening, decentralization, deniability, PIR)
 - [ ] S5 — QUIC/MASQUE transport upgrade (deferred: TCP framing works for now)
-- [ ] P3 — the six orthogonal additions (obfuscation, endpoint, decentralization, …)
 
 **Both rotors have working cores.** P0 (the outbound data plane, S0 → S4) is complete
-with a measurement GATE; the inbound rotor (MTD hopping + PoW admission + rendezvous
-origin-hiding + unlinkable capability tokens) is complete.
+with a measurement GATE; the inbound rotor (MTD + PoW + rendezvous + unlinkable capability
+tokens) is complete; P3 hardening has begun with the obfuscation layer.
 
 ## The GATE: what the measurement actually says
 
@@ -137,7 +143,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 | `whirl-net` | Async transport, directory, relay server, mixing, cover traffic |
 | `whirl-node` | Demo: spin up a testnet and route traffic across it |
 | `whirl-adversary` | The GATE: partial-observer correlation harness + measured verdict |
-| `whirl-shield` | The inbound rotor: MTD ingress hopping + proof-of-work admission |
+| `whirl-shield` | The inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens |
+| `whirl-obfs` | Pluggable-transport framework + transports + an entropy meter |
 
 ## Design principle
 

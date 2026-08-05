@@ -8,6 +8,7 @@ members = [
     "crates/whirl-node",
     "crates/whirl-adversary",
     "crates/whirl-shield",
+    "crates/whirl-obfs",
 ]
 
 [workspace.package]

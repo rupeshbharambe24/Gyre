@@ -716,6 +716,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "whirl-obfs"
+version = "0.0.1"
+dependencies = [
+ "getrandom 0.3.4",
+ "hmac",
+ "sha2",
+ "thiserror",
+]
+
+[[package]]
 name = "whirl-shield"
 version = "0.0.1"
 dependencies = [
