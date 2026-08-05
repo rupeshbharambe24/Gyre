@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/whirl-common",
     "crates/whirl-sphinx",
+    "crates/whirl-net",
     "crates/whirl-node",
 ]
 
@@ -20,6 +21,14 @@ authors = ["rupeshbharambe24 <rupeshbharambe2004@gmail.com>"]
 sphinx-packet = "0.7.0"
 x25519-dalek = { version = "3.0.0", features = ["static_secrets", "getrandom"] }
 thiserror = "2"
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "net",
+    "io-util",
+    "time",
+    "sync",
+] }
 
 # Slightly smaller, faster release binaries; harmless for a research build.
 [profile.release]

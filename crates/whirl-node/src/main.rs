@@ -1,6 +1,6 @@
-//! **S0 demo.** Builds a small in-process circuit of relays, wraps a message into a
-//! Sphinx onion at the "client", and echoes it hop-by-hop to the exit — printing
-//! what each hop is (and, importantly, is *not*) allowed to see.
+//! **S1 demo.** Spins up a small localhost testnet of relays, then wraps a message
+//! into a Sphinx onion at the "client" and sends it in — watching it cross real
+//! sockets, hop by hop, until the destination receives the exact payload.
 //!
 //! Run it with:
 //!
@@ -8,71 +8,86 @@
 //! cargo run -p whirl-node
 //! ```
 //!
-//! This is a demonstration harness, not the real node service (that arrives with
-//! the QUIC transport in a later milestone).
+//! Each relay only ever learns the *next* hop; the relay lines (on stderr) show the
+//! forwarding, and the client/destination lines (on stdout) show the round trip.
 
+use std::net::SocketAddr;
+
+use tokio::net::TcpListener;
+use tokio::sync::oneshot;
 use whirl_common::{FlowClass, DEFAULT_HOPS};
-use whirl_sphinx::{null_surb, wrap, Relay, Unwrapped, ADDRESS_LEN, DEST_ADDRESS_LEN};
+use whirl_net::{read_frame, send_to, Directory, RelayServer};
+use whirl_sphinx::{null_surb, packet_to_bytes, wrap, Relay, ADDRESS_LEN, DEST_ADDRESS_LEN};
 
-fn main() {
+#[tokio::main]
+async fn main() {
     println!(
-        "Whirlpool · S0 — Sphinx onion echo  ({} hops, lane={})",
+        "Whirlpool · S1 — Sphinx onion over the network  ({} hops, lane={})",
         DEFAULT_HOPS,
         FlowClass::Fast
     );
     println!("{}", "-".repeat(64));
 
-    // A tiny in-process circuit of DEFAULT_HOPS relays, address-labelled 1..=N so
-    // the "learns only the next hop" property is visible in the output.
+    // A localhost circuit of DEFAULT_HOPS relays, address-labelled 1..=N.
     let relays: Vec<Relay> = (1..=DEFAULT_HOPS as u8)
         .map(|i| Relay::new([i; ADDRESS_LEN]))
         .collect();
-    let route: Vec<_> = relays.iter().map(Relay::as_node).collect();
 
-    let dest = [42u8; DEST_ADDRESS_LEN];
-    let message = b"hello from the client, through the whirlpool";
-
-    println!(
-        "client  wrapping {} bytes for a {}-hop route -> exit delivers to dest #{}",
-        message.len(),
-        route.len(),
-        dest[0]
-    );
-
-    let mut in_flight = Some(wrap(message, &route, dest, null_surb()).expect("wrap onion"));
-    for (i, relay) in relays.iter().enumerate() {
-        let packet = in_flight.take().expect("a packet is in flight");
-        match relay.process(packet).expect("process onion") {
-            Unwrapped::Forward {
-                next_address,
-                packet,
-                delay_nanos,
-            } => {
-                println!(
-                    "  hop {}  relay #{:<2}  forward -> #{:<2}   (delay {}ns; learns nothing else)",
-                    i + 1,
-                    relay.address()[0],
-                    next_address[0],
-                    delay_nanos
-                );
-                in_flight = Some(packet);
-            }
-            Unwrapped::Final {
-                dest_address,
-                payload,
-            } => {
-                println!(
-                    "  hop {}  relay #{:<2}  EXIT    -> deliver to dest #{}",
-                    i + 1,
-                    relay.address()[0],
-                    dest_address[0]
-                );
-                assert_eq!(payload, message, "payload survived the onion intact");
-                println!("delivered: {:?}", String::from_utf8_lossy(&payload));
-            }
-        }
+    let mut listeners = Vec::new();
+    let mut entries: Vec<([u8; ADDRESS_LEN], SocketAddr)> = Vec::new();
+    for relay in &relays {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind relay");
+        let addr = listener.local_addr().unwrap();
+        println!("relay #{:<2} listening on {addr}", relay.address()[0]);
+        entries.push((relay.address(), addr));
+        listeners.push(listener);
     }
 
+    // The destination sink.
+    let dest_label = [42u8; DEST_ADDRESS_LEN];
+    let sink = TcpListener::bind("127.0.0.1:0").await.expect("bind sink");
+    let sink_addr = sink.local_addr().unwrap();
+    println!("dest  #{:<2} listening on {sink_addr}", dest_label[0]);
+    entries.push((dest_label, sink_addr));
+
+    let first_hop = entries[0].1;
+    let dir = Directory::from_entries(entries);
+    let route: Vec<_> = relays.iter().map(Relay::as_node).collect();
+
+    // Start every relay (verbose, so the demo prints each forward).
+    for (relay, listener) in relays.into_iter().zip(listeners) {
+        let server = RelayServer::new(relay, dir.clone()).verbose(true);
+        tokio::spawn(async move {
+            let _ = server.serve(listener).await;
+        });
+    }
+
+    // The destination waits for one delivered frame.
+    let (tx, rx) = oneshot::channel();
+    tokio::spawn(async move {
+        let (mut conn, _) = sink.accept().await.unwrap();
+        let delivered = read_frame(&mut conn).await.unwrap().unwrap();
+        let _ = tx.send(delivered);
+    });
+
+    let message = b"hello from the client, across the whirlpool network";
     println!("{}", "-".repeat(64));
-    println!("OK  no hop saw both ends; the exit recovered the exact payload.");
+    println!(
+        "client  wrap {} bytes -> send to first hop {first_hop}",
+        message.len()
+    );
+    let packet = wrap(message, &route, dest_label, null_surb()).expect("wrap onion");
+    send_to(first_hop, &packet_to_bytes(&packet))
+        .await
+        .expect("send to first hop");
+
+    let delivered = tokio::time::timeout(std::time::Duration::from_secs(5), rx)
+        .await
+        .expect("delivery timed out")
+        .expect("sink dropped the sender");
+
+    println!("{}", "-".repeat(64));
+    assert_eq!(delivered, message, "payload survived the network intact");
+    println!("delivered: {:?}", String::from_utf8_lossy(&delivered));
+    println!("OK  onion crossed {DEFAULT_HOPS} networked hops; no relay saw both ends.");
 }

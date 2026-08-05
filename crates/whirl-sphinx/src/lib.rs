@@ -154,6 +154,16 @@ pub fn unwrap(packet: SphinxPacket, relay_secret: &StaticSecret) -> Result<Unwra
     }
 }
 
+/// Serialize an onion packet to its wire bytes (fixed-size header + payload).
+pub fn packet_to_bytes(packet: &SphinxPacket) -> Vec<u8> {
+    packet.to_bytes()
+}
+
+/// Parse an onion packet received off the wire.
+pub fn packet_from_bytes(bytes: &[u8]) -> Result<SphinxPacket> {
+    Ok(SphinxPacket::from_bytes(bytes)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

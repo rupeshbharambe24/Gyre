@@ -39,16 +39,20 @@ The build is measurement-gated: each step ends with a number against a baseline.
 - [x] **S0 — Sphinx onion echo.** A payload is wrapped and processed hop-by-hop so
   that no relay sees both ends and the exit recovers the exact payload. Built on
   the audited [`sphinx-packet`](https://crates.io/crates/sphinx-packet) crate.
-- [ ] S1 — QUIC/MASQUE transport + the adversary-emulation harness (the go/no-go gate)
+- [x] **S1 — networked relays.** Each relay is now an async server: an onion really
+  travels client → relay → relay → exit → destination over the network, resolving
+  next hops through a directory. (Transport is length-prefixed frames over async
+  TCP for now; the QUIC/MASQUE upgrade is a later milestone.)
 - [ ] S2 — per-hop Poisson mixing + cover loops
 - [ ] S3 — erasure-coded multipath (the novel core)
 - [ ] S4 — FAST / MIX adaptive lanes
-- [ ] … inbound rotor, then the orthogonal hardening layers
+- [ ] GATE — adversary-emulation harness: measure correlation vs. a baseline
+- [ ] S5 — QUIC/MASQUE transport upgrade, then the inbound rotor
 
 ## Quickstart
 
 ```bash
-# Run the S0 demo: echo a Sphinx onion through a 3-hop circuit
+# Run the S1 demo: route a Sphinx onion across a localhost testnet of relays
 cargo run -p whirl-node
 
 # Tests, format, lint
@@ -57,15 +61,20 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-Example S0 output:
+Example S1 output:
 
 ```text
-Whirlpool · S0 — Sphinx onion echo  (3 hops, lane=fast)
-client  wrapping 44 bytes for a 3-hop route -> exit delivers to dest #42
-  hop 1  relay #1   forward -> #2    (delay 0ns; learns nothing else)
-  hop 2  relay #2   forward -> #3    (delay 0ns; learns nothing else)
-  hop 3  relay #3   EXIT    -> deliver to dest #42
-OK  no hop saw both ends; the exit recovered the exact payload.
+Whirlpool · S1 — Sphinx onion over the network  (3 hops, lane=fast)
+relay #1  listening on 127.0.0.1:63771
+relay #2  listening on 127.0.0.1:63772
+relay #3  listening on 127.0.0.1:63773
+dest  #42 listening on 127.0.0.1:63774
+client  wrap 51 bytes -> send to first hop 127.0.0.1:63771
+[relay #1] forward -> #2
+[relay #2] forward -> #3
+[relay #3] EXIT -> deliver 51 bytes to dest #42
+delivered: "hello from the client, across the whirlpool network"
+OK  onion crossed 3 networked hops; no relay saw both ends.
 ```
 
 ## Layout
@@ -73,8 +82,9 @@ OK  no hop saw both ends; the exit recovered the exact payload.
 | Crate | What it holds |
 |---|---|
 | `whirl-common` | Shared constants and types (e.g. `FlowClass`) |
-| `whirl-sphinx` | S0 — typed wrapper over the audited Sphinx mix-packet format |
-| `whirl-node` | S0 demo: build an onion and echo it through a circuit |
+| `whirl-sphinx` | Typed wrapper over the audited Sphinx mix-packet format |
+| `whirl-net` | Async transport, directory, and relay server (carries onions over the wire) |
+| `whirl-node` | Demo: spin up a testnet and route an onion across it |
 
 ## Design principle
 
