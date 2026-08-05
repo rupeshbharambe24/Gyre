@@ -1,0 +1,16 @@
+[package]
+name = "whirl-stego"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Addition 5: deniability (situational) — LSB steganography, with the honest limits made explicit."
+
+[[bin]]
+name = "whirl-stego"
+path = "src/main.rs"
+
+[dependencies]
+thiserror.workspace = true

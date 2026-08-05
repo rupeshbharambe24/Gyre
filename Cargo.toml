@@ -12,6 +12,7 @@ members = [
     "crates/whirl-endpoint",
     "crates/whirl-directory",
     "crates/whirl-pir",
+    "crates/whirl-stego",
 ]
 
 [workspace.package]

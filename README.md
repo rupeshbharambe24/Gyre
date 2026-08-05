@@ -103,7 +103,11 @@ The build is measurement-gated: each step ends with a number against a baseline.
   leaks (the rendezvous descriptor): the client recovers record `i` without either server
   learning `i`. Honest ceiling: information-theoretic **only if the two servers don't
   collude** — and Sybil infra is in the threat model.
-- [ ] P3 · Addition 5 — deniability (situational)
+- [x] **P3 · Addition 5 — deniability (situational).** LSB steganography that hides a
+  message in a cover object's low bits (the carrier looks unchanged). Honest ceiling
+  front-and-center: it's *trivially detectable* by steganalysis, capacity is tiny, and
+  deniable at-rest storage (hidden volumes) is **de-recommended** — prefer memory-only
+  operation. **P3 (all six additions) is complete.**
 - [ ] P4 — the crowd / incentive layer (the binding constraint the GATE measured)
 - [ ] S5 — QUIC/MASQUE transport upgrade (deferred: TCP framing works for now)
 
@@ -169,6 +173,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 | `whirl-endpoint` | Endpoint hardening: forward-secret ratchet, personas, uniform fingerprint |
 | `whirl-directory` | Threshold-signed consensus, equivocation detection, build attestation |
 | `whirl-pir` | Private directory retrieval: 2-server IT-PIR (default is full download) |
+| `whirl-stego` | Deniability: LSB steganography (situational; honest limits documented) |
 
 ## Design principle
 
