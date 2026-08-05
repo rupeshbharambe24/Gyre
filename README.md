@@ -52,14 +52,19 @@ The build is measurement-gated: each step ends with a number against a baseline.
   disjoint path; the destination reassembles from any `m`. Honest framing (**D7**):
   this hardens the *middle path* against a partial observer — it is **not** a
   reconstruction-threshold guarantee, and endpoints stay exposed.
-- [ ] S4 — FAST / MIX adaptive lanes
+- [x] **S4 — FAST / MIX adaptive lanes.** The client picks a per-flow tradeoff: FAST
+  is onion-only (~zero added delay, Tor-class latency); MIX pays a Poisson per-hop
+  delay for stronger timing resistance. The lane is never written in the clear —
+  but note the honest ceiling (**D8**/**D21**): a partial observer can still separate
+  the lanes by their observable delay distribution, so FAST and MIX partition the
+  anonymity set rather than sharing one crowd.
 - [ ] GATE — adversary-emulation harness: measure correlation vs. a baseline
 - [ ] S5 — QUIC/MASQUE transport upgrade, then the inbound rotor
 
 ## Quickstart
 
 ```bash
-# Run the S3 demo: erasure-coded multipath with one path dropped
+# Run the S4 demo: FAST vs MIX lanes on the same route, timed
 cargo run -p whirl-node
 
 # Tests, format, lint
@@ -68,20 +73,13 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 ```
 
-Example S3 output (three disjoint paths, path 1 dropped, still rebuilt from 2 of 3):
+Example S4 output (same 3-hop route; the lane only changes the delay policy):
 
 ```text
-Whirlpool · S3 — erasure-coded multipath  (2-of-3 across disjoint paths, lane=mix)
-path 0: relays [1, 2, 3] -> dest #200
-path 1: relays [4, 5, 6] -> dest #200
-path 2: relays [7, 8, 9] -> dest #200
-client  split 54 bytes into 3 fragments; sending all but path 1 (dropped)
-[relay #1] hold 27ms -> forward to #2
-[relay #7] hold 23ms -> forward to #8
-[relay #3] EXIT -> deliver 45 bytes to dest #200
-[relay #9] EXIT -> deliver 45 bytes to dest #200
-delivered: "a message split across branches, rebuilt from a subset"
-OK  path 1 was dropped, yet 2-of-3 fragments rebuilt the message.
+Whirlpool · S4 — FAST / MIX adaptive lanes  (3 hops)
+FAST lane   mean/hop   0ms   ->   delivered in   15ms
+ MIX lane   mean/hop  50ms   ->   delivered in  114ms
+OK  same route, two lanes: FAST trades anonymity for latency, MIX the reverse.
 ```
 
 ## Layout

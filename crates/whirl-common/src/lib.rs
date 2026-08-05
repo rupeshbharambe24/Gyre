@@ -4,6 +4,8 @@
 //! only the small pieces that would otherwise be duplicated across the node and
 //! client.
 
+use core::time::Duration;
+
 /// Default number of onion hops in a circuit.
 ///
 /// Capped low on purpose (design decision **D5**): beyond ~3 hops the anonymity
@@ -34,6 +36,21 @@ impl FlowClass {
             FlowClass::Mix => "mix",
         }
     }
+
+    /// Default mean per-hop Poisson mixing delay for this lane.
+    ///
+    /// `Fast` adds none (Tor-class latency); `Mix` pays a mean delay per hop for
+    /// stronger timing-correlation resistance. The lane is never written in the clear
+    /// — only the encrypted per-hop delays differ — but note the honest ceiling
+    /// (**D8**/**D21**): a partial observer can still separate the lanes by the
+    /// *observable* delay distribution, so FAST and MIX partition the anonymity set
+    /// rather than sharing one crowd.
+    pub fn default_mean_hop_delay(self) -> Duration {
+        match self {
+            FlowClass::Fast => Duration::ZERO,
+            FlowClass::Mix => Duration::from_millis(50),
+        }
+    }
 }
 
 impl core::fmt::Display for FlowClass {
@@ -56,5 +73,11 @@ mod tests {
     #[test]
     fn default_hops_is_three() {
         assert_eq!(DEFAULT_HOPS, 3);
+    }
+
+    #[test]
+    fn lane_delays_encode_the_tradeoff() {
+        assert_eq!(FlowClass::Fast.default_mean_hop_delay(), Duration::ZERO);
+        assert!(FlowClass::Mix.default_mean_hop_delay() > Duration::ZERO);
     }
 }
