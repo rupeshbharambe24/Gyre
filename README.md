@@ -89,7 +89,16 @@ The build is measurement-gated: each step ends with a number against a baseline.
   client fingerprint (so all clients look byte-identical — which feeds the crowd). Keys
   are `zeroize`d. Honest ceiling: isolation *contains* a compromise, it can't make an
   untrusted endpoint trusted; uniformity only helps with a large crowd.
-- [ ] P3 — the remaining additions (decentralization + attestation, deniability, PIR)
+- [x] **P3 · Addition 3 — anonymous credentials** — done as the VOPRF capability token in
+  `whirl-shield` (see above).
+- [x] **P3 · Addition 4 — decentralization + attestation.** A `t`-of-`n` threshold-signed
+  directory consensus (no single authority can forge it), Certificate-Transparency-style
+  equivocation detection (two signed bodies for one epoch = public proof of misbehavior),
+  and reproducible-build attestation (a build hash is blessed only by enough independent
+  rebuilders). Honest ceiling: **detection, not prevention**; reproducible builds prove
+  binary == source, not that a relay *runs* that binary.
+- [ ] P3 — the remaining additions (deniability, PIR — situational/surgical)
+- [ ] P4 — the crowd / incentive layer (the binding constraint the GATE measured)
 - [ ] S5 — QUIC/MASQUE transport upgrade (deferred: TCP framing works for now)
 
 **Both rotors have working cores.** P0 (the outbound data plane, S0 → S4) is complete
@@ -152,6 +161,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 | `whirl-shield` | The inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens |
 | `whirl-obfs` | Pluggable-transport framework + transports + an entropy meter |
 | `whirl-endpoint` | Endpoint hardening: forward-secret ratchet, personas, uniform fingerprint |
+| `whirl-directory` | Threshold-signed consensus, equivocation detection, build attestation |
 
 ## Design principle
 

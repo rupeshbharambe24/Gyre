@@ -10,6 +10,7 @@ members = [
     "crates/whirl-shield",
     "crates/whirl-obfs",
     "crates/whirl-endpoint",
+    "crates/whirl-directory",
 ]
 
 [workspace.package]
@@ -26,6 +27,7 @@ authors = ["rupeshbharambe24 <rupeshbharambe2004@gmail.com>"]
 sphinx-packet = "0.7.0"
 x25519-dalek = { version = "3.0.0", features = ["static_secrets", "getrandom"] }
 curve25519-dalek = "5"
+ed25519-dalek = "3"
 reed-solomon-erasure = "6"
 hmac = "0.13"
 sha2 = "0.11"
