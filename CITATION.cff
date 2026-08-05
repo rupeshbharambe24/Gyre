@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use Whirlpool, please cite it."
+type: software
+title: Whirlpool
+abstract: "A layered, two-rotor privacy-and-defense network fabric; experimental and unaudited."
+authors:
+  - name: "rupeshbharambe24"
+repository-code: "https://github.com/rupeshbharambe24/Whirlpool"
+license: MIT
+version: 0.0.1
+date-released: 2026-08-05
+keywords:
+  - anonymity
+  - mixnet
+  - onion-routing
+  - privacy
+  - moving-target-defense
+  - rust

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability (private)
+    url: https://github.com/rupeshbharambe24/Whirlpool/security
+    about: Do not open a public issue for security problems. Use GitHub's private vulnerability reporting so it can be triaged responsibly.
+  - name: Questions & documentation
+    url: https://github.com/rupeshbharambe24/Whirlpool#readme
+    about: Not a bug or a concrete proposal? Read the README and the docs/ folder first, then open a bug report or feature proposal above.

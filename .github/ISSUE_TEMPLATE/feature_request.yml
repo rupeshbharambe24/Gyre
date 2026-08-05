@@ -1,0 +1,79 @@
+name: Feature / milestone proposal
+description: Propose a new capability, hardening addition, or milestone for the roadmap.
+title: "[Proposal]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Proposals are welcome. Whirlpool grows **milestone by milestone**, and **every claim is
+        measured before it is trusted**. A good proposal states not just what it buys, but where
+        its ceiling is.
+
+        > [!NOTE]
+        > The binding constraint almost everywhere is the **crowd** — the size of the concurrent
+        > anonymity set. Cleverness does not manufacture anonymity. If your proposal implies more
+        > anonymity, explain how it grows or sustains the crowd.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What gap, threat, or friction does this address? Who is hurt by the status quo?
+      placeholder: "A partial observer on X can currently do Y because ..."
+    validations:
+      required: true
+  - type: textarea
+    id: approach
+    attributes:
+      label: Proposed approach
+      description: How would it work? Sketch the mechanism. Reference existing crates or decisions (D1–D22) where relevant.
+      placeholder: "Add a per-flow ... in whirl-net, gated behind ..."
+    validations:
+      required: false
+  - type: dropdown
+    id: dimension
+    attributes:
+      label: Which dimension / threat does this address?
+      description: Where does this sit in the two-rotor model and threat surface?
+      options:
+        - Outbound rotor — mixing / cover / multipath
+        - Inbound rotor — MTD / PoW / rendezvous / tokens
+        - Adversary harness / measurement (the GATE)
+        - Obfuscation / censorship resistance
+        - Endpoint hardening / data minimization
+        - Directory / consensus / attestation
+        - PIR / private lookup
+        - Deniability / steganography
+        - Crowd / incentives / Sybil pricing
+        - Transport / performance
+        - Build / CI / tooling
+        - Docs
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: limits
+    attributes:
+      label: Limits / ceiling
+      description: |
+        State honestly what this does **not** buy. Against which adversary does it stop working?
+        (Reminder: nothing beats a global passive observer at low latency; the anonymity trilemma
+        still applies; endpoint compromise deanonymizes regardless of the network.)
+      placeholder: "This helps against a partial observer at mix latency only; it does nothing at the FAST lane, and ..."
+    validations:
+      required: true
+  - type: checkboxes
+    id: honesty
+    attributes:
+      label: Honesty
+      options:
+        - label: I understand Whirlpool refuses to overclaim, and this proposal states its limits / ceiling.
+          required: true
+  - type: checkboxes
+    id: no-new-crypto
+    attributes:
+      label: Cryptographic hygiene
+      description: Design principle D11 — do not roll your own crypto or transport; integrate audited primitives.
+      options:
+        - label: This does not require rolling new cryptography or transport (or the "Proposed approach" above justifies why it must).
+          required: true

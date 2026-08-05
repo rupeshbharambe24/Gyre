@@ -1,0 +1,95 @@
+name: Bug report
+description: Report a defect, crash, or incorrect behavior in a Whirlpool crate.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a report.
+
+        > [!IMPORTANT]
+        > Whirlpool is **early research — EXPERIMENTAL and UNAUDITED**. Do **not** rely on it
+        > for real anonymity or safety yet. A "bug" here is a defect against the project's
+        > *measured* claims, not a shortfall against anonymity guarantees it has never made.
+
+        > [!WARNING]
+        > **Do not report security vulnerabilities here.** Use GitHub's private vulnerability
+        > reporting instead: https://github.com/rupeshbharambe24/Whirlpool/security
+        > Public issues are world-readable the moment you submit them.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: A clear, concise description of the bug.
+      placeholder: "cargo test -p whirl-shield panics on a fresh checkout because ..."
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Crate / area
+      description: Which part of the workspace does this affect?
+      options:
+        - whirl-common
+        - whirl-sphinx
+        - whirl-fec
+        - whirl-net
+        - whirl-node
+        - whirl-adversary
+        - whirl-shield
+        - whirl-obfs
+        - whirl-endpoint
+        - whirl-directory
+        - whirl-pir
+        - whirl-stego
+        - whirl-crowd
+        - build/CI
+        - docs
+        - other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The exact commands and inputs. A minimal reproduction is worth ten descriptions.
+      placeholder: |
+        1. `git clone` at commit <sha>
+        2. `cargo run -p whirl-adversary`
+        3. Observe the panic below
+      render: bash
+    validations:
+      required: true
+  - type: textarea
+    id: expected-actual
+    attributes:
+      label: Expected vs. actual behavior
+      description: What you expected to happen, and what actually happened (include full error output / backtrace).
+      placeholder: |
+        Expected: the GATE report prints a correlation sweep and exits 0.
+        Actual: thread 'main' panicked at ...
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        Your OS and `rustc` version. Note the MSRV (rust-version) is **1.85** on the stable toolchain.
+      placeholder: |
+        OS: macOS 15.5 (arm64)
+        rustc: 1.85.0 (stable)
+        cargo: 1.85.0
+      render: text
+    validations:
+      required: true
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-flight
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: This is a functional/build defect, not a security vulnerability (those go through private reporting).
+          required: true
