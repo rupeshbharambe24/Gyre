@@ -1,0 +1,15 @@
+[package]
+name = "whirl-crowd"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "P4: the crowd/incentive layer — a k-anonymity admission governor and a staking Sybil-pricing model."
+
+[[bin]]
+name = "whirl-crowd"
+path = "src/main.rs"
+
+[dependencies]

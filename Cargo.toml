@@ -13,6 +13,7 @@ members = [
     "crates/whirl-directory",
     "crates/whirl-pir",
     "crates/whirl-stego",
+    "crates/whirl-crowd",
 ]
 
 [workspace.package]

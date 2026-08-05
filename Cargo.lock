@@ -717,6 +717,10 @@ name = "whirl-common"
 version = "0.0.1"
 
 [[package]]
+name = "whirl-crowd"
+version = "0.0.1"
+
+[[package]]
 name = "whirl-directory"
 version = "0.0.1"
 dependencies = [

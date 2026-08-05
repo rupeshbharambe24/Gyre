@@ -108,12 +108,20 @@ The build is measurement-gated: each step ends with a number against a baseline.
   front-and-center: it's *trivially detectable* by steganalysis, capacity is tiny, and
   deniable at-rest storage (hidden volumes) is **de-recommended** — prefer memory-only
   operation. **P3 (all six additions) is complete.**
-- [ ] P4 — the crowd / incentive layer (the binding constraint the GATE measured)
+- [x] **P4 — the crowd / incentive layer (the binding constraint).** The GATE measured that
+  anonymity *is* the size of the concurrent crowd. P4 is the two pieces of that problem which
+  are code: a **k-anonymity admission governor** that *refuses to promise* anonymity below a
+  safe concurrent set size (it admits, batches, or refuses — it refuses to lie, it does not
+  make a crowd), and a **staking model** that *prices* a Sybil takeover (`stake_to_control`)
+  and penalizes splitting one stake across many identities via a self-bond premium. Honest
+  ceiling front-and-center: neither manufactures the crowd — that stays a demand-side adoption
+  problem, and staking trades Sybil resistance for wealth concentration. **All phases complete.**
 - [ ] S5 — QUIC/MASQUE transport upgrade (deferred: TCP framing works for now)
 
-**Both rotors have working cores.** P0 (the outbound data plane, S0 → S4) is complete
+**Both rotors are complete, end to end.** P0 (the outbound data plane, S0 → S4) is complete
 with a measurement GATE; the inbound rotor (MTD + PoW + rendezvous + unlinkable capability
-tokens) is complete; P3 hardening has begun with the obfuscation layer.
+tokens) is complete; P3 hardening is complete (all six additions); and P4 names the binding
+constraint in code and in prose. The only deferred item is the S5 QUIC/MASQUE transport swap.
 
 ## The GATE: what the measurement actually says
 
@@ -152,6 +160,9 @@ cargo run -p whirl-adversary
 # Run the S4 demo: FAST vs MIX lanes on the same route, timed
 cargo run -p whirl-node
 
+# Run the P4 demo: k-anonymity admission governor + staking Sybil-pricing
+cargo run -p whirl-crowd
+
 # Tests, format, lint
 cargo test --workspace
 cargo fmt --all -- --check
@@ -174,6 +185,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 | `whirl-directory` | Threshold-signed consensus, equivocation detection, build attestation |
 | `whirl-pir` | Private directory retrieval: 2-server IT-PIR (default is full download) |
 | `whirl-stego` | Deniability: LSB steganography (situational; honest limits documented) |
+| `whirl-crowd` | P4: k-anonymity admission governor + staking Sybil-pricing model |
 
 ## Design principle
 
