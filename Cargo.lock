@@ -688,6 +688,15 @@ name = "whirl-common"
 version = "0.0.1"
 
 [[package]]
+name = "whirl-endpoint"
+version = "0.0.1"
+dependencies = [
+ "hmac",
+ "sha2",
+ "zeroize",
+]
+
+[[package]]
 name = "whirl-fec"
 version = "0.0.1"
 dependencies = [

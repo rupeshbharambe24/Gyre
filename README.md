@@ -83,7 +83,13 @@ The build is measurement-gated: each step ends with a number against a baseline.
   just asserted: an entropy meter shows the polymorphic output is near-max entropy —
   exactly the fingerprint modern entropy-DPI flags. Appearance only; zero effect on
   anonymity, the trilemma, or a global observer.
-- [ ] P3 — the other five additions (endpoint hardening, decentralization, deniability, PIR)
+- [x] **P3 · Addition 2 — endpoint hardening + data minimization.** A forward-secret key
+  ratchet (each step a fresh key; earlier keys unrecoverable), compartmentalized
+  per-context personas (cryptographically unlinkable across contexts), and one uniform
+  client fingerprint (so all clients look byte-identical — which feeds the crowd). Keys
+  are `zeroize`d. Honest ceiling: isolation *contains* a compromise, it can't make an
+  untrusted endpoint trusted; uniformity only helps with a large crowd.
+- [ ] P3 — the remaining additions (decentralization + attestation, deniability, PIR)
 - [ ] S5 — QUIC/MASQUE transport upgrade (deferred: TCP framing works for now)
 
 **Both rotors have working cores.** P0 (the outbound data plane, S0 → S4) is complete
@@ -145,6 +151,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 | `whirl-adversary` | The GATE: partial-observer correlation harness + measured verdict |
 | `whirl-shield` | The inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens |
 | `whirl-obfs` | Pluggable-transport framework + transports + an entropy meter |
+| `whirl-endpoint` | Endpoint hardening: forward-secret ratchet, personas, uniform fingerprint |
 
 ## Design principle
 

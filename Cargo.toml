@@ -9,6 +9,7 @@ members = [
     "crates/whirl-adversary",
     "crates/whirl-shield",
     "crates/whirl-obfs",
+    "crates/whirl-endpoint",
 ]
 
 [workspace.package]
@@ -29,6 +30,7 @@ reed-solomon-erasure = "6"
 hmac = "0.13"
 sha2 = "0.11"
 getrandom = "0.3"
+zeroize = { version = "1", features = ["derive"] }
 thiserror = "2"
 tokio = { version = "1", features = [
     "rt-multi-thread",
