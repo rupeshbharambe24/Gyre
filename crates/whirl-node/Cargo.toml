@@ -1,0 +1,17 @@
+[package]
+name = "whirl-node"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "S0 demo: build a Sphinx onion and echo it through an in-process circuit."
+
+[[bin]]
+name = "whirl-node"
+path = "src/main.rs"
+
+[dependencies]
+whirl-common = { path = "../whirl-common" }
+whirl-sphinx = { path = "../whirl-sphinx" }
