@@ -1,10 +1,18 @@
 # Shadow simulation scaffolding
 
 > [!CAUTION]
-> **Nothing in this directory has been executed.** [Shadow](https://shadow.github.io) is
-> **Linux-only** — it works by intercepting syscalls — and the machine that produced
-> [`docs/SIMULATION.md`](../../docs/SIMULATION.md) runs macOS. These files are a prepared
-> starting point for whoever runs it on Linux first, not a result. Do not cite them as one.
+> **This has not been run yet — no Shadow results exist.** Shadow is **Linux-only** (it
+> intercepts syscalls) and the development machine runs macOS. The config below is now
+> complete and points at binaries that really exist, but until the workflow goes green
+> there are no numbers here to cite.
+>
+> **You do not need to own a Linux machine to run it.** Two free options:
+> 1. **GitHub Actions** — `.github/workflows/shadow.yml` builds Shadow and runs this
+>    experiment. Public repositories get unlimited free Linux runners, so this costs
+>    nothing and is reproducible for anyone. Trigger it from the Actions tab.
+> 2. **WSL2 on Windows** — a real Linux kernel, so Shadow should work. WSL**1** will not:
+>    it translates syscalls rather than running a kernel, and Shadow's interception needs
+>    the real thing. Check with `wsl -l -v` and upgrade with `wsl --set-version <distro> 2`.
 
 ## Why Shadow, given we already have `gyre-sim`
 
@@ -26,14 +34,16 @@ The two are complementary:
 
 ## What is needed before this can run
 
-1. **A Linux host** (Shadow supports recent Ubuntu/Debian/Fedora), plus Shadow itself:
-   see the [installation guide](https://shadow.github.io/docs/guide/install_shadow.html).
-2. **Real Gyre binaries that speak the network.** The current `gyre-node` demo spins up an
-   in-process testnet; Shadow needs separate client and relay binaries that bind sockets
-   and take their peers from config/argv. That is the actual work item — it is a change to
-   the crates, not to this directory.
-3. **A topology file.** Shadow ships generators for realistic latency/bandwidth graphs;
-   `network.gml` here is a deliberately tiny placeholder.
+1. ~~Real Gyre binaries that speak the network.~~ **Done** — `gyre-relay`, `gyre-client`
+   and `gyre-sink` are real processes that bind sockets and take their peers from argv.
+   Verified working outside Shadow with `./scripts/testnet.sh`, where mixing visibly
+   reorders packets across processes.
+2. **A Linux host with Shadow installed** — or just use the GitHub Actions workflow above.
+   Note that `apt install shadow` installs an unrelated package (the shadow password
+   suite); Shadow the simulator must be built from source.
+3. **A realistic topology.** `network.gml` is two regions with a slow link between them —
+   enough to exercise real TCP over non-trivial latency, *not* a model of the internet.
+   Replace it with a generated topology before drawing any conclusion about scale.
 
 ## Files
 
@@ -46,10 +56,16 @@ mistakes them for a validated configuration.
 ## Running it, once the prerequisites exist
 
 ```bash
-# on Linux, with shadow installed and the gyre binaries built
-cargo build --release
-shadow sim/shadow/shadow.yaml
+cargo build --release -p gyre-cli
+cd sim/shadow && shadow shadow.yaml
+
+# what each simulated host printed
+find shadow.data -name '*.stdout' -exec cat {} \;
 ```
+
+A successful run shows the sink reporting end-to-end delivery, and each relay logging a
+*different* per-packet mixing delay — the same reordering the local testnet shows, but now
+over simulated TCP with real congestion and loss.
 
 Results should then be written up in `docs/SIMULATION.md` **as a separate section**,
 clearly distinguished from the `gyre-sim` numbers — different harness, different

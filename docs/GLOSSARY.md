@@ -3,8 +3,8 @@
 ![status: experimental](https://img.shields.io/badge/status-experimental-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![MSRV](https://img.shields.io/badge/rustc-1.85%2B-blue.svg)
-![crates](https://img.shields.io/badge/crates-14-informational.svg)
-![tests](https://img.shields.io/badge/tests-163%20passing-brightgreen.svg)
+![crates](https://img.shields.io/badge/crates-15-informational.svg)
+![tests](https://img.shields.io/badge/tests-167%20passing-brightgreen.svg)
 [![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 
 Plain-English definitions of the privacy and networking terms used across the

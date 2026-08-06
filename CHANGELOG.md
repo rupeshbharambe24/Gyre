@@ -10,8 +10,8 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 ![Release](https://img.shields.io/badge/release-none%20tagged-inactive.svg)
 ![Audit](https://img.shields.io/badge/audit-unaudited-red.svg)
 ![MSRV](https://img.shields.io/badge/MSRV-1.85-blue.svg)
-![Crates](https://img.shields.io/badge/crates-14-informational.svg)
-![Tests](https://img.shields.io/badge/tests-163%20green-success.svg)
+![Crates](https://img.shields.io/badge/crates-15-informational.svg)
+![Tests](https://img.shields.io/badge/tests-167%20green-success.svg)
 [![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 
 > [!NOTE]
@@ -167,11 +167,28 @@ a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition
 
 **Tooling & quality gates**
 
-- **Workspace.** 14 crates, 163 tests, all green. See [`README.md`](README.md) and
+- **Workspace.** 15 crates, 167 tests, all green. See [`README.md`](README.md) and
   [`docs/DESIGN.md`](docs/DESIGN.md).
 - **Gates.** `cargo fmt --all -- --check`, `cargo clippy --workspace
   --all-targets -- -D warnings`, and `cargo test --workspace`. CI runs all three
   on every pull request and on pushes to `main`.
+- **Standalone binaries — `gyre-relay`, `gyre-client`, `gyre-sink` (`gyre-cli`).** Until
+  now everything ran inside one process, which meant neither a network simulator nor a real
+  deployment was possible. These are real processes that bind real sockets and take their
+  peers from argv. `./scripts/testnet.sh` launches a three-relay testnet and pushes onions
+  through it; mixing visibly **reorders packets between separate OS processes** (sent
+  0,1,2 → delivered 1,2,0), with each relay logging only its own neighbour.
+  *Testnet keys are derived from public labels and are therefore **not secret** — that is
+  fine for simulation and nowhere else; a deployment must use OS randomness and publish
+  only public halves through the signed consensus.*
+- **`Relay::from_secret_bytes`.** A relay that regenerated its key on restart would
+  invalidate every descriptor already published about it and every onion in flight for it.
+  Same gap as the token issuer had.
+- **Free Linux CI.** `.github/workflows/testnet.yml` runs the multi-process testnet on
+  every push (GitHub-hosted runners are free and unlimited for public repositories), and
+  `.github/workflows/shadow.yml` builds Shadow and runs the simulation on demand — so
+  Shadow results no longer require owning a Linux machine. The Shadow workflow has **not
+  been run yet**; `sim/shadow/` says so rather than implying otherwise.
 - **S5 — QUIC transport with consensus-pinned relay certificates.** `gyre-net::quic` gives
   each circuit its own QUIC stream, so a lost packet on one no longer stalls the others
   (cross-circuit head-of-line blocking). Relays have no CA-issued certificates, and the two

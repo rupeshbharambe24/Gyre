@@ -1,0 +1,61 @@
+name: Shadow simulation
+
+# Shadow (https://shadow.github.io) runs the REAL binaries against a simulated network
+# stack — real TCP, congestion and topology, which `gyre-sim` models rather than provides.
+# It is Linux-only, so this workflow is how the project gets Shadow results at all.
+#
+# Building Shadow from source takes a while, so this is manual/scheduled rather than
+# per-push. NOTE: `apt install shadow` installs an unrelated package (the shadow password
+# suite) — Shadow the simulator must be built from source.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 4 * * 0" # weekly, Sunday 04:00 UTC
+
+jobs:
+  shadow:
+    name: real binaries, simulated network
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build the Gyre binaries
+        run: cargo build --release -p gyre-cli
+
+      - name: Install Shadow's build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake findutils libclang-dev libc-dev \
+            build-essential make xz-utils lld pkg-config
+
+      - name: Build and install Shadow
+        run: |
+          git clone --depth 1 https://github.com/shadow/shadow.git /tmp/shadow
+          cd /tmp/shadow
+          ./setup build --clean --jobs "$(nproc)"
+          ./setup install
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Shadow version
+        run: shadow --version
+
+      - name: Run the Gyre experiment
+        run: |
+          cd sim/shadow
+          shadow shadow.yaml
+
+      - name: Show what the simulated hosts produced
+        if: always()
+        run: |
+          echo "--- hosts ---"
+          find sim/shadow/shadow.data -name '*.stdout' -print -exec cat {} \; || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shadow-results
+          path: sim/shadow/shadow.data/
+          retention-days: 14

@@ -601,6 +601,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "gyre-cli"
+version = "0.0.1"
+dependencies = [
+ "gyre-common",
+ "gyre-net",
+ "gyre-sphinx",
+ "sha2",
+ "tokio",
+]
+
+[[package]]
 name = "gyre-common"
 version = "0.0.1"
 

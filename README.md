@@ -5,8 +5,8 @@
 [![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Rust: 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)
-![Crates: 14](https://img.shields.io/badge/crates-14-informational.svg)
-![Tests: 163 passing](https://img.shields.io/badge/tests-163%20passing-brightgreen.svg)
+![Crates: 15](https://img.shields.io/badge/crates-15-informational.svg)
+![Tests: 167 passing](https://img.shields.io/badge/tests-167%20passing-brightgreen.svg)
 ![Status: experimental](https://img.shields.io/badge/status-experimental-red.svg)
 
 Gyre is a single relay fabric that spins two ways at once: an **outbound
@@ -173,6 +173,10 @@ cargo test  --workspace
 cargo fmt   --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 
+# A real testnet: three relays as SEPARATE PROCESSES on real sockets.
+# Mixing visibly reorders packets between them — the mechanism, not a model.
+./scripts/testnet.sh 8 mix
+
 # End-to-end simulation: the REAL protocol code under an OPTIMAL correlation
 # attacker. This supersedes the GATE numbers — see docs/SIMULATION.md.
 cargo run --release -p gyre-sim
@@ -214,7 +218,7 @@ cargo run -p gyre-stego       # LSB steganography (situational)
 
 ## Crate map
 
-Fourteen crates, 163 tests, all green.
+Fifteen crates, 167 tests, all green.
 
 | Crate | Purpose | Tests |
 |---|---|:--:|
@@ -232,6 +236,7 @@ Fourteen crates, 163 tests, all green.
 | `gyre-stego` | Deniability: LSB steganography (situational; honest limits) | 4 |
 | `gyre-crowd` | P4: k-anonymity admission governor + staking Sybil-pricing model | 8 |
 | `gyre-sim` | Simulation harness: real code over a modelled network + an **optimal** correlation attacker | 19 |
+| `gyre-cli` | Standalone `gyre-relay` / `gyre-client` / `gyre-sink` binaries — real processes on real sockets | 4 |
 | **Total** | | **55** |
 
 ---

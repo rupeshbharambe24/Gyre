@@ -3,8 +3,8 @@
 [![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MSRV](https://img.shields.io/badge/rustc-1.85%2B-orange.svg)](Cargo.toml)
-[![Crates](https://img.shields.io/badge/crates-14-blue.svg)](#the-workspace-at-a-glance)
-[![Tests](https://img.shields.io/badge/tests-163%20green-brightgreen.svg)](#the-workspace-at-a-glance)
+[![Crates](https://img.shields.io/badge/crates-15-blue.svg)](#the-workspace-at-a-glance)
+[![Tests](https://img.shields.io/badge/tests-167%20green-brightgreen.svg)](#the-workspace-at-a-glance)
 [![Status](https://img.shields.io/badge/status-experimental-yellow.svg)](#project-ethos)
 
 Thanks for your interest in **Gyre** — a layered privacy-and-defense network
@@ -92,7 +92,7 @@ They are project law.
 
 ## The workspace at a glance
 
-Fourteen crates, **one crate per orthogonal concern**, 163 tests, all green.
+Fifteen crates, **one crate per orthogonal concern**, 167 tests, all green.
 
 | Crate | Purpose | Tests |
 | --- | --- | :---: |
@@ -110,9 +110,10 @@ Fourteen crates, **one crate per orthogonal concern**, 163 tests, all green.
 | `gyre-stego` | deniability: LSB steganography (situational; honest limits) | 10 |
 | `gyre-crowd` | k-anonymity admission governor + staking Sybil-pricing model | 8 |
 | `gyre-sim` | simulation harness: real code, modelled network, optimal-assignment attacker | 19 |
-| **Total** | | **163** |
+| `gyre-cli` | standalone `gyre-relay` / `gyre-client` / `gyre-sink` binaries (real sockets) | 4 |
+| **Total** | | **167** |
 
-These three numbers — **14 crates / 163 tests / the GATE verdict** — are ground truth.
+These three numbers — **15 crates / 167 tests / the GATE verdict** — are ground truth.
 See [Documentation changes](#documentation-changes) for keeping them consistent.
 
 ---
@@ -150,7 +151,7 @@ cd Gyre
 # 2. Build the whole workspace (rustup auto-selects the pinned stable toolchain)
 cargo build --workspace
 
-# 3. Test the whole workspace (all 163 tests should pass)
+# 3. Test the whole workspace (all 167 tests should pass)
 cargo test --workspace
 
 # 4. Run a single crate's tests while iterating (example: the inbound rotor)
@@ -206,7 +207,7 @@ cargo fmt --all -- --check
 # Gate 2 — lint with WARNINGS AS ERRORS (-D warnings). Clippy must be silent.
 cargo clippy --workspace --all-targets -- -D warnings
 
-# Gate 3 — the full test suite (all 163 tests)
+# Gate 3 — the full test suite (all 167 tests)
 cargo test --workspace
 ```
 
@@ -238,7 +239,7 @@ Pre-PR checklist:
 
 - [ ] `cargo fmt --all -- --check` is clean
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` is silent
-- [ ] `cargo test --workspace` is green (163 tests, or 163 + your new ones)
+- [ ] `cargo test --workspace` is green (167 tests, or 167 + your new ones)
 - [ ] New behavior is covered by a test that asserts **behavior, not timing**
 - [ ] A new invariant is covered by a **property**, and a new parser of untrusted input by
       a "never panics on arbitrary bytes" property (see [How we test](#how-we-test-unit-property-fuzz))
@@ -364,7 +365,7 @@ repository.workspace = true
 
 > [!NOTE]
 > Adding a crate changes the ground-truth counts. If crate #14 lands with its own
-> tests, the "14 crates / 163 tests" numbers move **together, everywhere** — see the
+> tests, the "15 crates / 167 tests" numbers move **together, everywhere** — see the
 > next section.
 
 ---

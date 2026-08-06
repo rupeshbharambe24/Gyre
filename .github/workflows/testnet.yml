@@ -1,0 +1,25 @@
+name: Testnet (real processes)
+
+# Runs the multi-process testnet on a real Linux host. GitHub-hosted runners are free and
+# unlimited for public repositories, so this is a permanent Linux test bed at no cost.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  testnet:
+    name: relays as separate processes
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Launch a 3-relay testnet and route real onions through it
+        run: ./scripts/testnet.sh 8 mix
+
+      - name: Same route on the FAST lane (no mixing delay)
+        run: ./scripts/testnet.sh 8 fast

@@ -14,6 +14,7 @@ members = [
     "crates/gyre-pir",
     "crates/gyre-stego",
     "crates/gyre-crowd",
+    "crates/gyre-cli",
     "crates/gyre-sim",
     "crates/gyre-benches",
 ]

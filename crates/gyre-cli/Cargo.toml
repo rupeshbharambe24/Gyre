@@ -1,0 +1,16 @@
+[package]
+name = "gyre-cli"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Standalone relay and client binaries — real processes on real sockets, for network simulation and deployment."
+
+[dependencies]
+gyre-common = { path = "../gyre-common" }
+gyre-sphinx = { path = "../gyre-sphinx" }
+gyre-net = { path = "../gyre-net" }
+sha2.workspace = true
+tokio.workspace = true

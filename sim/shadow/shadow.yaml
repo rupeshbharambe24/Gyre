@@ -1,10 +1,13 @@
-# Shadow experiment skeleton for Gyre. NOT YET RUN — see README.md in this directory.
+# Gyre under Shadow — real binaries, simulated network.
 #
-# This will not work until the crates expose standalone, socket-bound relay and client
-# binaries (today `gyre-node` runs an in-process testnet). The shape is here so that work
-# has an obvious target.
+# Shadow runs the ACTUAL gyre-relay / gyre-client / gyre-sink binaries against a simulated
+# network stack, so timing includes real TCP behaviour, congestion and topology. That is
+# what `gyre-sim` models rather than provides.
+#
+# Run:  cargo build --release -p gyre-cli && cd sim/shadow && shadow shadow.yaml
+# Linux only. See README.md in this directory.
 general:
-  stop_time: 120s
+  stop_time: 60s
   model_unblocked_syscall_latency: true
 
 network:
@@ -13,30 +16,92 @@ network:
     file: network.gml
 
 hosts:
-  # --- relays -------------------------------------------------------------------
+  # --- three relays, split across two regions so routes cross the slow link ---------
   relay1:
     network_node_id: 0
     processes:
-      - path: ../../target/release/gyre-relay      # TODO: binary does not exist yet
-        args: --listen 0.0.0.0:9001 --identity relay1
+      - path: ../../target/release/gyre-relay
+        args:
+          - --label
+          - r1
+          - --listen
+          - 0.0.0.0:9001
+          - --relay
+          - r1=11.0.0.1:9001
+          - --relay
+          - r2=11.0.0.2:9001
+          - --relay
+          - r3=11.0.0.3:9001
+          - --relay
+          - dest=11.0.0.4:9100
         start_time: 1s
+
   relay2:
     network_node_id: 0
     processes:
       - path: ../../target/release/gyre-relay
-        args: --listen 0.0.0.0:9001 --identity relay2
+        args:
+          - --label
+          - r2
+          - --listen
+          - 0.0.0.0:9001
+          - --relay
+          - r1=11.0.0.1:9001
+          - --relay
+          - r2=11.0.0.2:9001
+          - --relay
+          - r3=11.0.0.3:9001
+          - --relay
+          - dest=11.0.0.4:9100
         start_time: 1s
+
   relay3:
     network_node_id: 1
     processes:
       - path: ../../target/release/gyre-relay
-        args: --listen 0.0.0.0:9001 --identity relay3
+        args:
+          - --label
+          - r3
+          - --listen
+          - 0.0.0.0:9001
+          - --relay
+          - r1=11.0.0.1:9001
+          - --relay
+          - r2=11.0.0.2:9001
+          - --relay
+          - r3=11.0.0.3:9001
+          - --relay
+          - dest=11.0.0.4:9100
         start_time: 1s
 
-  # --- clients ------------------------------------------------------------------
+  # --- the destination the exit relay delivers to ----------------------------------
+  destination:
+    network_node_id: 1
+    processes:
+      - path: ../../target/release/gyre-sink
+        args: ["--listen", "0.0.0.0:9100", "--expect", "10"]
+        start_time: 2s
+
+  # --- a client pushing traffic through the fabric ---------------------------------
   client1:
     network_node_id: 1
     processes:
-      - path: ../../target/release/gyre-client     # TODO: binary does not exist yet
-        args: --route relay1,relay2,relay3 --lane mix --packets 8
-        start_time: 10s
+      - path: ../../target/release/gyre-client
+        args:
+          - --route
+          - r1,r2,r3
+          - --dest
+          - dest
+          - --lane
+          - mix
+          - --packets
+          - "10"
+          - --relay
+          - r1=11.0.0.1:9001
+          - --relay
+          - r2=11.0.0.2:9001
+          - --relay
+          - r3=11.0.0.3:9001
+          - --relay
+          - dest=11.0.0.4:9100
+        start_time: 5s

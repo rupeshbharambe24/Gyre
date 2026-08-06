@@ -77,6 +77,21 @@ impl Relay {
         }
     }
 
+    /// A relay whose long-term key is derived deterministically from 32 secret bytes.
+    ///
+    /// Real relays need this: a relay that generated a fresh key on every restart would
+    /// invalidate every descriptor already published about it, and every onion built for
+    /// it in flight. The seed is the relay's long-term secret — treat it as one.
+    pub fn from_secret_bytes(address: [u8; NODE_ADDRESS_LENGTH], secret: [u8; 32]) -> Self {
+        let secret = StaticSecret::from(secret);
+        let public = PublicKey::from(&secret);
+        Self {
+            secret,
+            public,
+            address,
+        }
+    }
+
     /// This relay's address label.
     pub fn address(&self) -> [u8; NODE_ADDRESS_LENGTH] {
         self.address
