@@ -30,7 +30,7 @@ cargo run --release -p gyre-sim     # release matters: real crypto is slow in de
 - [Results](#results)
 - [What these results mean](#what-these-results-mean)
 - [Limits of this harness](#limits-of-this-harness)
-- [The Shadow path (Linux)](#the-shadow-path-linux)
+- [Shadow results — real binaries, simulated network stack](#shadow-results--real-binaries-simulated-network-stack)
 
 ---
 
@@ -192,16 +192,81 @@ Stated plainly, because they bound every number above:
 - **No adaptive adversary.** Nobody drops, delays, or injects packets to create a
   watermark; this measures a *passive* observer only.
 
-## The Shadow path (Linux)
+## Shadow results — real binaries, simulated network stack
 
-The natural next step is [Shadow](https://shadow.github.io) — the discrete-event simulator
-the Tor Project uses, which runs **real, unmodified binaries** over a simulated network
-stack, adding real TCP, congestion, and topology to the picture.
+[Shadow](https://shadow.github.io) runs the **real, unmodified** `gyre-relay` /
+`gyre-client` / `gyre-sink` binaries against a simulated network stack, so timing includes
+real TCP: connect handshakes, congestion control, and loss. That is exactly what `gyre-sim`
+models rather than provides.
 
-Shadow is **Linux-only** (it works by intercepting syscalls), so it could not be run on the
-machine that produced this document, and nothing here should be read as a Shadow result.
-The scaffolding for that run lives in [`sim/shadow/`](../sim/shadow) and is documented
-there, honestly marked as **not yet executed**.
+It is Linux-only, so it runs in CI ([`.github/workflows/shadow.yml`](../.github/workflows/shadow.yml)),
+where GitHub's free runners make it reproducible for anyone at no cost.
+
+**Setup.** Three relays and four concurrent clients across two simulated regions (15 ms
+intra-region, 70 ms inter-region with 0.1% loss, 100 Mbit links). Each client sends 10
+packets on the MIX lane through `r1 → r2 → r3` to a sink. Shadow v3.3.0.
+
+### What it showed
+
+| Measurement | Result |
+|---|---|
+| End-to-end delivery | **40/40** payloads |
+| Client → entry relay, per packet | **140 ms** (real TCP connect) |
+| End-to-end latency | 3.6 – 4.9 s across the run |
+| **Intra-client reordering (evidence of mixing)** | **4 inversions** |
+| Raw inversions across all clients | 17 |
+
+```text
+c1: [0,1,2,3,4,5,6,7,8,9]  -> in order
+c2: [0,2,1,3,4,5,6,7,8,9]  -> REORDERED
+c3: [0,2,1,3,4,6,5,7,8,9]  -> REORDERED
+c4: [0,1,3,2,4,5,6,7,8,9]  -> REORDERED
+```
+
+**Mixing measurably reorders packets over real TCP.** Three of four clients had a packet
+overtake one they had sent earlier — something no amount of client drift can explain,
+because within a single client the send order is known.
+
+### Two cautions that matter more than the headline
+
+> [!IMPORTANT]
+> **The naive metric overstates mixing by about 4×.** The raw count of out-of-order
+> arrivals is 17; only **4** are real. The other 13 are simply independent clients drifting
+> apart, which happens with no mixing at all. Any measurement that does not attribute
+> payloads to a sender cannot tell these apart — an earlier version of this experiment
+> could not, and 17 was the number it would have reported.
+
+> [!WARNING]
+> **The mixing is weak at the default MIX setting.** Only 4 of 36 adjacent pairs (~11%)
+> reordered. The reason is visible in the same data: each client hands a packet to the
+> entry relay **140 ms** apart (dominated by the real TCP connect), while 50 ms/hop mixing
+> spreads packets by only ~100 ms. Delays smaller than a client's own send gap mostly
+> cannot overtake anything.
+>
+> This **independently corroborates** the `gyre-sim` result above, which found the 50 ms
+> MIX lane leaves an optimal attacker at ≈0.50 accuracy. Two harnesses, different methods,
+> same conclusion: **the default MIX setting is too weak, and useful resistance starts
+> nearer 150 ms/hop.**
+
+### What Shadow added that `gyre-sim` could not
+
+`gyre-sim` models the network, so it never charged 140 ms for a TCP connect — and that one
+number is what makes the mixing weak here. The local loopback testnet
+(`./scripts/testnet.sh`) reorders far more freely because its sends are ~1 ms apart. Same
+code, same mixing setting, three different answers depending on how honestly the network is
+modelled. That is the argument for running all three.
+
+### Limits of this run
+
+- **Small.** Three relays, four clients, 40 packets. Enough to show the mechanism operates
+  over real TCP; nowhere near enough to say anything about behaviour at scale.
+- **Synthetic traffic.** Fixed-size sequential sends, not real application traffic.
+- **A toy topology.** Two regions and one slow link, not a model of the internet.
+- **No adversary.** This measures *reordering*, not correlation resistance. The attacker
+  results above come from `gyre-sim`.
+
+Reproduce: trigger **Shadow simulation** from the Actions tab, or run locally on Linux per
+[`sim/shadow/README.md`](../sim/shadow/README.md).
 
 ---
 

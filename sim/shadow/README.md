@@ -1,18 +1,16 @@
 # Shadow simulation scaffolding
 
-> [!CAUTION]
-> **This has not been run yet — no Shadow results exist.** Shadow is **Linux-only** (it
-> intercepts syscalls) and the development machine runs macOS. The config below is now
-> complete and points at binaries that really exist, but until the workflow goes green
-> there are no numbers here to cite.
+> [!NOTE]
+> **This runs green.** See [`docs/SIMULATION.md`](../../docs/SIMULATION.md) for results:
+> 40/40 delivered end to end over simulated TCP, with **4 intra-client inversions** proving
+> mixing genuinely reorders — and the honest caveat that the naive metric would have
+> reported 17.
 >
-> **You do not need to own a Linux machine to run it.** Two free options:
-> 1. **GitHub Actions** — `.github/workflows/shadow.yml` builds Shadow and runs this
->    experiment. Public repositories get unlimited free Linux runners, so this costs
->    nothing and is reproducible for anyone. Trigger it from the Actions tab.
-> 2. **WSL2 on Windows** — a real Linux kernel, so Shadow should work. WSL**1** will not:
->    it translates syscalls rather than running a kernel, and Shadow's interception needs
->    the real thing. Check with `wsl -l -v` and upgrade with `wsl --set-version <distro> 2`.
+> Shadow is **Linux-only**, and you do not need a Linux machine to run it: the
+> [workflow](../../.github/workflows/shadow.yml) uses GitHub's free runners. Trigger
+> **Shadow simulation** from the Actions tab. WSL**2** also works locally (WSL1 does not —
+> it translates syscalls rather than running a kernel, and Shadow's interception needs the
+> real thing).
 
 ## Why Shadow, given we already have `gyre-sim`
 
@@ -30,7 +28,7 @@ The two are complementary:
 | Network stack | modelled (latency + jitter) | real TCP/UDP over a simulated topology |
 | Runs on | any platform, seconds | Linux only, minutes to hours |
 | Scale | thousands of flows | hundreds to thousands of hosts |
-| Status | **measured** | **not yet run** |
+| Status | **measured** | **measured** |
 
 ## What is needed before this can run
 

@@ -233,8 +233,25 @@ a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition
   end-to-end **deanonymisation rate** (`coverage × accuracy`), latency percentiles, and
   wire overhead. Run with `cargo run --release -p gyre-sim`; full write-up in
   [`docs/SIMULATION.md`](docs/SIMULATION.md).
-- **Shadow scaffolding** (`sim/shadow/`) for the Linux-only next step — explicitly marked
-  **not yet executed**, since Shadow cannot run on the machine used here.
+- **Shadow simulation — now running, with results.** `sim/shadow/` runs the **real**
+  `gyre-relay` / `gyre-client` / `gyre-sink` binaries against Shadow's simulated network
+  stack (real TCP, congestion, loss), via a GitHub Actions workflow so it needs no Linux
+  machine of your own. Three relays, four concurrent clients, 40/40 payloads delivered.
+  **Mixing measurably reorders packets over real TCP**: three of four clients had a packet
+  overtake one they had sent earlier.
+  *Two caveats carried in the write-up rather than buried:* the naive out-of-order count
+  (17) **overstates mixing by ~4×** — only 4 inversions are real, the rest is independent
+  clients drifting apart — and the reordering is **weak at the default MIX setting** (4 of
+  36 adjacent pairs), because a client's own 140 ms TCP connect gap exceeds the ~100 ms the
+  mixing spreads. That independently corroborates `gyre-sim`'s finding that 50 ms/hop is
+  too weak. Full results in [`docs/SIMULATION.md`](docs/SIMULATION.md).
+- **`scripts/validate-shadow-gml.py`** — validates a network graph in *Shadow's* GML
+  dialect, which is stricter than networkx's (no `#` comments, limited attributes).
+  networkx is useless as a check here in both directions: it accepts comments Shadow
+  rejects, and demands a `label` Shadow refuses. Runs in CI on every push.
+- **`scripts/analyse-shadow-mixing.py`** — reports **intra-client** reordering separately
+  from the raw count, so a run states its own verdict instead of inviting a human to
+  over-read a delivery log.
 - **Property-based test suite (proptest).** `crates/*/tests/properties.rs` adds **52
   properties** across ten crates, each generating hundreds of inputs per run and shrinking
   any failure to a minimal counterexample. They assert the domain invariants (any `data`
