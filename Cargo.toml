@@ -36,6 +36,20 @@ authors = ["rupeshbharambe24 <rupeshbharambe2004@gmail.com>"]
 sphinx-packet = "0.7.0"
 x25519-dalek = { version = "3.0.0", features = ["static_secrets", "getrandom"] }
 curve25519-dalek = "5"
+# RFC 9497 VOPRF — an audited implementation, replacing the hand-rolled construction.
+# `ristretto255-ciphersuite` gives the RFC's ristretto255-SHA512 suite. NOTE: this crate
+# pins sha2 0.10 / curve25519-dalek 4 internally, so those appear alongside the workspace's
+# newer versions. That duplication is the price of not rolling our own crypto (D11).
+voprf = { version = "0.5", default-features = false, features = [
+    "ristretto255-ciphersuite",
+] }
+# Only to name the `RngCore`/`CryptoRng` traits that `voprf` requires; the bytes come from
+# the OS CSPRNG via `getrandom`, so no randomness is invented here.
+rand_core = { version = "0.6", default-features = false }
+# Constant-time primitives with proper optimisation barriers. Already in the tree via
+# `voprf`; used directly rather than hand-rolling a comparison (D11 applies to the small
+# things too — a hand-written fold has no barrier against the compiler short-circuiting it).
+subtle = { version = "2", default-features = false }
 ed25519-dalek = "3"
 reed-solomon-erasure = "6"
 hmac = "0.13"

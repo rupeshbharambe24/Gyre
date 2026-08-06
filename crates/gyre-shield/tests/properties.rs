@@ -113,7 +113,7 @@ proptest! {
     /// An honestly issued capability token always verifies, redeems exactly once, and is
     /// rejected on any replay — the single-use guarantee the fast path depends on.
     #[test]
-    fn an_issued_token_verifies_and_redeems_exactly_once(_run in 0u8..8) {
+    fn an_issued_token_verifies_and_redeems_exactly_once(replays in 1usize..5) {
         let mut issuer = Issuer::new();
         let published = issuer.public_key();
         let (state, blinded) = blind();
@@ -122,7 +122,11 @@ proptest! {
 
         prop_assert!(issuer.verify(&token));
         prop_assert!(issuer.redeem(&token), "first redemption succeeds");
-        prop_assert!(!issuer.redeem(&token), "a replay must be rejected");
+        // The generated value is actually used: *no* number of replays may ever succeed.
+        for attempt in 0..replays {
+            prop_assert!(!issuer.redeem(&token), "replay {attempt} must be rejected");
+        }
+        prop_assert_eq!(issuer.spent_count(), 1, "a replay must not grow the spent set");
     }
 
     /// Robustness: the issuer decompresses a client-supplied point, so arbitrary 32 bytes
@@ -130,6 +134,11 @@ proptest! {
     #[test]
     fn issuing_arbitrary_bytes_never_panics(blinded in prop::array::uniform32(any::<u8>())) {
         let issuer = Issuer::new();
-        let _ = issuer.issue(blinded);
+        // Beyond not panicking: whatever comes back must be well-formed. A success on
+        // random bytes would mean the point decoding accepted something it should not.
+        if let Ok(issued) = issuer.issue(blinded) {
+            prop_assert_eq!(issued.evaluated.len(), 32);
+            prop_assert_eq!(issued.proof.len(), 64);
+        }
     }
 }

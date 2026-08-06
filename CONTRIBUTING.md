@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MSRV](https://img.shields.io/badge/rustc-1.85%2B-orange.svg)](Cargo.toml)
 [![Crates](https://img.shields.io/badge/crates-15-blue.svg)](#the-workspace-at-a-glance)
-[![Tests](https://img.shields.io/badge/tests-167%20green-brightgreen.svg)](#the-workspace-at-a-glance)
+[![Tests](https://img.shields.io/badge/tests-171%20green-brightgreen.svg)](#the-workspace-at-a-glance)
 [![Status](https://img.shields.io/badge/status-experimental-yellow.svg)](#project-ethos)
 
 Thanks for your interest in **Gyre** — a layered privacy-and-defense network
@@ -92,7 +92,7 @@ They are project law.
 
 ## The workspace at a glance
 
-Fifteen crates, **one crate per orthogonal concern**, 167 tests, all green.
+Fifteen crates, **one crate per orthogonal concern**, 171 tests, all green.
 
 | Crate | Purpose | Tests |
 | --- | --- | :---: |
@@ -102,7 +102,7 @@ Fifteen crates, **one crate per orthogonal concern**, 167 tests, all green.
 | `gyre-net` | async transport (TCP + QUIC), directory, relay server, mixing, cover traffic | 14 |
 | `gyre-node` | demo binary: spin up a testnet + integration tests (lanes, multipath) | 2 |
 | `gyre-adversary` | **THE GATE**: partial-observer timing-correlation harness + verdict | 4 |
-| `gyre-shield` | inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens | 38 |
+| `gyre-shield` | inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens | 42 |
 | `gyre-obfs` | pluggable-transport framework + transports + an entropy meter | 9 |
 | `gyre-endpoint` | endpoint hardening: forward-secret ratchet, personas, uniform fingerprint | 8 |
 | `gyre-directory` | threshold-signed consensus, typed params, equivocation detection, attestation | 21 |
@@ -111,9 +111,9 @@ Fifteen crates, **one crate per orthogonal concern**, 167 tests, all green.
 | `gyre-crowd` | k-anonymity admission governor + staking Sybil-pricing model | 8 |
 | `gyre-sim` | simulation harness: real code, modelled network, optimal-assignment attacker | 19 |
 | `gyre-cli` | standalone `gyre-relay` / `gyre-client` / `gyre-sink` binaries (real sockets) | 4 |
-| **Total** | | **167** |
+| **Total** | | **171** |
 
-These three numbers — **15 crates / 167 tests / the GATE verdict** — are ground truth.
+These three numbers — **15 crates / 171 tests / the GATE verdict** — are ground truth.
 See [Documentation changes](#documentation-changes) for keeping them consistent.
 
 ---
@@ -151,7 +151,7 @@ cd Gyre
 # 2. Build the whole workspace (rustup auto-selects the pinned stable toolchain)
 cargo build --workspace
 
-# 3. Test the whole workspace (all 167 tests should pass)
+# 3. Test the whole workspace (all 171 tests should pass)
 cargo test --workspace
 
 # 4. Run a single crate's tests while iterating (example: the inbound rotor)
@@ -207,7 +207,7 @@ cargo fmt --all -- --check
 # Gate 2 — lint with WARNINGS AS ERRORS (-D warnings). Clippy must be silent.
 cargo clippy --workspace --all-targets -- -D warnings
 
-# Gate 3 — the full test suite (all 167 tests)
+# Gate 3 — the full test suite (all 171 tests)
 cargo test --workspace
 ```
 
@@ -239,7 +239,7 @@ Pre-PR checklist:
 
 - [ ] `cargo fmt --all -- --check` is clean
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` is silent
-- [ ] `cargo test --workspace` is green (167 tests, or 167 + your new ones)
+- [ ] `cargo test --workspace` is green (171 tests, or 171 + your new ones)
 - [ ] New behavior is covered by a test that asserts **behavior, not timing**
 - [ ] A new invariant is covered by a **property**, and a new parser of untrusted input by
       a "never panics on arbitrary bytes" property (see [How we test](#how-we-test-unit-property-fuzz))
@@ -365,7 +365,7 @@ repository.workspace = true
 
 > [!NOTE]
 > Adding a crate changes the ground-truth counts. If crate #14 lands with its own
-> tests, the "15 crates / 167 tests" numbers move **together, everywhere** — see the
+> tests, the "15 crates / 171 tests" numbers move **together, everywhere** — see the
 > next section.
 
 ---

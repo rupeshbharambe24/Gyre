@@ -1,89 +1,78 @@
-//! Deterministic test vectors for the capability-token construction.
+//! Deterministic test vectors for the capability token.
 //!
-//! These exist so an auditor — or a second, independent implementation — can check byte
-//! for byte that this code computes what the specification in `docs/AUDIT.md` says. Every
-//! value below is derived from a fixed seed, so nothing here depends on the OS RNG.
+//! These exist so an auditor — or a second implementation — can check byte for byte that
+//! this code computes what `docs/AUDIT.md` says. Every value is derived from a fixed seed,
+//! so nothing here depends on the OS RNG.
 //!
 //! If one of these changes, the wire format changed: outstanding tokens and any other
 //! implementation are now incompatible, and that must be a deliberate, versioned decision.
+//!
+//! **These values changed once already**, when the hand-rolled construction was replaced
+//! with the audited [`voprf`] crate's RFC 9497 implementation. That was intentional — the
+//! old encoding was never deployed — and the vectors below pin the RFC-conformant one.
 
-use gyre_shield::token::{unblind, Issuer, Token};
+use gyre_shield::token::{blind, unblind, Issuer, Token, OUTPUT_LEN, SEED_LEN};
 
 const ISSUER_SEED: [u8; 32] = [
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
     0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
 ];
 
-const TOKEN_SEED: [u8; 32] = [0x42; 32];
+const TOKEN_SEED: [u8; SEED_LEN] = [0x42; SEED_LEN];
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// Vector 1 — the issuer's public key is a fixed function of its secret seed.
+/// Vector 1 — the issuer's public key is a fixed function of its secret seed
+/// (RFC 9497 `DeriveKeyPair`).
 #[test]
 fn vector_issuer_public_key() {
     let issuer = Issuer::from_secret_seed(&ISSUER_SEED);
     assert_eq!(
         hex(&issuer.public_key().to_bytes()),
-        "0a9a69c0ab673b88dd084370deb7a78bca331eb8d3a5dda5ec893271694f6819",
+        "fefc48110bde263d480b1e2458f0a7703ed056e97e5af8c2eae4186dc056cd55",
         "issuer public key vector"
     );
 }
 
-/// Vector 2 — the unblinded evaluation `N = k·H(seed)` is a fixed function of the issuer
-/// key and the token seed, independent of whatever blinding factor was used. This is the
-/// value the blind protocol must arrive at, so it pins the core of the construction.
+/// Vector 2 — the OPRF output for a fixed (issuer key, token seed) pair. This is the value
+/// the blind protocol must arrive at, so it pins the core of the construction.
 #[test]
-fn vector_token_evaluation() {
+fn vector_token_output() {
     let issuer = Issuer::from_secret_seed(&ISSUER_SEED);
-    let evaluated = issuer.evaluate(&TOKEN_SEED);
-    assert_eq!(
-        hex(&evaluated),
-        "84b9ba04b1024d71820f41fd9bead7eebd6154255e449ab29b6de862f4ddf45f",
-        "token evaluation vector"
-    );
+    let output = issuer.evaluate(&TOKEN_SEED).expect("evaluate");
+    assert_eq!(hex(&output), "6e01c3142b251bd1f7a675b8b3fab6b6190ce2d49b9c2b667ea48b8b02a6ee847e77822ecf796e90f636f11613586f324784618b30083d93306d447fcd5ef151", "token output vector");
+    assert_eq!(output.len(), OUTPUT_LEN);
 
-    // And the blind path must reach exactly the same value.
+    // The direct evaluation must verify as a token.
     let token = Token {
         seed: TOKEN_SEED,
-        evaluated,
+        output,
     };
-    assert!(
-        issuer.verify(&token),
-        "the direct evaluation must verify as a token"
-    );
+    assert!(issuer.verify(&token));
 }
 
-/// Vector 3 — a full issue → unblind → redeem round trip against a *fixed* issuer key.
-///
-/// The blinding factor is random, so the intermediate `blinded`/`evaluated` values differ
-/// per run by design (that randomness IS the unlinkability). What is deterministic, and
-/// what this pins, is that the resulting token always carries the same evaluation for a
-/// given (issuer key, token seed) — and that it verifies.
+/// Vector 3 — the blind path reaches exactly the same output the direct evaluation does,
+/// whatever blinding factor was drawn. The blinding is fresh each time by design (that
+/// randomness *is* the unlinkability), so it is the final output that is deterministic.
 #[test]
-fn vector_round_trip_is_stable_across_blinding_factors() {
+fn vector_blind_path_matches_direct_evaluation() {
     let issuer = Issuer::from_secret_seed(&ISSUER_SEED);
     let published = issuer.public_key();
 
-    let mut evaluations = Vec::new();
     for _ in 0..3 {
-        let (state, blinded) = gyre_shield::token::blind();
+        let (state, blinded) = blind();
         let issued = issuer.issue(blinded).expect("issue");
         let token = unblind(state, issued, published).expect("honest proof verifies");
-        assert!(issuer.verify(&token));
-        evaluations.push((token.seed, token.evaluated));
-    }
 
-    // Different seeds each time (fresh randomness), so the evaluations differ...
-    assert_ne!(evaluations[0].0, evaluations[1].0);
-    // ...but each is exactly k·H(its own seed), which `verify` just confirmed.
-    for (seed, evaluated) in &evaluations {
-        let token = Token {
-            seed: *seed,
-            evaluated: *evaluated,
-        };
-        assert!(issuer.verify(&token), "evaluation must be k*H(seed)");
+        // Same seed, computed two completely different ways.
+        assert_eq!(
+            issuer.evaluate(&token.seed).unwrap(),
+            token.output,
+            "the blind path must agree with the direct evaluation"
+        );
+        assert!(issuer.verify(&token));
     }
 }
 
@@ -94,13 +83,17 @@ fn vector_issuer_is_reproducible_from_its_seed() {
     let a = Issuer::from_secret_seed(&ISSUER_SEED);
     let b = Issuer::from_secret_seed(&ISSUER_SEED);
     assert_eq!(a.public_key(), b.public_key());
+    assert_eq!(
+        a.evaluate(&TOKEN_SEED).unwrap(),
+        b.evaluate(&TOKEN_SEED).unwrap()
+    );
 
     let different = Issuer::from_secret_seed(&[0xAA; 32]);
     assert_ne!(a.public_key(), different.public_key());
 
     // A token issued under one instance verifies under the other — that is the point.
     let published = a.public_key();
-    let (state, blinded) = gyre_shield::token::blind();
+    let (state, blinded) = blind();
     let token = unblind(state, a.issue(blinded).unwrap(), published).unwrap();
     assert!(
         b.verify(&token),

@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Rust: 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)
 ![Crates: 15](https://img.shields.io/badge/crates-15-informational.svg)
-![Tests: 167 passing](https://img.shields.io/badge/tests-167%20passing-brightgreen.svg)
+![Tests: 171 passing](https://img.shields.io/badge/tests-171%20passing-brightgreen.svg)
 ![Status: experimental](https://img.shields.io/badge/status-experimental-red.svg)
 
 Gyre is a single relay fabric that spins two ways at once: an **outbound
@@ -147,14 +147,15 @@ inbound address**.
 - **Proof-of-work admission** — difficulty scales with load; the server verifies
   in one hash. It re-prices attacker asymmetry but does nothing for L3/L4
   volumetric floods.
-- **Unlinkable capability tokens** — a blind **verifiable** OPRF (RFC 9497 shape)
-  over ristretto: a client that paid once redeems a token to skip the PoW, and the
-  issuer (which only ever saw a random *blinded* point) cannot link redemption to
-  issuance. Single-use; double-spend rejected. The issuer must attach a **DLEQ proof**
-  that it used its published key — without it, a malicious issuer deanonymises every
-  client by handing out a different key each time (this was a real, reproduced flaw;
-  see [`docs/AUDIT.md`](docs/AUDIT.md)). Built on audited `curve25519-dalek`
-  primitives — but **the construction itself is an unaudited prototype.**
+- **Unlinkable capability tokens** — **RFC 9497 VOPRF** (`ristretto255-SHA512`) via the
+  audited [`voprf`](https://crates.io/crates/voprf) crate: a client that paid once redeems
+  a token to skip the PoW, and the issuer — which only ever saw a random *blinded* point —
+  cannot link redemption to issuance. Single-use; double-spend rejected. The issuer must
+  attach a **DLEQ proof** that it used its published key, and the client pins that key from
+  the **threshold-signed consensus** — without both, a malicious issuer deanonymises every
+  client by handing out a different key each time. That was a real, reproduced flaw in an
+  earlier hand-rolled version; see [`docs/AUDIT.md`](docs/AUDIT.md). The construction is now
+  an audited library; **the integration around it is still unreviewed.**
 
 ---
 
@@ -218,7 +219,7 @@ cargo run -p gyre-stego       # LSB steganography (situational)
 
 ## Crate map
 
-Fifteen crates, 167 tests, all green.
+Fifteen crates, 171 tests, all green.
 
 | Crate | Purpose | Tests |
 |---|---|:--:|
@@ -228,7 +229,7 @@ Fifteen crates, 167 tests, all green.
 | `gyre-net` | Async transport (TCP + QUIC), directory, relay server, mixing, cover traffic | 14 |
 | `gyre-node` | Demo binary: spin up a testnet + integration tests (lanes, multipath) | 2 |
 | `gyre-adversary` | **The GATE:** partial-observer timing-correlation harness + verdict | 4 |
-| `gyre-shield` | Inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens | 38 |
+| `gyre-shield` | Inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens | 42 |
 | `gyre-obfs` | Pluggable-transport framework + transports + an entropy meter | 4 |
 | `gyre-endpoint` | Endpoint hardening: forward-secret ratchet, personas, uniform fingerprint | 3 |
 | `gyre-directory` | Threshold-signed consensus, typed network params, equivocation detection | 21 |
@@ -403,10 +404,10 @@ bearing on anonymity properties.
 Integrated known-good building blocks: `sphinx-packet 0.7.0` (Nym-audited
 Sphinx), `x25519-dalek 3.0`, `curve25519-dalek 5`, `ed25519-dalek 3`,
 `reed-solomon-erasure 6`, `hmac 0.13`, `sha2 0.11`, `zeroize 1`, `tokio 1`,
-`quinn 0.11` + `rustls 0.23` (QUIC transport). The
-lone exception is called out everywhere it appears: the VOPRF capability-token
-construction is a hand-built **prototype** on `curve25519-dalek` primitives —
-unaudited.
+`quinn 0.11` + `rustls 0.23` (QUIC), and **`voprf 0.5`** (RFC 9497 capability tokens). There is **no longer a hand-rolled
+exception**: the capability token was the last one, and it now delegates to `voprf`. What
+remains Gyre's own is integration and policy — which is still unreviewed, and said so in
+[`SECURITY.md`](SECURITY.md).
 
 ---
 

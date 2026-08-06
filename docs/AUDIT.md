@@ -1,19 +1,32 @@
 # Gyre — Cryptographic Audit Package
 
 ![status: experimental](https://img.shields.io/badge/status-experimental-orange.svg)
-![audit: not started](https://img.shields.io/badge/external%20audit-not%20started-red.svg)
-![scope: capability token](https://img.shields.io/badge/scope-capability%20token-informational.svg)
+![construction: RFC 9497 lib](https://img.shields.io/badge/construction-audited%20library-brightgreen.svg)
+![integration: unreviewed](https://img.shields.io/badge/integration-not%20reviewed-red.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-Everything an external reviewer needs to assess Gyre's **one hand-built cryptographic
-construction**: the anonymous capability token in
-[`crates/gyre-shield/src/token.rs`](../crates/gyre-shield/src/token.rs).
+What an external reviewer needs to assess the cryptography in Gyre — which, as of the
+`voprf` port, is **a much smaller surface than it used to be.**
+
+> [!IMPORTANT]
+> **The scope of this document shrank dramatically, on purpose.**
+>
+> Gyre used to contain a hand-assembled VOPRF. Reviewing it for this document found that it
+> was labelled "verifiable" while carrying **no DLEQ proof**, which broke unlinkability
+> outright (finding F1). Rather than keep maintaining bespoke cryptography, the construction
+> was **replaced with the [`voprf`](https://crates.io/crates/voprf) crate's implementation
+> of RFC 9497** (`ristretto255-SHA512`) — the same library behind OPAQUE.
+>
+> So the question for an auditor is no longer *"is this homemade protocol sound?"* but the
+> far narrower *"is this library used correctly, and is the policy around it right?"*
+> Deleting the code that needed auditing was the cheapest way to reduce risk, and it is
+> what design decision **D11** asked for in the first place.
 
 > [!CAUTION]
-> **No external audit has taken place.** This document is the *package* prepared for one,
-> including a self-review that already found and fixed a critical flaw. A self-review is
-> not an audit — it is the author checking their own work, which is exactly the thing an
-> audit exists to distrust.
+> **No external audit has taken place.** This is the package prepared for one. A
+> self-review is the author checking their own work — precisely the thing an audit exists
+> to distrust — and this project's own self-review already missed a critical flaw for
+> several commits before catching it.
 
 ---
 
@@ -22,7 +35,7 @@ construction**: the anonymous capability token in
 - [1. Scope](#1-scope)
 - [2. Specification](#2-specification)
 - [3. Security model](#3-security-model)
-- [4. Deviations from RFC 9497](#4-deviations-from-rfc-9497)
+- [4. Conformance to RFC 9497](#4-conformance-to-rfc-9497)
 - [5. Self-review findings](#5-self-review-findings)
 - [6. Open questions for the auditor](#6-open-questions-for-the-auditor)
 - [7. Test vectors](#7-test-vectors)
@@ -32,82 +45,63 @@ construction**: the anonymous capability token in
 
 ## 1. Scope
 
-**In scope — the only hand-rolled cryptography in the project:**
+**In scope — Gyre's remaining cryptographic surface.** Note that none of it is a *protocol*
+any more; it is integration and policy around an audited implementation.
 
-| Component | File | ~Lines |
+| Component | File | What is Gyre's own |
 |---|---|---|
-| Blind VOPRF capability token (blind / issue / DLEQ prove + verify / unblind / redeem) | `crates/gyre-shield/src/token.rs` | ~330 |
+| Capability-token integration | `crates/gyre-shield/src/token.rs` | Key provenance, single-use set, epoch rotation, wire encodings, RNG adapter |
+| Consensus parameter encoding | `crates/gyre-directory/src/params.rs` | Canonical encoding that signatures cover |
+| Threshold verification | `crates/gyre-directory/src/lib.rs` | Quorum + epoch-binding checks |
+| QUIC certificate pinning | `crates/gyre-net/src/quic.rs` | The `ServerCertVerifier` implementation |
 
-**Explicitly not in scope** — these are audited upstream crates used as-is, per design
-decision **D11** (*never roll your own crypto*):
+**Not in scope — audited upstream crates used as-is (D11):**
 
-`sphinx-packet` (onion format) · `curve25519-dalek` (ristretto255, scalars) ·
-`x25519-dalek` · `ed25519-dalek` · `sha2` · `hmac` · `reed-solomon-erasure` · `zeroize`
-
-Gyre's own code composes these; it does not reimplement them. The token is the one place
-where a *protocol* was assembled by hand, which is why it is the audit target.
+`voprf` (RFC 9497 VOPRF — **the construction itself**) · `sphinx-packet` (onion format) ·
+`curve25519-dalek` · `x25519-dalek` · `ed25519-dalek` · `rustls` (TLS 1.3) · `sha2` ·
+`hmac` · `reed-solomon-erasure` · `zeroize`
 
 ## 2. Specification
 
-Group: **ristretto255** (prime order `ℓ`, no cofactor, no small-order points).
-Hash: **SHA-512**. `G` is the ristretto255 basepoint.
+The protocol is **RFC 9497 VOPRF mode, ciphersuite `ristretto255-SHA512`**, as implemented
+by the `voprf` crate. It is not restated here — read the RFC, which is the authority. What
+follows is what Gyre wraps around it.
 
-### 2.1 Primitives
-
-```text
-H(seed)          = ristretto255_from_uniform_bytes(
-                       SHA-512( "gyre-capability-token-v1/hash-to-group" ‖ seed ) )
-                   where seed is exactly 32 bytes (fixed by type, so ‖ is unambiguous)
-
-issuer key       k  ←$ Z_ℓ            (or k = SHA-512("…/issuer-key" ‖ seed32) mod ℓ)
-public key       Y  = k·G             (published via the signed directory consensus)
-```
-
-### 2.2 DLEQ proof (Chaum–Pedersen, Fiat–Shamir)
-
-Proves `log_G(Y) == log_B(Z)` — that the issuer evaluated with the key behind its
-*published* public key.
+### 2.1 The flow
 
 ```text
-Prove(k, Y, B, Z):
-    r  ←$ Z_ℓ
-    A₁ = r·G ,  A₂ = r·B
-    c  = SHA-512( "gyre-capability-token-v1/dleq" ‖ G ‖ Y ‖ B ‖ Z ‖ A₁ ‖ A₂ ) mod ℓ
-    s  = r + c·k
-    return (c, s)
-
-Verify(Y, B, Z, (c, s)):
-    A₁' = s·G − c·Y
-    A₂' = s·B − c·Z
-    accept iff  SHA-512( "…/dleq" ‖ G ‖ Y ‖ B ‖ Z ‖ A₁' ‖ A₂' ) mod ℓ  ==  c
-```
-
-All six transcript elements are compressed ristretto points of exactly 32 bytes, so the
-concatenation is unambiguous without length prefixes.
-
-### 2.3 Protocol
-
-```text
-Client                                   Issuer (secret k, published Y = k·G)
-------                                   ------------------------------------
+Client                                    Issuer (secret k, published Y = k·G)
+------                                    ------------------------------------
 seed ←$ {0,1}^256
-r    ←$ Z_ℓ
-T = H(seed)
-B = r·T                    ──── B ───▶
-                                         Z = k·B
-                                         π = Prove(k, Y, B, Z)
-                           ◀── Z, π ────
-assert Verify(Y, B, Z, π)      ← REQUIRED. Y must come from the signed consensus,
-                                 never from this response.
-N = r⁻¹·Z  ( = k·T )
-token = (seed, N)
+(state, B) = VoprfClient::blind(seed)   ──── B ───▶
+                                          (Z, π) = VoprfServer::blind_evaluate(B)
+                                        ◀── Z, π ───
+output = state.finalize(seed, Z, π, Y)
+   └─ verifies the DLEQ proof π against Y; fails closed on mismatch
+token = (seed, output)
 
 --- later, unlinkably ---
-                           ── seed,N ─▶  accept iff N == k·H(seed)
-                                         and seed ∉ spent;  then spent ∪= {seed}
+                                        ── seed,output ──▶
+                                          accept iff  VoprfServer::evaluate(seed) == output
+                                          (constant-time)  and seed ∉ spent
+                                          then spent ∪= {seed}
 ```
 
-Epochs: `Issuer::rotate()` draws a fresh `k`, republishes `Y`, and clears `spent`.
+### 2.2 What Gyre adds, and why each piece exists
+
+| Piece | Why it is Gyre's problem, not the library's |
+|---|---|
+| `PublicKey::from_verified_params` | The RFC says verify against the server's public key; it does not say *where that key comes from*. Getting it from the issuer would make the proof worthless. |
+| `VerifiedParams` (in `gyre-directory`) | Makes "this key was published by a quorum" a *type*, so an unverified key cannot reach `unblind` by accident. |
+| Spent set + `rotate()` | The RFC has no notion of single use or epochs. Both are deployment policy. |
+| Fixed-width wire encodings | `ELEMENT_LEN=32`, `PROOF_LEN=64`, `OUTPUT_LEN=64`, asserted by a test so an upstream change breaks loudly. |
+| `OsCsprng` adapter | `voprf` is generic over `RngCore + CryptoRng`; this forwards to `getrandom`. It invents no randomness. |
+
+### 2.3 Key derivation
+
+`Issuer::from_secret_seed` uses the RFC's `DeriveKeyPair` via `VoprfServer::new_from_seed`,
+with info string `gyre-capability-token-v2/issuer-key`. An operator must be able to reload
+the same key after a restart, or every restart silently invalidates live tokens.
 
 ## 3. Security model
 
@@ -124,37 +118,56 @@ choose its keys freely and to log everything it sees.
 | P3 | **Single use** | A token that has been redeemed cannot be redeemed again within an epoch. |
 | P4 | **Key consistency** | A client detects an issuer that evaluates with any key other than its published one. |
 
-P1 depends on P4 — that dependency is the flaw found in the self-review below. P2 rests on
-the one-more-DH assumption in ristretto255 (as in RFC 9497 and Privacy Pass); **no proof is
-offered here**, and confirming that this specific composition inherits it is a core task
-for the auditor.
+P1 depends on P4, and that dependency is exactly what the hand-rolled version got wrong
+(F1). P1, P2 and P4 now rest on RFC 9497's analysis rather than on anything argued here —
+which is the whole benefit of the port. **P3 (single use) is still Gyre's**: it comes from
+the spent set, not from the OPRF, and an auditor should treat it as unproven code rather
+than inherited theory.
 
 **Anonymity-set caveat.** P1 is unlinkability *within the set of tokens issued in the same
 epoch and redeemed in the same window*. If one client is the only redeemer in a window, the
 timing links it regardless of the cryptography. That is the crowd constraint that governs
 the whole project, not a property the token can fix.
 
-## 4. Deviations from RFC 9497
+## 4. Conformance to RFC 9497
 
-The construction follows RFC 9497's *shape*, not its letter. Deviations matter because they
-break interoperability **and** mean the RFC's security analysis is not inherited.
+**The construction now *is* RFC 9497** — `voprf` implements the specification, including
+`expand_message_xmd` hash-to-group with the RFC's DSTs, the standard DLEQ transcript, and
+`DeriveKeyPair`. The long list of deviations that used to live here is gone, because the
+code that deviated is gone.
 
-| Area | RFC 9497 (ristretto255-SHA512) | This implementation | Assessment |
-|---|---|---|---|
-| Hash-to-group | `expand_message_xmd` with DST `HashToGroup-OPRFV1-\x00-…` | bare SHA-512 → `from_uniform_bytes` | Believed sound as a random oracle to the group (this *is* the ristretto one-way map on 64 uniform bytes), but **not RFC-interoperable** and not covered by the RFC's proofs. |
-| DST format | RFC-specified versioned DSTs | custom `gyre-capability-token-v1/*` strings | Distinct per use, so no cross-protocol collision within Gyre; not RFC-compatible. |
-| Mode | OPRF / VOPRF / POPRF | VOPRF only | Intentional. |
-| Proof | DLEQ over the RFC's transcript encoding | Chaum–Pedersen over a custom transcript | Standard construction, non-standard encoding. |
-| Batching | Batched evaluation + one proof | none (one proof per issuance) | Performance only; costs ~25 µs/issuance (see [BENCHMARKS.md](../BENCHMARKS.md)). |
-| Key commitment / rotation schedule | out of scope for the RFC | `rotate()`, operator-driven | Policy left to the deployment; see finding F3. |
+For the record, what the hand-rolled version got wrong and the library gets right:
 
-**Consequence, stated plainly:** this is *not* an RFC 9497 implementation and must not be
-described as one. It is an independent construction that borrows the RFC's design.
+| Area | Old hand-rolled version | Now (`voprf`) |
+|---|---|---|
+| Mode | base OPRF, mislabelled "VOPRF" — **no proof at all** | true VOPRF with DLEQ proof |
+| Hash-to-group | bare SHA-512 → `from_uniform_bytes` | RFC `expand_message_xmd` with the specified DST |
+| DSTs | custom `gyre-capability-token-v1/*` | RFC-specified, versioned |
+| Proof transcript | custom Chaum–Pedersen encoding | RFC encoding |
+| Interoperability | none | an independent RFC 9497 implementation can interoperate |
+| Analysis inherited | none | the RFC's, plus the library's review history |
+
+**Remaining deviation:** the *token* is `(seed, output)` and redemption recomputes
+`evaluate(seed)`. That is a Gyre-level protocol on top of the OPRF, not part of the RFC,
+and it is what §3's properties P2/P3 actually rest on.
 
 ## 5. Self-review findings
 
-Found by reviewing this code against RFC 9497 while preparing this document. **F1 was
-critical and is fixed; the reproduction is retained as a regression test.**
+Found by reviewing the (then hand-rolled) code against RFC 9497 while preparing this
+document. **F1 was critical.** Several of these are now moot *because the code they applied
+to no longer exists* — that is recorded rather than deleted, because the history is the
+strongest argument for why the port happened.
+
+| Finding | Status after the `voprf` port |
+|---|---|
+| F1 — no DLEQ proof, unlinkability broken | **Fixed twice**: first by hand, then removed entirely by delegating to the library |
+| F1a — key distribution (was Q4) | **Still Gyre's**, still in scope |
+| F2 — secrets not zeroized | **Moot** — `VoprfClient`/`VoprfServer` are `ZeroizeOnDrop` upstream |
+| F3 — unbounded spent set | **Still Gyre's**, mitigated by `rotate()` |
+| F4 — hash-input ambiguity | **Moot** — the RFC's encoding is unambiguous |
+| F5/F6/F7 — issuer==verifier, bearer tokens, spent-set timing | **Still Gyre's**, informational |
+| F8 — `accept_consensus` accepted unsigned docs at threshold 0 | **Fixed**, unrelated to the port |
+
 
 ### F1 — CRITICAL (fixed): no DLEQ proof ⇒ unlinkability fully broken
 
@@ -251,51 +264,107 @@ binding would destroy unlinkability). Deployments must treat tokens as secrets i
 `HashSet` lookup timing may reveal whether a seed was already spent. The result is returned
 to the caller anyway, so the leak is unlikely to matter — flagged for completeness.
 
+### F9–F13 — from the post-port adversarial review
+
+A three-lens adversarial review of the ported code (security properties, correct `voprf`
+usage, test integrity) raised 27 observations. **Thirteen were serious enough to verify
+individually, and all thirteen were refuted** — unlinkability, key pinning and
+panic-reachability were checked against the code and found sound. What survived was a set
+of smaller issues. These were fixed:
+
+- **F9 — `Blinding`'s doc comment claimed the struct was wiped on drop; the seed was not.**
+  A documentation/code mismatch in exactly the direction this project treats as a defect.
+  Fixed: `Blinding` now derives `ZeroizeOnDrop`, and the comment describes what the code
+  does.
+- **F10 — `Token` derived `Copy` and `PartialEq`.** `Copy` makes a bearer credential
+  impossible to wipe reliably, and a *derived* `PartialEq` is a non-constant-time
+  comparison of the very secret the module compares carefully in `verify` — a trap sitting
+  next to the careful version. Fixed: `Copy` removed, `PartialEq` implemented in constant
+  time.
+- **F11 — the constant-time comparison was hand-rolled** while `subtle` was already in the
+  dependency graph via `voprf`. A hand-written branchless fold has no barrier stopping a
+  compiler from reintroducing a branch. Fixed: delegated to `subtle::ConstantTimeEq`.
+- **F12 — `OsCsprng::try_fill_bytes` panicked instead of returning `Err`**, making the
+  fallible half of the API a lie to any caller that checked it. Fixed.
+- **F13 — two weak tests.** The key-partitioning test had **no negative control**, so it
+  could not distinguish "pinning rejected a foreign key" from "the rogue's responses were
+  malformed and would fail against any key"; and a property generated a value it never
+  used. Both fixed — the control now asserts the rogue's proof *does* verify against the
+  rogue's *own* key, so the refusals are provably caused by the key mismatch.
+
+### F14–F17 — known gaps, not fixed
+
+Recorded rather than quietly dropped. None is a defect in the cryptography; each is a real
+limitation an auditor should know about.
+
+- **F14 — `Issuer::issue` is an unauthenticated issuance oracle.** Nothing in this module
+  binds issuance to the proof-of-work admission it is documented to reward. Anyone who can
+  reach the issuer can obtain unlimited tokens. The binding is deployment plumbing that
+  does not exist yet, and until it does the token grants no scarcity.
+- **F15 — `rotate()` has no caller anywhere in the repository.** The bound on the spent set
+  is therefore theoretical: nothing schedules an epoch. See Q-D.
+- **F16 — `Issuer::evaluate` is a public token-minting helper.** It requires the secret key,
+  so it grants nothing a caller holding the `Issuer` does not already have — but it is a
+  footgun, and it exists for test-vector generation.
+- **F17 — panics on RNG or key-generation failure are an undocumented availability
+  surface.** They are the *correct* behaviour (never continue with a broken CSPRNG), but a
+  relay that aborts is a relay that is down.
+
 ## 6. Open questions for the auditor
 
-Ranked by how much they would change our confidence:
+The port answered most of the old list — Q1 (is the composition sound?), Q2 (is the
+hash-to-group sound?), Q3 (is the transcript complete?) and Q6 (should we adopt a library?)
+are all resolved by using the RFC implementation. What remains is narrower and, we think,
+more answerable:
 
-1. **Q1 — Does the composition actually achieve P2 (one-more unforgeability)?** The blind
-   evaluation, the DLEQ transcript, and the redemption check are individually standard; the
-   *composition* has not been proven. This is the question we most want answered.
-2. **Q2 — Is the custom hash-to-group sound as a random oracle?** SHA-512 →
-   `from_uniform_bytes` is believed fine, but it is not the RFC's `expand_message_xmd`. Is
-   there any distinguisher or bias we have missed?
-3. **Q3 — Is the DLEQ transcript complete?** It binds `G, Y, B, Z, A₁, A₂`. Is anything
-   missing that would enable proof reuse across sessions, epochs, or issuers?
-4. **Q4 — Key distribution *(implemented — please review the design)*.** Clients now pin
-   `Y` from `VerifiedParams`, obtainable only by threshold verification (§F1a). Open parts:
-   is the `NetworkParams` encoding genuinely canonical, is the epoch-binding check
-   sufficient, and **what should a client do with a stale consensus during key rotation** —
-   today it would simply fail to verify tokens from the new epoch.
-5. **Q5 — Rotation policy.** What epoch length bounds the spent set without stranding honest
-   clients mid-flight? Should tokens carry an explicit epoch identifier?
-6. **Q6 — Should we simply adopt an audited implementation instead?** Given D11, the honest
-   default may be to replace this construction with a reviewed VOPRF library and keep only
-   the integration. We would like a recommendation.
+1. **Q-A — Is the library used correctly?** Ciphersuite choice, argument order, that
+   `finalize` really is the proof-verifying call, and that the same input reaches both
+   `blind` and `finalize`. A mismatch would produce tokens that silently never verify.
+2. **Q-B — Is `(seed, output)` a sound token?** Redemption reveals the OPRF input and
+   output. Does revealing both weaken anything, and is the constant-time comparison in
+   `verify` sufficient to stop byte-at-a-time forgery?
+3. **Q-C — Key distribution.** Clients pin `Y` from `VerifiedParams`. Is the
+   `NetworkParams` encoding genuinely canonical, is the epoch-binding check sufficient, and
+   **what should a client do with a stale consensus during key rotation** — today it simply
+   fails to verify tokens from the new epoch.
+4. **Q-D — Rotation policy.** What epoch length bounds the spent set without stranding
+   honest clients mid-flight? Should tokens carry an explicit epoch identifier?
+5. **Q-E — The QUIC certificate verifier.** `gyre-net::quic` implements a custom
+   `rustls::ServerCertVerifier` that pins a SHA-256 fingerprint and delegates signature
+   checking. Custom verifiers are a classic source of silent authentication bypass — this
+   one deserves a careful read.
+6. **Q-G — RFC conformance of the vectors.** The vectors pin *Gyre's* output, not RFC 9497
+   conformance. Cross-checking against the RFC's own published test vectors would prove
+   interoperability; the reviewer suggests `voprf`'s `danger` feature (scoped to
+   dev-dependencies) may expose what that needs.
+7. **Q-F — Dependency duplication.** `voprf 0.5` pins `sha2 0.10` and an older
+   `curve25519-dalek` while the workspace uses newer ones, so both versions are linked. Is
+   that acceptable, or should the workspace align (possibly on `voprf 0.6-pre`)?
 
 ## 7. Test vectors
 
 Reproducible vectors live in
-[`tests/token_vectors.rs`](../crates/gyre-shield/tests/token_vectors.rs) and run with
+[`tests/token_vectors.rs`](../crates/gyre-shield/tests/token_vectors.rs); run with
 `cargo test -p gyre-shield --test token_vectors`.
 
-With issuer secret seed `000102…1e1f` and token seed `42` × 32:
+With issuer secret seed `000102…1e1f` (info `gyre-capability-token-v2/issuer-key`) and token
+seed `42` × 32:
 
 | Value | Bytes (hex) |
 |---|---|
-| Issuer public key `Y = k·G` | `0a9a69c0ab673b88dd084370deb7a78bca331eb8d3a5dda5ec893271694f6819` |
-| Token evaluation `N = k·H(seed)` | `84b9ba04b1024d71820f41fd9bead7eebd6154255e449ab29b6de862f4ddf45f` |
+| Issuer public key `Y` | `fefc48110bde263d480b1e2458f0a7703ed056e97e5af8c2eae4186dc056cd55` |
+| OPRF output for the token seed | `6e01c3142b251bd1f7a675b8b3fab6b6190ce2d49b9c2b667ea48b8b02a6ee84`<br>`7e77822ecf796e90f636f11613586f324784618b30083d93306d447fcd5ef151` |
 
 > [!NOTE]
-> These are **self-generated regression vectors**: they pin the wire format so it cannot
-> change by accident. They are *not* independent validation — nothing has cross-checked
-> them against another implementation. Doing so is part of Q1/Q2.
+> **These values changed when the construction was replaced**, and that was intentional —
+> the old encoding was never deployed. They are **self-generated regression vectors**: they
+> pin the wire format against accidental change, but nothing has cross-checked them against
+> another RFC 9497 implementation. Doing so is part of Q-A, and is now *possible* precisely
+> because the implementation is conformant.
 
-Blinded points and DLEQ proofs are deliberately **not** fixed vectors: both incorporate
-fresh randomness, and that randomness is precisely what provides unlinkability. What is
-deterministic — and what the vectors pin — is the final evaluation for a given
-(issuer key, token seed).
+Blinded elements and proofs are deliberately **not** fixed vectors: both incorporate fresh
+randomness, and that randomness is what provides unlinkability. What is deterministic — and
+what the vectors pin — is the final output for a given (issuer key, token seed).
 
 ## 8. What is out of scope
 

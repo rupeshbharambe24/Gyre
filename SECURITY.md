@@ -15,11 +15,11 @@ honest** rather than reassuring. Read the caution below before anything else.
 >
 > - No third party has audited this code, its protocols, or its assumptions.
 >   Every property here is self-measured by the project's own harness.
-> - The **VOPRF anonymous-capability-token construction is a hand-built,
->   unaudited prototype** — a from-scratch implementation on `curve25519-dalek`
->   primitives following the RFC 9497 *shape*, not a reviewed library. It has not
->   been validated against a formal model or by a cryptographer. Treat any token
->   it issues as a demonstration, not a security boundary.
+> - The capability token's **construction** is now the audited `voprf` crate's RFC 9497
+>   implementation, but the **integration around it** — key provenance, single-use,
+>   rotation — is Gyre's own code and has had no cryptographic review. It replaced a
+>   hand-rolled version whose unlinkability was found to be **entirely broken**; see
+>   [`docs/AUDIT.md`](docs/AUDIT.md).
 > - If your safety, freedom, or a production system depends on the outcome, use a
 >   mature, audited tool (Tor, a reviewed mixnet, a real DDoS provider) instead.
 >   Gyre is a research fabric for studying how these mechanisms compose, not
@@ -182,20 +182,20 @@ anti-overclaim rule the project treats as law.
   threshold-signed directory download is already leak-free and cheaper. When PIR
   *is* used, its guarantee collapses entirely the moment the two servers collude
   (Decision D18).
-- **The VOPRF capability token is an unaudited prototype.** Restating the caution
-  because it matters wherever tokens appear: `gyre-shield`'s token is hand-built
-  on `curve25519-dalek` in the RFC 9497 shape and has had no cryptographic review.
-  A self-review while preparing [`docs/AUDIT.md`](docs/AUDIT.md) found that it
-  shipped **without the DLEQ proof its "verifiable" label implied**, which broke
-  unlinkability outright — a malicious issuer could tag every client with a
-  per-client key and link every redemption (reproduced: 5 of 5). That is fixed, and
-  the attack is now a regression test. It is exactly the kind of flaw a real audit
-  exists to find, and it was found by the author, not an auditor — treat the
-  remaining construction with the same suspicion.
-- **The token fix depends on key distribution that is not yet wired up.** Clients
-  must pin the issuer's public key from the threshold-signed consensus; verifying a
-  proof against a key the issuer supplied in the same response proves nothing. That
-  plumbing is **not implemented** (open question Q4 in the audit package).
+- **The capability token is no longer our own cryptography — but the integration is still
+  unreviewed.** The construction is now the audited [`voprf`](https://crates.io/crates/voprf)
+  crate's RFC 9497 implementation. Getting there was not voluntary: a self-review found the
+  previous hand-rolled version was labelled "verifiable" while carrying **no DLEQ proof**,
+  which broke unlinkability outright — a malicious issuer could tag every client with a
+  per-client key and link every redemption (reproduced: 5 of 5). That is exactly the class
+  of flaw a real audit exists to find, and it was found by the author rather than an
+  auditor. What remains Gyre's own code — key provenance, the spent set, rotation policy —
+  has still had **no external review**.
+- **Key provenance is now enforced, but rotation handling is not.** Clients pin the issuer
+  key from threshold-verified consensus parameters (`VerifiedParams`), so a key the issuer
+  supplied cannot reach the verification path by accident. What is *not* handled: a client
+  holding a stale consensus during key rotation simply fails to verify tokens from the new
+  epoch. See open question Q-C in [`docs/AUDIT.md`](docs/AUDIT.md).
 - **Cover traffic is not concurrent real senders.** A cover-inflated "effective
   set" must never be read as the number of real people actually present. The
   anonymity that counts is the concurrent *real* crowd, and it is always the

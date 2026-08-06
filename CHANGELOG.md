@@ -11,7 +11,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 ![Audit](https://img.shields.io/badge/audit-unaudited-red.svg)
 ![MSRV](https://img.shields.io/badge/MSRV-1.85-blue.svg)
 ![Crates](https://img.shields.io/badge/crates-15-informational.svg)
-![Tests](https://img.shields.io/badge/tests-167%20green-success.svg)
+![Tests](https://img.shields.io/badge/tests-171%20green-success.svg)
 [![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 
 > [!NOTE]
@@ -33,6 +33,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - [Unreleased](#unreleased)
   - [Milestone status](#milestone-status)
   - [Added](#added)
+  - [Changed](#changed)
   - [Fixed](#fixed)
   - [Deferred](#deferred-not-a-keep-a-changelog-category)
 - [About versioning](#about-versioning)
@@ -167,7 +168,7 @@ a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition
 
 **Tooling & quality gates**
 
-- **Workspace.** 15 crates, 167 tests, all green. See [`README.md`](README.md) and
+- **Workspace.** 15 crates, 171 tests, all green. See [`README.md`](README.md) and
   [`docs/DESIGN.md`](docs/DESIGN.md).
 - **Gates.** `cargo fmt --all -- --check`, `cargo clippy --workspace
   --all-targets -- -D warnings`, and `cargo test --workspace`. CI runs all three
@@ -260,7 +261,59 @@ a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition
   exception — hand-built on those audited `curve25519-dalek` primitives — and it is
   flagged as an unaudited prototype above.
 
+### Changed
+
+- **The capability token now uses an audited RFC 9497 implementation instead of our own.**
+  `gyre-shield::token` delegates the construction to the
+  [`voprf`](https://crates.io/crates/voprf) crate (`ristretto255-SHA512`, the library behind
+  OPAQUE). Gyre keeps only what is *policy* rather than cryptography: where the issuer's
+  public key comes from, single-use enforcement, epoch rotation, and the wire encodings.
+
+  This was not cosmetic. The previous version was hand-assembled, and reviewing it for
+  `docs/AUDIT.md` found it was labelled "verifiable" while carrying **no DLEQ proof** — a
+  flaw that broke unlinkability outright. Adding the proof by hand fixed the bug; deleting
+  the bespoke construction removed the *class* of bug, which is what **D11** asked for.
+  Consequences, stated plainly:
+  - **The audit surface shrank dramatically.** The question for a reviewer is no longer
+    "is this homemade protocol sound?" but "is the library used correctly, and is the
+    policy around it right?" `docs/AUDIT.md` was rewritten accordingly.
+  - **Wire format changed** — `Token` is now `(seed, output)` with a 64-byte SHA-512
+    output, and the test vectors moved. Nothing was deployed, so nothing breaks.
+  - **Issuance and unblinding got slower**: `issue` 23 → 107 µs, `unblind` 30 → 150 µs.
+    That is the DLEQ proof being generated and *verified*; the old figures measured a
+    construction that did not do its job. Still well under a millisecond end to end.
+  - `curve25519-dalek` is no longer a direct dependency of `gyre-shield`. `voprf 0.5` does
+    pin older `sha2`/`curve25519-dalek` internally, so both versions link — the honest
+    price of not rolling our own (tracked as open question Q-F).
+
 ### Fixed
+
+*From a three-lens adversarial review of the port. It raised 27 observations; the 13 serious
+ones were each verified individually and **all 13 were refuted** — unlinkability, key
+pinning and panic-reachability were checked and found sound. These smaller issues survived:*
+
+- **A doc comment claimed `Blinding` was wiped on drop while its seed was not.** A
+  documentation/code mismatch in exactly the direction this project treats as a defect.
+  `Blinding` now derives `ZeroizeOnDrop` and the comment describes what the code does.
+- **`Token` derived `Copy` and `PartialEq`.** `Copy` makes a bearer credential impossible
+  to wipe reliably, and a *derived* equality is a non-constant-time comparison of the very
+  secret `verify` compares carefully — a trap sitting next to the careful version. `Copy`
+  removed; `PartialEq` is now constant-time.
+- **The constant-time comparison was hand-rolled** while `subtle` was already in the tree
+  via `voprf`. A hand-written branchless fold has no barrier against a compiler
+  reintroducing a branch. Now delegated to `subtle::ConstantTimeEq` — D11 applies to small
+  things too.
+- **`OsCsprng::try_fill_bytes` panicked instead of returning `Err`**, making the fallible
+  half of the API a lie to any caller that checked it.
+- **Two weak tests.** The key-partitioning test had **no negative control**, so it could not
+  distinguish "pinning rejected a foreign key" from "the rogue's responses were malformed
+  and would have failed against any key"; and one property generated a value it never used.
+  The control now asserts the rogue's proof *does* verify against the rogue's *own* key.
+
+*Known gaps recorded but **not** fixed — see F14–F17 in [`docs/AUDIT.md`](docs/AUDIT.md):
+issuance is not bound to PoW admission, `rotate()` has no caller, `evaluate` is a
+token-minting footgun, and RNG-failure panics are an availability surface.*
+
 
 - **CRITICAL — the capability token's unlinkability was completely broken.** The
   construction was documented as a "blind **V**OPRF (RFC 9497 shape)" but shipped **no DLEQ

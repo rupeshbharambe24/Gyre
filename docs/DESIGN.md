@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Rust](https://img.shields.io/badge/rust-1.85%2B-informational.svg)
 ![Crates](https://img.shields.io/badge/crates-15-blue.svg)
-![Tests](https://img.shields.io/badge/tests-167%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-171%20passing-brightgreen.svg)
 [![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 
 A condensed, public design summary. It states what the system is, the adversary

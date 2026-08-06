@@ -67,19 +67,26 @@ layer at one relay.
 
 ### VOPRF capability token (inbound admission)
 
-Ristretto (curve25519-dalek). One full unlinkable issue→redeem path is the four stages
-below, ≈ 106 µs of client+issuer work total.
+RFC 9497 `ristretto255-SHA512`, via the audited [`voprf`](https://crates.io/crates/voprf)
+crate. One full unlinkable issue→redeem path is the four stages below.
 
 | Stage | Who | Time |
 |---|---|---:|
-| `blind` | client | 26.6 µs |
-| `issue` | issuer | 23.0 µs |
-| `unblind` | client | 30.3 µs |
-| `verify` | issuer | 26.3 µs |
+| `blind` | client | 25.1 µs |
+| `issue` (blind-evaluate **+ DLEQ proof**) | issuer | 107.5 µs |
+| `unblind` (**verify proof** + finalize) | client | 150.4 µs |
+| `verify` (redemption) | issuer | 24.5 µs |
 
-> [!NOTE]
-> The construction is a hand-built, **unaudited** prototype — these numbers describe its
-> cost, not its security. See [`SECURITY.md`](SECURITY.md).
+> [!IMPORTANT]
+> **These numbers went up, and that is the point.** An earlier measurement reported `issue`
+> at 23 µs and `unblind` at 30 µs. That version carried **no DLEQ proof** — a flaw that
+> broke unlinkability outright (see [`docs/AUDIT.md`](docs/AUDIT.md)). Issuance now
+> generates a proof and unblinding *verifies* it, which is where the extra ~85 µs and
+> ~120 µs go. The old figures measured a construction that did not do its job; comparing
+> against them would be comparing against a bug.
+>
+> In absolute terms the whole issue→redeem path is well under a millisecond, so the
+> correctness is essentially free at any realistic admission rate.
 
 ### Proof-of-work admission (inbound)
 

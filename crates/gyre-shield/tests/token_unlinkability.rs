@@ -51,6 +51,20 @@ fn a_key_partitioning_issuer_cannot_tag_any_client() {
         "every client must refuse a token issued under an unpublished key; \
          {accepted} of {clients} were tagged"
     );
+
+    // NEGATIVE CONTROL. Without this, the test above cannot tell "the pinning rejected a
+    // foreign key" from "the rogue's responses were malformed and would fail against any
+    // key". Here the *same* rogue issuer is checked against its *own* published key: it
+    // must succeed. So the refusals above are caused by the key mismatch specifically, and
+    // nothing else.
+    let rogue = Issuer::new();
+    let (state, blinded) = blind();
+    let issued = rogue.issue(blinded).expect("issue");
+    assert!(
+        unblind(state, issued, rogue.public_key()).is_ok(),
+        "control failed: the rogue's own proof must verify against the rogue's own key, \
+         otherwise the test above proves nothing about pinning"
+    );
 }
 
 /// The honest path still works — the check is not simply refusing everything.
@@ -84,16 +98,24 @@ fn the_issuer_sees_nothing_that_distinguishes_two_issuances() {
     let t1 = unblind(s1, issuer.issue(b1).unwrap(), published).unwrap();
     let t2 = unblind(s2, issuer.issue(b2).unwrap(), published).unwrap();
 
-    // Nothing the issuer saw at issuance (b1, b2) appears in what it sees at redemption.
+    // Nothing the issuer saw at issuance (b1, b2) reappears in what it sees at redemption
+    // (seed, output). The output is longer than a blinded point, so check every window
+    // rather than relying on the length difference to make this trivially true.
     assert_ne!(t1.seed, t2.seed);
     for token in [&t1, &t2] {
-        assert_ne!(
-            token.evaluated, b1,
-            "the token must not echo a blinded point"
-        );
-        assert_ne!(token.evaluated, b2);
-        assert_ne!(token.seed, b1);
-        assert_ne!(token.seed, b2);
+        for blinded in [&b1, &b2] {
+            assert_ne!(
+                &token.seed, blinded,
+                "the seed must not echo a blinded point"
+            );
+            assert!(
+                !token
+                    .output
+                    .windows(blinded.len())
+                    .any(|w| w == blinded.as_slice()),
+                "no part of the token may echo a blinded point"
+            );
+        }
     }
 }
 
