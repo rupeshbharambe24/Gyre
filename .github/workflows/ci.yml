@@ -31,3 +31,8 @@ jobs:
 
       - name: Test
         run: cargo test --workspace
+
+      # Cheap, and it catches a class of breakage that otherwise only surfaces in the slow
+      # Shadow workflow.
+      - name: Validate the Shadow network graph
+        run: python3 scripts/validate-shadow-gml.py sim/shadow/network.gml

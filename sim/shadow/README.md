@@ -42,6 +42,13 @@ The two are complementary:
    Two traps, both hit on the first attempt:
    - `apt install shadow` installs an unrelated package (the shadow password suite).
      Shadow the simulator ships **no prebuilt binaries** and must be built from source.
+   - **The network graph must be in Shadow's GML dialect**, which is stricter than
+     networkx's: no `#` comments (they fail at line 1), and only `id` /
+     `host_bandwidth_up` / `host_bandwidth_down` on nodes and `source` / `target` /
+     `latency` / `packet_loss` on edges. Run
+     `python3 scripts/validate-shadow-gml.py sim/shadow/network.gml` before pushing —
+     that check exists because this cost a CI round-trip. Explanatory prose belongs here,
+     not in the `.gml`.
    - The config schema bites too: `network.graph.file` is a **struct**
      (`file: {path: ...}`), not a string; long-running servers need
      `expected_final_state: running` or Shadow reports a still-running process as a failed

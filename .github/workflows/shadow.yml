@@ -95,6 +95,14 @@ jobs:
             echo "ok: $b -> $(command -v "$b")"
           done
 
+      # Shadow's GML parser is stricter than networkx's — it rejects `#` comments and
+      # unknown attributes. Catching that here costs a second; catching it inside Shadow
+      # costs a full CI round-trip, which is exactly what happened.
+      - name: Pre-flight — the network graph is valid in Shadow's GML dialect
+        run: |
+          pip3 install --quiet networkx
+          python3 scripts/validate-shadow-gml.py sim/shadow/network.gml
+
       - name: Run the Gyre experiment
         run: |
           cd sim/shadow
