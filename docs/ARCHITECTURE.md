@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)
 ![crates](https://img.shields.io/badge/crates-14-informational.svg)
-![tests](https://img.shields.io/badge/tests-127%20green-brightgreen.svg)
+![tests](https://img.shields.io/badge/tests-141%20green-brightgreen.svg)
 ![status](https://img.shields.io/badge/status-experimental-red.svg)
 
 This document describes **how the code is organized** — the workspace, the crate
@@ -42,7 +42,7 @@ directions:
 - **Inbound rotor** — hides and gates a *system* (rendezvous origin-hiding,
   moving-target-defense ingress hopping, proof-of-work admission, capability tokens).
 
-The workspace is a Cargo workspace of **14 crates, 127 tests, all green** (edition
+The workspace is a Cargo workspace of **14 crates, 141 tests, all green** (edition
 2021, MSRV `rust-version = 1.85`, MIT). Crates fall into layers by role:
 
 | Layer | Crates | Tests |
@@ -51,7 +51,7 @@ The workspace is a Cargo workspace of **14 crates, 127 tests, all green** (editi
 | Transport (lib-only) | `gyre-net` | 8 |
 | Outbound demo & tests | `gyre-node` | 2 |
 | Measurement — the GATE | `gyre-adversary` | 4 |
-| Inbound rotor | `gyre-shield` | 20 |
+| Inbound rotor | `gyre-shield` | 33 |
 | Orthogonal hardening | `gyre-obfs`, `gyre-endpoint`, `gyre-directory`, `gyre-pir`, `gyre-stego` | 9 · 8 · 10 · 6 · 10 |
 | Crowd / incentive | `gyre-crowd` | 8 |
 | Simulation / measurement | `gyre-sim` | 19 |

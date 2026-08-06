@@ -11,7 +11,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 ![Audit](https://img.shields.io/badge/audit-unaudited-red.svg)
 ![MSRV](https://img.shields.io/badge/MSRV-1.85-blue.svg)
 ![Crates](https://img.shields.io/badge/crates-14-informational.svg)
-![Tests](https://img.shields.io/badge/tests-127%20green-success.svg)
+![Tests](https://img.shields.io/badge/tests-141%20green-success.svg)
 [![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 
 > [!NOTE]
@@ -125,11 +125,13 @@ honest ceiling inline, wherever one applies.
   *Ceiling (D2):* rotation is **defense, not anonymity**.
 - **Rendezvous origin-hiding.** Rendezvous-based origin hiding for the protected
   asset, so the origin never faces clients directly.
-- **VOPRF capability tokens.** Unlinkable capability tokens (blind VOPRF, RFC 9497
-  *shape*) complete the inbound rotor.
+- **VOPRF capability tokens.** Unlinkable capability tokens (blind *verifiable* OPRF,
+  RFC 9497 *shape*) complete the inbound rotor. The issuer attaches a **DLEQ proof** that
+  it used its published key; the client refuses the token otherwise.
   *Ceiling:* this is a **hand-built PROTOTYPE** on `curve25519-dalek` primitives
-  and is **UNAUDITED**. Anonymous credentials add **zero** intrinsic Sybil
-  resistance — only the scarce resource (PoW / stake) does.
+  and is **UNAUDITED** — the prepared audit package is [`docs/AUDIT.md`](docs/AUDIT.md).
+  Anonymous credentials add **zero** intrinsic Sybil resistance — only the scarce
+  resource (PoW / stake) does.
 
 **P3 — Six orthogonal hardening additions** (added *by threat*, not by default;
 a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition 3
@@ -165,11 +167,18 @@ a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition
 
 **Tooling & quality gates**
 
-- **Workspace.** 14 crates, 127 tests, all green. See [`README.md`](README.md) and
+- **Workspace.** 14 crates, 141 tests, all green. See [`README.md`](README.md) and
   [`docs/DESIGN.md`](docs/DESIGN.md).
 - **Gates.** `cargo fmt --all -- --check`, `cargo clippy --workspace
   --all-targets -- -D warnings`, and `cargo test --workspace`. CI runs all three
   on every pull request and on pushes to `main`.
+- **Cryptographic audit package** ([`docs/AUDIT.md`](docs/AUDIT.md)) for the one hand-built
+  construction: full specification, security model with the four claimed properties,
+  a table of every deviation from RFC 9497, seven self-review findings (one critical, see
+  *Fixed*), six ranked open questions for an auditor, and reproducible test vectors
+  (`cargo test -p gyre-shield --test token_vectors`). Also adds
+  `Issuer::from_secret_seed` so an operator can reload a key across restarts — without it,
+  every restart silently invalidated outstanding tokens.
 - **Simulation harness (`gyre-sim`) — the GATE, run against the real code.** A
   discrete-event simulator that drives the **actual** protocol implementation (real Sphinx
   onions, real X25519 relay keys, the real Loopix delay sampler, real packet sizes) over a
@@ -210,6 +219,31 @@ a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition
 
 ### Fixed
 
+- **CRITICAL — the capability token's unlinkability was completely broken.** The
+  construction was documented as a "blind **V**OPRF (RFC 9497 shape)" but shipped **no DLEQ
+  proof**, making it the *base* OPRF mode. That enables textbook **key partitioning**: a
+  malicious issuer hands each client a different secret key, then at redemption tries every
+  key — exactly one verifies, identifying the issuance session and therefore the client. A
+  proof-of-concept **linked 5 of 5 redemptions**; the property the token exists to provide
+  was absent, not merely unproven. **Fixed** by implementing the Chaum–Pedersen DLEQ proof:
+  the issuer must prove it used the key behind its published public key, and `unblind` now
+  refuses the token otherwise (`unblind` takes the pinned public key as a third argument).
+  The same attack now links **0 of 5** — retained as a regression test in
+  `crates/gyre-shield/tests/token_unlinkability.rs`. Full analysis in
+  [`docs/AUDIT.md`](docs/AUDIT.md).
+  > **Deployment caveat:** the fix only holds if clients pin the public key from the
+  > threshold-signed consensus. That wiring is **not yet implemented** and is tracked as
+  > open question Q4 in the audit package.
+- **Token secrets are now zeroized.** `Blinding.blind` — the scalar whose secrecy *is*
+  unlinkability — and `Issuer.key` were left in memory on drop, inconsistent with
+  `gyre-endpoint`. Both are now `ZeroizeOnDrop`, along with intermediate hash buffers.
+- **The double-spend set can now be bounded.** It grew without limit (a memory-exhaustion
+  DoS); `Issuer::rotate()` starts a new epoch — fresh key, cleared set — and
+  `spent_count()` makes the size observable. Rotation is operator policy, so the residual
+  risk is documented rather than closed.
+- **Hash-input ambiguity removed.** `hash_to_point` took `&[u8]`, so `DST ‖ seed` would be
+  ambiguous for variable-length seeds. Latent (all callers passed 32 bytes), now impossible
+  by type.
 - **Corrected an overclaim in the GATE's own documentation, and the numbers it produced.**
   `gyre-adversary` described its greedy matcher as chosen "so anonymity never looks better
   than it is" — exactly backwards. A *weaker* attacker makes anonymity look **better**, so

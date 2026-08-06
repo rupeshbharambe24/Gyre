@@ -115,9 +115,10 @@ proptest! {
     #[test]
     fn an_issued_token_verifies_and_redeems_exactly_once(_run in 0u8..8) {
         let mut issuer = Issuer::new();
+        let published = issuer.public_key();
         let (state, blinded) = blind();
         let issued = issuer.issue(blinded).expect("a fresh blinded point is valid");
-        let token = unblind(state, issued).expect("the issuer's response is a valid point");
+        let token = unblind(state, issued, published).expect("an honest proof must verify");
 
         prop_assert!(issuer.verify(&token));
         prop_assert!(issuer.redeem(&token), "first redemption succeeds");

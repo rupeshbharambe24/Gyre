@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Rust: 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)
 ![Crates: 14](https://img.shields.io/badge/crates-14-informational.svg)
-![Tests: 127 passing](https://img.shields.io/badge/tests-127%20passing-brightgreen.svg)
+![Tests: 141 passing](https://img.shields.io/badge/tests-141%20passing-brightgreen.svg)
 ![Status: experimental](https://img.shields.io/badge/status-experimental-red.svg)
 
 Gyre is a single relay fabric that spins two ways at once: an **outbound
@@ -147,10 +147,13 @@ inbound address**.
 - **Proof-of-work admission** — difficulty scales with load; the server verifies
   in one hash. It re-prices attacker asymmetry but does nothing for L3/L4
   volumetric floods.
-- **Unlinkable capability tokens** — a blind VOPRF (RFC 9497 shape) over
-  ristretto: a client that paid once redeems a token to skip the PoW, and the
+- **Unlinkable capability tokens** — a blind **verifiable** OPRF (RFC 9497 shape)
+  over ristretto: a client that paid once redeems a token to skip the PoW, and the
   issuer (which only ever saw a random *blinded* point) cannot link redemption to
-  issuance. Single-use; double-spend rejected. Built on audited `curve25519-dalek`
+  issuance. Single-use; double-spend rejected. The issuer must attach a **DLEQ proof**
+  that it used its published key — without it, a malicious issuer deanonymises every
+  client by handing out a different key each time (this was a real, reproduced flaw;
+  see [`docs/AUDIT.md`](docs/AUDIT.md)). Built on audited `curve25519-dalek`
   primitives — but **the construction itself is an unaudited prototype.**
 
 ---
@@ -211,7 +214,7 @@ cargo run -p gyre-stego       # LSB steganography (situational)
 
 ## Crate map
 
-Fourteen crates, 127 tests, all green.
+Fourteen crates, 141 tests, all green.
 
 | Crate | Purpose | Tests |
 |---|---|:--:|
@@ -221,7 +224,7 @@ Fourteen crates, 127 tests, all green.
 | `gyre-net` | Async transport, directory, relay server, mixing, cover traffic | 4 |
 | `gyre-node` | Demo binary: spin up a testnet + integration tests (lanes, multipath) | 2 |
 | `gyre-adversary` | **The GATE:** partial-observer timing-correlation harness + verdict | 4 |
-| `gyre-shield` | Inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens | 11 |
+| `gyre-shield` | Inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens | 33 |
 | `gyre-obfs` | Pluggable-transport framework + transports + an entropy meter | 4 |
 | `gyre-endpoint` | Endpoint hardening: forward-secret ratchet, personas, uniform fingerprint | 3 |
 | `gyre-directory` | Threshold-signed consensus, equivocation detection, build attestation | 5 |
@@ -370,6 +373,7 @@ bearing on anonymity properties.
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Milestone history and what "complete" means for each phase |
 | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) | Terms of art: mixnet, Loopix, VOPRF, MTD, anonymity set, and friends |
 | [`docs/SIMULATION.md`](docs/SIMULATION.md) | **End-to-end simulation results** against an optimal attacker — supersedes the GATE numbers |
+| [`docs/AUDIT.md`](docs/AUDIT.md) | **Cryptographic audit package**: spec, security model, RFC deviations, self-review findings, test vectors |
 | [`BENCHMARKS.md`](BENCHMARKS.md) | Reproducible criterion microbenchmarks of the primitives (with honest caveats) |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to build, test, and propose changes |
 | [`SECURITY.md`](SECURITY.md) | How to report a vulnerability (GitHub private advisories) |

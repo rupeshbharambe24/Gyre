@@ -185,6 +185,17 @@ anti-overclaim rule the project treats as law.
 - **The VOPRF capability token is an unaudited prototype.** Restating the caution
   because it matters wherever tokens appear: `gyre-shield`'s token is hand-built
   on `curve25519-dalek` in the RFC 9497 shape and has had no cryptographic review.
+  A self-review while preparing [`docs/AUDIT.md`](docs/AUDIT.md) found that it
+  shipped **without the DLEQ proof its "verifiable" label implied**, which broke
+  unlinkability outright — a malicious issuer could tag every client with a
+  per-client key and link every redemption (reproduced: 5 of 5). That is fixed, and
+  the attack is now a regression test. It is exactly the kind of flaw a real audit
+  exists to find, and it was found by the author, not an auditor — treat the
+  remaining construction with the same suspicion.
+- **The token fix depends on key distribution that is not yet wired up.** Clients
+  must pin the issuer's public key from the threshold-signed consensus; verifying a
+  proof against a key the issuer supplied in the same response proves nothing. That
+  plumbing is **not implemented** (open question Q4 in the audit package).
 - **Cover traffic is not concurrent real senders.** A cover-inflated "effective
   set" must never be read as the number of real people actually present. The
   anonymity that counts is the concurrent *real* crowd, and it is always the

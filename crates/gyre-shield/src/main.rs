@@ -88,14 +88,29 @@ async fn main() {
     // ---- Anonymous capability tokens ----
     println!("Capability tokens — redeem an unlinkable token to skip the PoW:");
     let mut issuer = gyre_shield::token::Issuer::new();
+    // The public key is pinned out of band (in production: from the signed consensus).
+    let published = issuer.public_key();
     let (state, blinded) = gyre_shield::token::blind();
     let issued = issuer.issue(blinded).expect("issue");
-    let token = gyre_shield::token::unblind(state, issued).expect("unblind");
+    let token = gyre_shield::token::unblind(state, issued, published).expect("unblind");
     println!("  issuer saw only a blinded point (never the token)");
+    println!("  client verified the issuer's DLEQ proof against the published key");
     println!(
         "  redeem #1: {}   redeem #2 (double-spend): {}",
         issuer.redeem(&token),
         issuer.redeem(&token)
+    );
+
+    // Show the protection working: a response computed with a different key is refused.
+    let rogue = gyre_shield::token::Issuer::new();
+    let (state2, blinded2) = gyre_shield::token::blind();
+    let rogue_issued = rogue.issue(blinded2).expect("issue");
+    println!(
+        "  response from a DIFFERENT key, checked against the published one: {}",
+        match gyre_shield::token::unblind(state2, rogue_issued, published) {
+            Ok(_) => "ACCEPTED (this would be a deanonymisation hole)".to_string(),
+            Err(e) => format!("REFUSED — {e}"),
+        }
     );
     println!("{}", "-".repeat(70));
     println!(

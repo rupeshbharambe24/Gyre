@@ -15,7 +15,9 @@ fn voprf(c: &mut Criterion) {
 
     g.bench_function("blind", |b| b.iter(|| black_box(blind())));
 
+    let published = issuer.public_key();
     let (_state, blinded) = blind();
+    // `issue` now also produces a DLEQ proof — that cost is part of issuance.
     g.bench_function("issue", |b| {
         b.iter(|| black_box(issuer.issue(black_box(blinded)).unwrap()))
     });
@@ -27,14 +29,15 @@ fn voprf(c: &mut Criterion) {
                 let issued = issuer.issue(blinded).unwrap();
                 (state, issued)
             },
-            |(state, issued)| black_box(unblind(state, issued).unwrap()),
+            // `unblind` now verifies the issuer's proof before accepting.
+            |(state, issued)| black_box(unblind(state, issued, published).unwrap()),
             BatchSize::SmallInput,
         )
     });
 
     let (state, blinded) = blind();
     let issued = issuer.issue(blinded).unwrap();
-    let token = unblind(state, issued).unwrap();
+    let token = unblind(state, issued, published).unwrap();
     g.bench_function("verify", |b| {
         b.iter(|| black_box(issuer.verify(black_box(&token))))
     });

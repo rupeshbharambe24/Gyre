@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![MSRV](https://img.shields.io/badge/rustc-1.85%2B-orange.svg)
 ![crates](https://img.shields.io/badge/crates-14-informational.svg)
-![tests](https://img.shields.io/badge/tests-127%20green-success.svg)
+![tests](https://img.shields.io/badge/tests-141%20green-success.svg)
 ![status](https://img.shields.io/badge/status-experimental-red.svg)
 
 Where Gyre has been, what is actually finished, and the one thing that no
@@ -42,7 +42,7 @@ amount of code can finish. This is a research roadmap, not a release plan.
 
 ## Done
 
-All phases are complete and measured. The workspace is **14 crates, 127 tests, all
+All phases are complete and measured. The workspace is **14 crates, 141 tests, all
 green**, gated in CI by `cargo fmt --all -- --check`, `cargo clippy --workspace
 --all-targets -- -D warnings`, and `cargo test --workspace`.
 
