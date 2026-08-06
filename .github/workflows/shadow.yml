@@ -31,7 +31,13 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Build the Gyre binaries
-        run: cargo build --release -p gyre-cli
+        run: |
+          cargo build --release -p gyre-cli
+          # shadow.yaml names the binaries as bare basenames and lets Shadow resolve them
+          # through PATH. A managed process runs with its cwd set to
+          # shadow.data/hosts/<hostname>/, so a relative path in the config would have to
+          # climb five levels and would break silently if the layout changed.
+          echo "$GITHUB_WORKSPACE/target/release" >> "$GITHUB_PATH"
 
       # Exactly the list from Shadow's own install guide
       # (docs/install_dependencies.md). Guessing at this is what broke the first attempt:
@@ -79,16 +85,14 @@ jobs:
       # The config refers to the binaries as ../../target/release/... relative to
       # sim/shadow. Check that before handing over to Shadow, so a path mistake fails here
       # with an obvious message instead of somewhere inside the simulator.
-      - name: Pre-flight — the binaries the config points at exist
+      - name: Pre-flight — the binaries Shadow will resolve are on PATH
         run: |
-          cd sim/shadow
           for b in gyre-relay gyre-client gyre-sink; do
-            p="../../target/release/$b"
-            if [ ! -x "$p" ]; then
-              echo "::error::missing binary $p (referenced by shadow.yaml)"
+            if ! command -v "$b" >/dev/null; then
+              echo "::error::$b is not on PATH; shadow.yaml resolves it by bare name"
               exit 1
             fi
-            echo "ok: $p"
+            echo "ok: $b -> $(command -v "$b")"
           done
 
       - name: Run the Gyre experiment

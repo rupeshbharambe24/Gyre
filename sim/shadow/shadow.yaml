@@ -4,8 +4,16 @@
 # network stack, so timing includes real TCP behaviour, congestion and topology. That is
 # what `gyre-sim` models rather than provides.
 #
-# Run:  cargo build --release -p gyre-cli && cd sim/shadow && shadow shadow.yaml
-# Linux only. See README.md in this directory.
+# Run (Linux only — see README.md):
+#   cargo build --release -p gyre-cli
+#   export PATH="$PWD/target/release:$PATH"
+#   cd sim/shadow && shadow shadow.yaml
+#
+# Binaries are named as BARE BASENAMES on purpose. A managed process runs with its working
+# directory set to `shadow.data/hosts/<hostname>/`, so a relative path here would have to
+# climb five levels to reach the repo root and would silently break if the layout moved.
+# Shadow resolves bare names through its own PATH instead, which is why the run instructions
+# put `target/release` on it.
 general:
   stop_time: 60s
   model_unblocked_syscall_latency: true
@@ -13,95 +21,90 @@ general:
 network:
   graph:
     type: gml
-    file: network.gml
+    # `file` is a FileSource struct, NOT a bare string — `file: network.gml` fails with
+    # `invalid type: string, expected struct FileSource`.
+    file:
+      path: network.gml
 
 hosts:
   # --- three relays, split across two regions so routes cross the slow link ---------
+  #
+  # Relays serve until the simulation ends, so they need `expected_final_state: running`.
+  # The default is `{exited: 0}`, which would make Shadow report a still-running server as
+  # a failed simulation.
   relay1:
+    # Pinned explicitly: the addresses below appear verbatim in the --relay
+    # arguments, and relying on Shadow's assignment ORDER to match would break the
+    # moment a host is reordered or inserted.
+    ip_addr: 11.0.0.1
     network_node_id: 0
     processes:
-      - path: ../../target/release/gyre-relay
+      - path: gyre-relay
         args:
-          - --label
-          - r1
-          - --listen
-          - 0.0.0.0:9001
-          - --relay
-          - r1=11.0.0.1:9001
-          - --relay
-          - r2=11.0.0.2:9001
-          - --relay
-          - r3=11.0.0.3:9001
-          - --relay
-          - dest=11.0.0.4:9100
+          ["--label", "r1", "--listen", "0.0.0.0:9001",
+           "--relay", "r1=11.0.0.1:9001", "--relay", "r2=11.0.0.2:9001",
+           "--relay", "r3=11.0.0.3:9001", "--relay", "dest=11.0.0.4:9100"]
         start_time: 1s
+        expected_final_state: running
 
   relay2:
+    # Pinned explicitly: the addresses below appear verbatim in the --relay
+    # arguments, and relying on Shadow's assignment ORDER to match would break the
+    # moment a host is reordered or inserted.
+    ip_addr: 11.0.0.2
     network_node_id: 0
     processes:
-      - path: ../../target/release/gyre-relay
+      - path: gyre-relay
         args:
-          - --label
-          - r2
-          - --listen
-          - 0.0.0.0:9001
-          - --relay
-          - r1=11.0.0.1:9001
-          - --relay
-          - r2=11.0.0.2:9001
-          - --relay
-          - r3=11.0.0.3:9001
-          - --relay
-          - dest=11.0.0.4:9100
+          ["--label", "r2", "--listen", "0.0.0.0:9001",
+           "--relay", "r1=11.0.0.1:9001", "--relay", "r2=11.0.0.2:9001",
+           "--relay", "r3=11.0.0.3:9001", "--relay", "dest=11.0.0.4:9100"]
         start_time: 1s
+        expected_final_state: running
 
   relay3:
+    # Pinned explicitly: the addresses below appear verbatim in the --relay
+    # arguments, and relying on Shadow's assignment ORDER to match would break the
+    # moment a host is reordered or inserted.
+    ip_addr: 11.0.0.3
     network_node_id: 1
     processes:
-      - path: ../../target/release/gyre-relay
+      - path: gyre-relay
         args:
-          - --label
-          - r3
-          - --listen
-          - 0.0.0.0:9001
-          - --relay
-          - r1=11.0.0.1:9001
-          - --relay
-          - r2=11.0.0.2:9001
-          - --relay
-          - r3=11.0.0.3:9001
-          - --relay
-          - dest=11.0.0.4:9100
+          ["--label", "r3", "--listen", "0.0.0.0:9001",
+           "--relay", "r1=11.0.0.1:9001", "--relay", "r2=11.0.0.2:9001",
+           "--relay", "r3=11.0.0.3:9001", "--relay", "dest=11.0.0.4:9100"]
         start_time: 1s
+        expected_final_state: running
 
   # --- the destination the exit relay delivers to ----------------------------------
+  #
+  # Deliberately left on the default `expected_final_state: {exited: 0}`. The sink exits 0
+  # only after receiving all 10 payloads, so **the simulation itself asserts end-to-end
+  # delivery**: if fewer arrive, the sink is still blocked at stop_time and Shadow fails
+  # the run. That is the pass/fail criterion, not a log line someone has to read.
   destination:
+    # Pinned explicitly: the addresses below appear verbatim in the --relay
+    # arguments, and relying on Shadow's assignment ORDER to match would break the
+    # moment a host is reordered or inserted.
+    ip_addr: 11.0.0.4
     network_node_id: 1
     processes:
-      - path: ../../target/release/gyre-sink
+      - path: gyre-sink
         args: ["--listen", "0.0.0.0:9100", "--expect", "10"]
         start_time: 2s
 
   # --- a client pushing traffic through the fabric ---------------------------------
   client1:
+    # Pinned explicitly: the addresses below appear verbatim in the --relay
+    # arguments, and relying on Shadow's assignment ORDER to match would break the
+    # moment a host is reordered or inserted.
+    ip_addr: 11.0.0.5
     network_node_id: 1
     processes:
-      - path: ../../target/release/gyre-client
+      - path: gyre-client
         args:
-          - --route
-          - r1,r2,r3
-          - --dest
-          - dest
-          - --lane
-          - mix
-          - --packets
-          - "10"
-          - --relay
-          - r1=11.0.0.1:9001
-          - --relay
-          - r2=11.0.0.2:9001
-          - --relay
-          - r3=11.0.0.3:9001
-          - --relay
-          - dest=11.0.0.4:9100
+          ["--route", "r1,r2,r3", "--dest", "dest", "--lane", "mix", "--packets", "10",
+           "--relay", "r1=11.0.0.1:9001", "--relay", "r2=11.0.0.2:9001",
+           "--relay", "r3=11.0.0.3:9001", "--relay", "dest=11.0.0.4:9100"]
         start_time: 5s

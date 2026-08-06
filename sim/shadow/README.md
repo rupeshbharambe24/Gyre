@@ -42,6 +42,11 @@ The two are complementary:
    Two traps, both hit on the first attempt:
    - `apt install shadow` installs an unrelated package (the shadow password suite).
      Shadow the simulator ships **no prebuilt binaries** and must be built from source.
+   - The config schema bites too: `network.graph.file` is a **struct**
+     (`file: {path: ...}`), not a string; long-running servers need
+     `expected_final_state: running` or Shadow reports a still-running process as a failed
+     simulation; and a managed process's working directory is
+     `shadow.data/hosts/<hostname>/`, not the config directory.
    - Its build dependencies must come from
      [Shadow's own install guide](https://github.com/shadow/shadow/blob/main/docs/install_dependencies.md),
      not from memory. A list missing `libglib2.0-dev` fails at cmake with
@@ -62,6 +67,8 @@ mistakes them for a validated configuration.
 
 ```bash
 cargo build --release -p gyre-cli
+# shadow.yaml names binaries by bare basename; Shadow resolves them through PATH.
+export PATH="$PWD/target/release:$PATH"
 cd sim/shadow && shadow shadow.yaml
 
 # what each simulated host printed
