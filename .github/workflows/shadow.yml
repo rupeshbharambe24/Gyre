@@ -118,9 +118,11 @@ jobs:
           cat sim/shadow/shadow.data/hosts/client1/*.stdout 2>/dev/null || echo "(none)"
           echo
           echo "=== relays (each should log only its own neighbour) ==="
+          # Relay forwarding logs go to STDERR, not stdout — printing only *.stdout hid
+          # them entirely on the first successful run.
           for r in relay1 relay2 relay3; do
             echo "--- $r ---"
-            cat "sim/shadow/shadow.data/hosts/$r"/*.stdout 2>/dev/null || echo "(none)"
+            cat "sim/shadow/shadow.data/hosts/$r"/*.stdout "sim/shadow/shadow.data/hosts/$r"/*.stderr 2>/dev/null || echo "(none)"
           done
 
       - uses: actions/upload-artifact@v4

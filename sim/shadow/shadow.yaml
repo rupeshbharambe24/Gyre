@@ -91,15 +91,62 @@ hosts:
     network_node_id: 1
     processes:
       - path: gyre-sink
-        args: ["--listen", "0.0.0.0:9100", "--expect", "10"]
+        args: ["--listen", "0.0.0.0:9100", "--expect", "40"]
         start_time: 2s
 
-  # --- a client pushing traffic through the fabric ---------------------------------
+  # --- clients pushing traffic through the fabric ----------------------------------
+  #
+  # FOUR concurrent clients, not one. With a single client the packets enter the fabric
+  # further apart than the mixing delay spreads them, so nothing ever reorders and the
+  # mixing has nothing to mix against — which is the project's whole thesis restated as a
+  # config mistake. A crowd is what makes mixing observable.
   client1:
     # Pinned explicitly: the addresses below appear verbatim in the --relay
     # arguments, and relying on Shadow's assignment ORDER to match would break the
     # moment a host is reordered or inserted.
     ip_addr: 11.0.0.5
+    network_node_id: 1
+    processes:
+      - path: gyre-client
+        args:
+          ["--route", "r1,r2,r3", "--dest", "dest", "--lane", "mix", "--packets", "10",
+           "--relay", "r1=11.0.0.1:9001", "--relay", "r2=11.0.0.2:9001",
+           "--relay", "r3=11.0.0.3:9001", "--relay", "dest=11.0.0.4:9100"]
+        start_time: 5s
+
+  client2:
+    # Pinned explicitly: the addresses below appear verbatim in the --relay
+    # arguments, and relying on Shadow's assignment ORDER to match would break the
+    # moment a host is reordered or inserted.
+    ip_addr: 11.0.0.6
+    network_node_id: 1
+    processes:
+      - path: gyre-client
+        args:
+          ["--route", "r1,r2,r3", "--dest", "dest", "--lane", "mix", "--packets", "10",
+           "--relay", "r1=11.0.0.1:9001", "--relay", "r2=11.0.0.2:9001",
+           "--relay", "r3=11.0.0.3:9001", "--relay", "dest=11.0.0.4:9100"]
+        start_time: 5s
+
+  client3:
+    # Pinned explicitly: the addresses below appear verbatim in the --relay
+    # arguments, and relying on Shadow's assignment ORDER to match would break the
+    # moment a host is reordered or inserted.
+    ip_addr: 11.0.0.7
+    network_node_id: 1
+    processes:
+      - path: gyre-client
+        args:
+          ["--route", "r1,r2,r3", "--dest", "dest", "--lane", "mix", "--packets", "10",
+           "--relay", "r1=11.0.0.1:9001", "--relay", "r2=11.0.0.2:9001",
+           "--relay", "r3=11.0.0.3:9001", "--relay", "dest=11.0.0.4:9100"]
+        start_time: 5s
+
+  client4:
+    # Pinned explicitly: the addresses below appear verbatim in the --relay
+    # arguments, and relying on Shadow's assignment ORDER to match would break the
+    # moment a host is reordered or inserted.
+    ip_addr: 11.0.0.8
     network_node_id: 1
     processes:
       - path: gyre-client
