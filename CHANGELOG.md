@@ -11,7 +11,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 ![Audit](https://img.shields.io/badge/audit-unaudited-red.svg)
 ![MSRV](https://img.shields.io/badge/MSRV-1.85-blue.svg)
 ![Crates](https://img.shields.io/badge/crates-14-informational.svg)
-![Tests](https://img.shields.io/badge/tests-157%20green-success.svg)
+![Tests](https://img.shields.io/badge/tests-163%20green-success.svg)
 [![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 
 > [!NOTE]
@@ -64,7 +64,7 @@ flowchart LR
 - [x] **Inbound rotor** — MTD, PoW admission, rendezvous, VOPRF tokens
 - [x] **P3** hardening — all six orthogonal additions
 - [x] **P4** crowd / incentive layer
-- [ ] **S5** QUIC/MASQUE transport swap — *deferred* (see below)
+- [x] **S5** QUIC transport (consensus-pinned relay certificates); MASQUE not implemented
 
 ### Added
 
@@ -167,11 +167,23 @@ a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition
 
 **Tooling & quality gates**
 
-- **Workspace.** 14 crates, 157 tests, all green. See [`README.md`](README.md) and
+- **Workspace.** 14 crates, 163 tests, all green. See [`README.md`](README.md) and
   [`docs/DESIGN.md`](docs/DESIGN.md).
 - **Gates.** `cargo fmt --all -- --check`, `cargo clippy --workspace
   --all-targets -- -D warnings`, and `cargo test --workspace`. CI runs all three
   on every pull request and on pushes to `main`.
+- **S5 — QUIC transport with consensus-pinned relay certificates.** `gyre-net::quic` gives
+  each circuit its own QUIC stream, so a lost packet on one no longer stalls the others
+  (cross-circuit head-of-line blocking). Relays have no CA-issued certificates, and the two
+  usual shortcuts are both unacceptable — disabling verification authenticates nothing, and
+  trust-on-first-use hands the relay to whoever is present first. Instead each relay
+  self-signs and publishes its **SHA-256 certificate fingerprint** in the threshold-signed
+  consensus; the client pins it and refuses anything else, while TLS 1.3 signature
+  verification is **delegated to `rustls`** so the peer must also prove it holds the key.
+  *Ceiling:* this is a **performance and authentication** change with **zero** effect on
+  anonymity — the onion, the mixing and the crowd provide that, not the byte transport.
+  Verified by tests that assert an impostor relay is refused *and that it is refused for
+  the right reason*.
 - **Q4 — consensus-pinned issuer key (completes the token fix).** The DLEQ proof is only
   worth anything if the key it is checked against did not come from the issuer, so the
   consensus body is now a **typed, canonically encoded** `NetworkParams` document
@@ -300,9 +312,10 @@ point of adding it.
 
 ### Deferred (not a Keep a Changelog category)
 
-- **S5 — QUIC/MASQUE transport swap.** Deferred as low-value, high-risk plumbing.
-  TCP length-prefixed frames work today, and the swap has **no bearing on the
-  anonymity properties**. This is the only outstanding milestone item.
+- **MASQUE (RFC 9298 CONNECT-UDP).** QUIC itself is now implemented (see *Added*); MASQUE
+  — tunnelling that traffic inside real HTTP/3 so it looks like ordinary web browsing — is
+  **not**. It is a censorship-resistance feature that belongs with `gyre-obfs` rather than
+  a performance one, and nothing in the codebase assumes it is present.
 
 ---
 

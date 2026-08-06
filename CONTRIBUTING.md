@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MSRV](https://img.shields.io/badge/rustc-1.85%2B-orange.svg)](Cargo.toml)
 [![Crates](https://img.shields.io/badge/crates-14-blue.svg)](#the-workspace-at-a-glance)
-[![Tests](https://img.shields.io/badge/tests-157%20green-brightgreen.svg)](#the-workspace-at-a-glance)
+[![Tests](https://img.shields.io/badge/tests-163%20green-brightgreen.svg)](#the-workspace-at-a-glance)
 [![Status](https://img.shields.io/badge/status-experimental-yellow.svg)](#project-ethos)
 
 Thanks for your interest in **Gyre** — a layered privacy-and-defense network
@@ -92,14 +92,14 @@ They are project law.
 
 ## The workspace at a glance
 
-Fourteen crates, **one crate per orthogonal concern**, 157 tests, all green.
+Fourteen crates, **one crate per orthogonal concern**, 163 tests, all green.
 
 | Crate | Purpose | Tests |
 | --- | --- | :---: |
 | `gyre-common` | shared constants & types (`FlowClass`, `DEFAULT_HOPS = 3`) | 3 |
 | `gyre-sphinx` | typed wrapper over the audited Sphinx mix-packet format | 11 |
 | `gyre-fec` | Reed-Solomon erasure coding: fragment a message, reassemble any *m* | 9 |
-| `gyre-net` | async transport, directory, relay server, mixing, cover traffic | 8 |
+| `gyre-net` | async transport (TCP + QUIC), directory, relay server, mixing, cover traffic | 14 |
 | `gyre-node` | demo binary: spin up a testnet + integration tests (lanes, multipath) | 2 |
 | `gyre-adversary` | **THE GATE**: partial-observer timing-correlation harness + verdict | 4 |
 | `gyre-shield` | inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens | 38 |
@@ -110,9 +110,9 @@ Fourteen crates, **one crate per orthogonal concern**, 157 tests, all green.
 | `gyre-stego` | deniability: LSB steganography (situational; honest limits) | 10 |
 | `gyre-crowd` | k-anonymity admission governor + staking Sybil-pricing model | 8 |
 | `gyre-sim` | simulation harness: real code, modelled network, optimal-assignment attacker | 19 |
-| **Total** | | **157** |
+| **Total** | | **163** |
 
-These three numbers — **14 crates / 157 tests / the GATE verdict** — are ground truth.
+These three numbers — **14 crates / 163 tests / the GATE verdict** — are ground truth.
 See [Documentation changes](#documentation-changes) for keeping them consistent.
 
 ---
@@ -150,7 +150,7 @@ cd Gyre
 # 2. Build the whole workspace (rustup auto-selects the pinned stable toolchain)
 cargo build --workspace
 
-# 3. Test the whole workspace (all 157 tests should pass)
+# 3. Test the whole workspace (all 163 tests should pass)
 cargo test --workspace
 
 # 4. Run a single crate's tests while iterating (example: the inbound rotor)
@@ -206,7 +206,7 @@ cargo fmt --all -- --check
 # Gate 2 — lint with WARNINGS AS ERRORS (-D warnings). Clippy must be silent.
 cargo clippy --workspace --all-targets -- -D warnings
 
-# Gate 3 — the full test suite (all 157 tests)
+# Gate 3 — the full test suite (all 163 tests)
 cargo test --workspace
 ```
 
@@ -238,7 +238,7 @@ Pre-PR checklist:
 
 - [ ] `cargo fmt --all -- --check` is clean
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` is silent
-- [ ] `cargo test --workspace` is green (157 tests, or 157 + your new ones)
+- [ ] `cargo test --workspace` is green (163 tests, or 163 + your new ones)
 - [ ] New behavior is covered by a test that asserts **behavior, not timing**
 - [ ] A new invariant is covered by a **property**, and a new parser of untrusted input by
       a "never panics on arbitrary bytes" property (see [How we test](#how-we-test-unit-property-fuzz))
@@ -364,7 +364,7 @@ repository.workspace = true
 
 > [!NOTE]
 > Adding a crate changes the ground-truth counts. If crate #14 lands with its own
-> tests, the "14 crates / 157 tests" numbers move **together, everywhere** — see the
+> tests, the "14 crates / 163 tests" numbers move **together, everywhere** — see the
 > next section.
 
 ---

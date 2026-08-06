@@ -4,7 +4,7 @@
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![MSRV](https://img.shields.io/badge/rustc-1.85%2B-orange.svg)
 ![crates](https://img.shields.io/badge/crates-14-informational.svg)
-![tests](https://img.shields.io/badge/tests-157%20green-success.svg)
+![tests](https://img.shields.io/badge/tests-163%20green-success.svg)
 ![status](https://img.shields.io/badge/status-experimental-red.svg)
 
 Where Gyre has been, what is actually finished, and the one thing that no
@@ -42,7 +42,7 @@ amount of code can finish. This is a research roadmap, not a release plan.
 
 ## Done
 
-All phases are complete and measured. The workspace is **14 crates, 157 tests, all
+All phases are complete and measured. The workspace is **14 crates, 163 tests, all
 green**, gated in CI by `cargo fmt --all -- --check`, `cargo clippy --workspace
 --all-targets -- -D warnings`, and `cargo test --workspace`.
 
@@ -136,34 +136,25 @@ flowchart LR
     GATE --> IN["Inbound rotor: MTD + PoW + rendezvous + VOPRF (COMPLETE)"]
     IN --> P3["P3: six orthogonal hardening additions (COMPLETE)"]
     P3 --> P4["P4: crowd / incentives (COMPLETE)"]
-    P4 -. deferred, no anonymity impact .-> S5["S5: QUIC/MASQUE transport swap (DEFERRED)"]
+    P4 -. no anonymity impact .-> S5["S5: QUIC transport (COMPLETE); MASQUE not implemented"]
 ```
 
 ---
 
 ## Deferred (not a blocker)
 
-One item, and it is deliberately last.
+### MASQUE (RFC 9298 CONNECT-UDP)
 
-### S5 — QUIC/MASQUE transport swap
+**Status: not implemented.**
 
-**Status: deferred (not a blocker, not a claim gap).**
+QUIC itself is done — `gyre-net::quic` gives each circuit its own stream and authenticates
+relays against a **fingerprint published in the threshold-signed consensus**, so an
+impostor relay is refused rather than trusted. What remains is MASQUE: tunnelling that
+QUIC traffic inside real HTTP/3 so it looks like ordinary web browsing.
 
-Today the fabric moves bytes over **TCP length-prefixed frames**, and they work.
-Swapping in a QUIC/MASQUE transport (decision **D21**) is a plumbing change:
-plausibly a modest latency win, and one more surface that already looks like
-ordinary HTTPS. It is deferred because it is **low-value, high-risk plumbing**:
-
-- **No bearing on anonymity properties.** Anonymity here comes from Sphinx onion
-  routing, per-hop mixing, and the crowd — not from the byte transport underneath.
-  Changing TCP to QUIC moves no GATE number.
-- **High-risk for what it buys.** A new async transport is a large, subtle surface
-  (congestion control, 0-RTT, connection migration) whose failure modes are easy to
-  get wrong and hard to test — a poor trade against "TCP already works."
-
-So it waits until the things that *do* matter are done. It reappears only in
-[What would make this real](#what-would-make-this-real), as a speed lever, never as
-an anonymity lever.
+That is a **censorship-resistance** feature, not a performance one, and it overlaps with
+what `gyre-obfs` already does for the first hop. It is deferred on the same reasoning as
+before — it moves no anonymity number — and nothing in the codebase assumes it is present.
 
 ---
 
@@ -210,9 +201,10 @@ requirements, not as a schedule.
   "UNAUDITED" stands.
 - **A live crowd.** Real concurrent senders at mix latency — the single number no
   code change can fake, and the one the GATE says everything depends on.
-- **QUIC/MASQUE transport (S5).** The deferred, modest latency win that would let
-  Gyre *compete with* — explicitly **not** "beat" — modern Tor on speed (**D21**),
-  while Tor's crowd remains decisive.
+- **A live QUIC deployment.** The transport is implemented and authenticated, but has only
+  ever run against localhost in tests. Real paths, real congestion, and real loss are what
+  would show whether the head-of-line win materialises — and would let Gyre *compete with*,
+  explicitly **not** "beat", modern Tor on speed (**D21**). Tor's crowd remains decisive.
 
 None of these is promised here. Each is a precondition for a claim Gyre does not
 yet get to make.

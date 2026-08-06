@@ -43,10 +43,15 @@ pub enum Error {
     FrameTooLarge(usize),
     #[error("address not found in directory")]
     UnknownAddress,
+    /// A QUIC/TLS transport failure (handshake, certificate pinning, stream I/O).
+    #[error("quic/tls: {0}")]
+    Tls(String),
 }
 
 /// Convenience alias for results from this crate.
 pub type Result<T> = std::result::Result<T, Error>;
+
+pub mod quic;
 
 // ---------------------------------------------------------------------------
 // Wire framing: a u32 big-endian length prefix followed by that many bytes.

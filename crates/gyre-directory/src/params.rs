@@ -16,8 +16,8 @@ const MAGIC: &[u8; 4] = b"GYRE";
 pub const PARAMS_VERSION: u16 = 1;
 /// Bytes before the relay list: magic ‖ version ‖ epoch ‖ issuer key ‖ pow ‖ mtd ‖ count.
 const HEADER_LEN: usize = 4 + 2 + 8 + 32 + 4 + 4 + 2;
-/// Bytes per relay entry: address ‖ x25519 public key.
-const RELAY_LEN: usize = 32 + 32;
+/// Bytes per relay entry: address ‖ x25519 public key ‖ QUIC certificate fingerprint.
+const RELAY_LEN: usize = 32 + 32 + 32;
 
 /// Errors from decoding a consensus body.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -40,6 +40,13 @@ pub struct RelayDescriptor {
     pub address: [u8; 32],
     /// The relay's X25519 public key, used to build onion layers for it.
     pub public_key: [u8; 32],
+    /// SHA-256 fingerprint of the relay's QUIC certificate.
+    ///
+    /// Relays have no CA-issued certificates, so a client pins this value and refuses any
+    /// other certificate. Publishing it here — inside the threshold-signed document — is
+    /// what stops an attacker from simply presenting its own certificate *and* its own
+    /// fingerprint, the same trap the issuer key avoids.
+    pub quic_fingerprint: [u8; 32],
 }
 
 /// The network parameters carried in a consensus body.
@@ -80,6 +87,7 @@ impl NetworkParams {
         for relay in self.relays.iter().take(count as usize) {
             out.extend_from_slice(&relay.address);
             out.extend_from_slice(&relay.public_key);
+            out.extend_from_slice(&relay.quic_fingerprint);
         }
         out
     }
@@ -123,6 +131,7 @@ impl NetworkParams {
                 RelayDescriptor {
                     address: bytes[at..at + 32].try_into().expect("32 bytes"),
                     public_key: bytes[at + 32..at + 64].try_into().expect("32 bytes"),
+                    quic_fingerprint: bytes[at + 64..at + 96].try_into().expect("32 bytes"),
                 }
             })
             .collect();
@@ -151,10 +160,12 @@ mod tests {
                 RelayDescriptor {
                     address: [1u8; 32],
                     public_key: [2u8; 32],
+                    quic_fingerprint: [5u8; 32],
                 },
                 RelayDescriptor {
                     address: [3u8; 32],
                     public_key: [4u8; 32],
+                    quic_fingerprint: [6u8; 32],
                 },
             ],
         }

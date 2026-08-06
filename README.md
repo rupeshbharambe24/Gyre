@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Rust: 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)
 ![Crates: 14](https://img.shields.io/badge/crates-14-informational.svg)
-![Tests: 157 passing](https://img.shields.io/badge/tests-157%20passing-brightgreen.svg)
+![Tests: 163 passing](https://img.shields.io/badge/tests-163%20passing-brightgreen.svg)
 ![Status: experimental](https://img.shields.io/badge/status-experimental-red.svg)
 
 Gyre is a single relay fabric that spins two ways at once: an **outbound
@@ -214,14 +214,14 @@ cargo run -p gyre-stego       # LSB steganography (situational)
 
 ## Crate map
 
-Fourteen crates, 157 tests, all green.
+Fourteen crates, 163 tests, all green.
 
 | Crate | Purpose | Tests |
 |---|---|:--:|
 | `gyre-common` | Shared constants & types (`FlowClass`, `DEFAULT_HOPS = 3`) | 3 |
 | `gyre-sphinx` | Typed wrapper over the audited Sphinx mix-packet format | 5 |
 | `gyre-fec` | Reed–Solomon erasure coding: fragment a message, reassemble any `m` | 4 |
-| `gyre-net` | Async transport, directory, relay server, mixing, cover traffic | 4 |
+| `gyre-net` | Async transport (TCP + QUIC), directory, relay server, mixing, cover traffic | 14 |
 | `gyre-node` | Demo binary: spin up a testnet + integration tests (lanes, multipath) | 2 |
 | `gyre-adversary` | **The GATE:** partial-observer timing-correlation harness + verdict | 4 |
 | `gyre-shield` | Inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens | 38 |
@@ -355,10 +355,16 @@ bearing on anonymity properties.
   penalizes stake-splitting via a self-bond premium. Trades Sybil resistance for
   wealth concentration; neither piece *makes* a crowd.
 
-### Deferred
-- [ ] **S5 — QUIC/MASQUE transport upgrade.** TCP length-prefixed frames work
-  today; deferred as low-value / high-risk plumbing with no bearing on anonymity
-  properties.
+### S5 — QUIC transport
+- [x] **QUIC transport with consensus-pinned relay certificates.** Each circuit gets its
+  own stream, so a loss on one no longer stalls the others (cross-circuit head-of-line
+  blocking). Relays have no CA certificates, so a client pins the **SHA-256 fingerprint
+  published in the threshold-signed consensus** and refuses anything else — signature
+  verification is delegated to `rustls`, never stubbed. Honest scope: this is a
+  **performance and authentication** change, **not** an anonymity one.
+- [ ] **MASQUE (RFC 9298 CONNECT-UDP)** — tunnelling inside real HTTP/3 to look like
+  ordinary web traffic. A censorship-resistance feature that belongs with `gyre-obfs`;
+  **not implemented**, and not assumed present anywhere.
 
 </details>
 
@@ -391,7 +397,8 @@ bearing on anonymity properties.
 
 Integrated known-good building blocks: `sphinx-packet 0.7.0` (Nym-audited
 Sphinx), `x25519-dalek 3.0`, `curve25519-dalek 5`, `ed25519-dalek 3`,
-`reed-solomon-erasure 6`, `hmac 0.13`, `sha2 0.11`, `zeroize 1`, `tokio 1`. The
+`reed-solomon-erasure 6`, `hmac 0.13`, `sha2 0.11`, `zeroize 1`, `tokio 1`,
+`quinn 0.11` + `rustls 0.23` (QUIC transport). The
 lone exception is called out everywhere it appears: the VOPRF capability-token
 construction is a hand-built **prototype** on `curve25519-dalek` primitives —
 unaudited.

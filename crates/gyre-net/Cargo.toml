@@ -11,7 +11,12 @@ description = "S1: async transport, directory, and relay server that carry Gyre 
 [dependencies]
 gyre-sphinx = { path = "../gyre-sphinx" }
 tokio.workspace = true
+quinn.workspace = true
+rustls.workspace = true
+rcgen.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
 proptest = { workspace = true }
+gyre-directory = { path = "../gyre-directory" }

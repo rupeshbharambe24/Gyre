@@ -137,7 +137,11 @@ proptest! {
         n in 0usize..12,
     ) {
         let relays: Vec<RelayDescriptor> = (0..n)
-            .map(|i| RelayDescriptor { address: [i as u8; 32], public_key: [(i + 1) as u8; 32] })
+            .map(|i| RelayDescriptor {
+                address: [i as u8; 32],
+                public_key: [(i + 1) as u8; 32],
+                quic_fingerprint: [(i + 2) as u8; 32],
+            })
             .collect();
         let params = NetworkParams { epoch, issuer_public_key, pow_difficulty_bits, mtd_window_secs, relays };
         prop_assert_eq!(NetworkParams::decode(&params.encode()).unwrap(), params);
