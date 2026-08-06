@@ -1,16 +1,24 @@
 name: Shadow simulation
 
-# Shadow (https://shadow.github.io) runs the REAL binaries against a simulated network
+# Shadow (https://shadow.github.io) runs the REAL Gyre binaries against a simulated network
 # stack — real TCP, congestion and topology, which `gyre-sim` models rather than provides.
 # It is Linux-only, so this workflow is how the project gets Shadow results at all.
 #
-# Building Shadow from source takes a while, so this is manual/scheduled rather than
-# per-push. NOTE: `apt install shadow` installs an unrelated package (the shadow password
-# suite) — Shadow the simulator must be built from source.
+# Shadow ships no prebuilt binaries, so it is built from source. That is slow, hence the
+# cache and the manual/scheduled trigger rather than per-push.
+#
+# NOTE: `apt install shadow` installs an unrelated package (the shadow password suite).
+# Shadow the simulator must be built.
 on:
   workflow_dispatch:
   schedule:
     - cron: "0 4 * * 0" # weekly, Sunday 04:00 UTC
+
+env:
+  # Pinned to a release rather than `main`: a simulation result is only meaningful if you
+  # know which simulator produced it, and tracking a moving branch means a green run today
+  # can break tomorrow for reasons that have nothing to do with Gyre.
+  SHADOW_VERSION: v3.3.0
 
 jobs:
   shadow:
@@ -25,22 +33,63 @@ jobs:
       - name: Build the Gyre binaries
         run: cargo build --release -p gyre-cli
 
+      # Exactly the list from Shadow's own install guide
+      # (docs/install_dependencies.md). Guessing at this is what broke the first attempt:
+      # `libglib2.0-dev` was missing and cmake failed on `glib-2.0>=2.58`.
       - name: Install Shadow's build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake findutils libclang-dev libc-dev \
-            build-essential make xz-utils lld pkg-config
+          sudo apt-get install -y \
+            cmake \
+            findutils \
+            libclang-dev \
+            libc-dbg \
+            libglib2.0-0 \
+            libglib2.0-dev \
+            make \
+            netbase \
+            python3 \
+            python3-networkx \
+            xz-utils \
+            util-linux \
+            gcc \
+            g++
+
+      - name: Cache the Shadow install
+        id: shadow-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local
+          key: shadow-${{ env.SHADOW_VERSION }}-${{ runner.os }}
 
       - name: Build and install Shadow
+        if: steps.shadow-cache.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 https://github.com/shadow/shadow.git /tmp/shadow
+          git clone --depth 1 --branch "$SHADOW_VERSION" \
+            https://github.com/shadow/shadow.git /tmp/shadow
           cd /tmp/shadow
-          ./setup build --clean --jobs "$(nproc)"
+          ./setup build --jobs "$(nproc)"
           ./setup install
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Shadow version
-        run: shadow --version
+        run: |
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/shadow" --version
+
+      # The config refers to the binaries as ../../target/release/... relative to
+      # sim/shadow. Check that before handing over to Shadow, so a path mistake fails here
+      # with an obvious message instead of somewhere inside the simulator.
+      - name: Pre-flight — the binaries the config points at exist
+        run: |
+          cd sim/shadow
+          for b in gyre-relay gyre-client gyre-sink; do
+            p="../../target/release/$b"
+            if [ ! -x "$p" ]; then
+              echo "::error::missing binary $p (referenced by shadow.yaml)"
+              exit 1
+            fi
+            echo "ok: $p"
+          done
 
       - name: Run the Gyre experiment
         run: |
@@ -50,8 +99,17 @@ jobs:
       - name: Show what the simulated hosts produced
         if: always()
         run: |
-          echo "--- hosts ---"
-          find sim/shadow/shadow.data -name '*.stdout' -print -exec cat {} \; || true
+          echo "=== end-to-end delivery (the sink) ==="
+          cat sim/shadow/shadow.data/hosts/destination/*.stdout 2>/dev/null || echo "(none)"
+          echo
+          echo "=== client ==="
+          cat sim/shadow/shadow.data/hosts/client1/*.stdout 2>/dev/null || echo "(none)"
+          echo
+          echo "=== relays (each should log only its own neighbour) ==="
+          for r in relay1 relay2 relay3; do
+            echo "--- $r ---"
+            cat "sim/shadow/shadow.data/hosts/$r"/*.stdout 2>/dev/null || echo "(none)"
+          done
 
       - uses: actions/upload-artifact@v4
         if: always()

@@ -39,8 +39,13 @@ The two are complementary:
    Verified working outside Shadow with `./scripts/testnet.sh`, where mixing visibly
    reorders packets across processes.
 2. **A Linux host with Shadow installed** — or just use the GitHub Actions workflow above.
-   Note that `apt install shadow` installs an unrelated package (the shadow password
-   suite); Shadow the simulator must be built from source.
+   Two traps, both hit on the first attempt:
+   - `apt install shadow` installs an unrelated package (the shadow password suite).
+     Shadow the simulator ships **no prebuilt binaries** and must be built from source.
+   - Its build dependencies must come from
+     [Shadow's own install guide](https://github.com/shadow/shadow/blob/main/docs/install_dependencies.md),
+     not from memory. A list missing `libglib2.0-dev` fails at cmake with
+     `Package 'glib-2.0' ... not found`.
 3. **A realistic topology.** `network.gml` is two regions with a slow link between them —
    enough to exercise real TCP over non-trivial latency, *not* a model of the internet.
    Replace it with a generated topology before drawing any conclusion about scale.
