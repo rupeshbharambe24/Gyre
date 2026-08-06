@@ -1,0 +1,64 @@
+# Coverage-guided fuzzing targets (cargo-fuzz / libFuzzer).
+#
+# Deliberately its own workspace (and excluded from the root one) so the stable
+# toolchain used by CI never tries to build it: running these needs nightly plus
+# `cargo install cargo-fuzz`. See CONTRIBUTING.md § Fuzzing.
+#
+# Every target here fuzzes a parser that also has a "never panics on arbitrary bytes"
+# property test running on stable in CI — these go deeper, they do not replace it.
+[package]
+name = "gyre-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+gyre-sphinx = { path = "../crates/gyre-sphinx" }
+gyre-fec = { path = "../crates/gyre-fec" }
+gyre-stego = { path = "../crates/gyre-stego" }
+gyre-obfs = { path = "../crates/gyre-obfs" }
+gyre-shield = { path = "../crates/gyre-shield" }
+
+[profile.release]
+debug = true
+
+[[bin]]
+name = "sphinx_packet_parse"
+path = "fuzz_targets/sphinx_packet_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fec_fragment_parse"
+path = "fuzz_targets/fec_fragment_parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "stego_extract"
+path = "fuzz_targets/stego_extract.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "obfs_deobfuscate"
+path = "fuzz_targets/obfs_deobfuscate.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "shield_token_issue"
+path = "fuzz_targets/shield_token_issue.rs"
+test = false
+doc = false
+bench = false

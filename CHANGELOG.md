@@ -11,7 +11,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 ![Audit](https://img.shields.io/badge/audit-unaudited-red.svg)
 ![MSRV](https://img.shields.io/badge/MSRV-1.85-blue.svg)
 ![Crates](https://img.shields.io/badge/crates-13-informational.svg)
-![Tests](https://img.shields.io/badge/tests-55%20green-success.svg)
+![Tests](https://img.shields.io/badge/tests-108%20green-success.svg)
 [![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 
 > [!NOTE]
@@ -33,6 +33,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 - [Unreleased](#unreleased)
   - [Milestone status](#milestone-status)
   - [Added](#added)
+  - [Fixed](#fixed)
   - [Deferred](#deferred-not-a-keep-a-changelog-category)
 - [About versioning](#about-versioning)
 
@@ -164,11 +165,24 @@ a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition
 
 **Tooling & quality gates**
 
-- **Workspace.** 13 crates, 55 tests, all green. See [`README.md`](README.md) and
+- **Workspace.** 13 crates, 108 tests, all green. See [`README.md`](README.md) and
   [`docs/DESIGN.md`](docs/DESIGN.md).
 - **Gates.** `cargo fmt --all -- --check`, `cargo clippy --workspace
   --all-targets -- -D warnings`, and `cargo test --workspace`. CI runs all three
   on every pull request and on pushes to `main`.
+- **Property-based test suite (proptest).** `crates/*/tests/properties.rs` adds **52
+  properties** across ten crates, each generating hundreds of inputs per run and shrinking
+  any failure to a minimal counterexample. They assert the domain invariants (any `data`
+  of `data + parity` fragments reconstruct the message; a solved PoW puzzle always
+  verifies; the MTD ingress is deterministic and always a real candidate; acceptance
+  tracks the *distinct* signer count; the admission governor is monotone in the crowd) and
+  a **"parsing arbitrary bytes never panics"** property for every parser that reads
+  untrusted input — fuzz-like coverage that runs on stable in CI. Test count: 55 → **108**.
+- **Fuzzing targets (cargo-fuzz).** `fuzz/fuzz_targets/` covers the Sphinx packet parser,
+  the FEC fragment parser and reassembler, LSB extraction, every pluggable transport's
+  de-obfuscation path, and the capability-token issuer. `fuzz/` is its own workspace and
+  is excluded from the root one, so the stable toolchain CI uses never builds it; running
+  the targets needs nightly plus `cargo install cargo-fuzz` (see `CONTRIBUTING.md`).
 - **Primitive benchmark suite.** A dev-only `gyre-benches` crate (criterion)
   microbenchmarks the building blocks — onion wrap/unwrap, Reed–Solomon coding, the
   VOPRF token stages, proof-of-work solve/verify, the key ratchet, PIR, and
@@ -181,6 +195,27 @@ a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition
   rather than rolled from scratch. The VOPRF token construction is the one
   exception — hand-built on those audited `curve25519-dalek` primitives — and it is
   flagged as an unaudited prototype above.
+
+### Fixed
+
+Both of these were found by the property suite above, not by review — which is rather the
+point of adding it.
+
+- **Admission control could fail open on a bad load estimate** (`gyre-shield`).
+  `difficulty_for_load` took an `f64` load ratio; `f64::clamp` propagates `NaN` and
+  `NaN as u32` saturates to `0`, so a `NaN` load — which a real estimator produces from
+  `0.0 / 0.0` on a reset counter or stalled sampler — yielded a **zero-bit puzzle, i.e.
+  free admission**, precisely when the estimator was broken. Non-finite loads are now
+  treated as unknown and charged the base cost; the difficulty is now provably within
+  `[8, 20]` for **every** `f64`. Guarded by both a deterministic regression test and a
+  property, each verified to fail without the fix.
+- **`capacity_bytes` was not a usable "will it fit?" predicate** (`gyre-stego`). It
+  returns `0` both for a cover that can carry an empty message and for one too small to
+  carry anything at all, and the 32-byte header constant it depends on was private — so a
+  caller could not express `embed`'s real precondition. Added `fits(cover_len,
+  secret_len)`, which is exactly that precondition, made `embed` use it as the single
+  source of truth, and exported `LENGTH_HEADER_BITS`. (Found by proptest shrinking to
+  `cover = [], secret = []`.)
 
 ### Deferred (not a Keep a Changelog category)
 

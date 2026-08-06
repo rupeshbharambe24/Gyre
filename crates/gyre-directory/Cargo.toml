@@ -15,3 +15,6 @@ path = "src/main.rs"
 [dependencies]
 ed25519-dalek.workspace = true
 getrandom.workspace = true
+
+[dev-dependencies]
+proptest = { workspace = true }

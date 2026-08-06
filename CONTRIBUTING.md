@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MSRV](https://img.shields.io/badge/rustc-1.85%2B-orange.svg)](Cargo.toml)
 [![Crates](https://img.shields.io/badge/crates-13-blue.svg)](#the-workspace-at-a-glance)
-[![Tests](https://img.shields.io/badge/tests-55%20green-brightgreen.svg)](#the-workspace-at-a-glance)
+[![Tests](https://img.shields.io/badge/tests-108%20green-brightgreen.svg)](#the-workspace-at-a-glance)
 [![Status](https://img.shields.io/badge/status-experimental-yellow.svg)](#project-ethos)
 
 Thanks for your interest in **Gyre** — a layered privacy-and-defense network
@@ -27,11 +27,12 @@ build, what we measure, and the bar a change has to clear before it merges.
 3. [Prerequisites](#prerequisites)
 4. [Local development](#local-development)
 5. [Before you open a PR](#before-you-open-a-pr)
-6. [Adding a milestone or crate](#adding-a-milestone-or-crate)
-7. [Commit & PR conventions](#commit--pr-conventions)
-8. [Documentation changes](#documentation-changes)
-9. [Code of Conduct](#code-of-conduct)
-10. [License](#license)
+6. [How we test: unit, property, fuzz](#how-we-test-unit-property-fuzz)
+7. [Adding a milestone or crate](#adding-a-milestone-or-crate)
+8. [Commit & PR conventions](#commit--pr-conventions)
+9. [Documentation changes](#documentation-changes)
+10. [Code of Conduct](#code-of-conduct)
+11. [License](#license)
 
 ---
 
@@ -91,26 +92,26 @@ They are project law.
 
 ## The workspace at a glance
 
-Thirteen crates, **one crate per orthogonal concern**, 55 tests, all green.
+Thirteen crates, **one crate per orthogonal concern**, 108 tests, all green.
 
 | Crate | Purpose | Tests |
 | --- | --- | :---: |
 | `gyre-common` | shared constants & types (`FlowClass`, `DEFAULT_HOPS = 3`) | 3 |
-| `gyre-sphinx` | typed wrapper over the audited Sphinx mix-packet format | 5 |
-| `gyre-fec` | Reed-Solomon erasure coding: fragment a message, reassemble any *m* | 4 |
-| `gyre-net` | async transport, directory, relay server, mixing, cover traffic | 4 |
+| `gyre-sphinx` | typed wrapper over the audited Sphinx mix-packet format | 11 |
+| `gyre-fec` | Reed-Solomon erasure coding: fragment a message, reassemble any *m* | 9 |
+| `gyre-net` | async transport, directory, relay server, mixing, cover traffic | 8 |
 | `gyre-node` | demo binary: spin up a testnet + integration tests (lanes, multipath) | 2 |
 | `gyre-adversary` | **THE GATE**: partial-observer timing-correlation harness + verdict | 4 |
-| `gyre-shield` | inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens | 11 |
-| `gyre-obfs` | pluggable-transport framework + transports + an entropy meter | 4 |
-| `gyre-endpoint` | endpoint hardening: forward-secret ratchet, personas, uniform fingerprint | 3 |
-| `gyre-directory` | threshold-signed consensus, equivocation detection, build attestation | 5 |
-| `gyre-pir` | private directory retrieval: 2-server IT-PIR (default is full download) | 3 |
-| `gyre-stego` | deniability: LSB steganography (situational; honest limits) | 4 |
-| `gyre-crowd` | k-anonymity admission governor + staking Sybil-pricing model | 3 |
-| **Total** | | **55** |
+| `gyre-shield` | inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens | 20 |
+| `gyre-obfs` | pluggable-transport framework + transports + an entropy meter | 9 |
+| `gyre-endpoint` | endpoint hardening: forward-secret ratchet, personas, uniform fingerprint | 8 |
+| `gyre-directory` | threshold-signed consensus, equivocation detection, build attestation | 10 |
+| `gyre-pir` | private directory retrieval: 2-server IT-PIR (default is full download) | 6 |
+| `gyre-stego` | deniability: LSB steganography (situational; honest limits) | 10 |
+| `gyre-crowd` | k-anonymity admission governor + staking Sybil-pricing model | 8 |
+| **Total** | | **108** |
 
-These three numbers — **13 crates / 55 tests / the GATE verdict** — are ground truth.
+These three numbers — **13 crates / 108 tests / the GATE verdict** — are ground truth.
 See [Documentation changes](#documentation-changes) for keeping them consistent.
 
 ---
@@ -148,11 +149,14 @@ cd Gyre
 # 2. Build the whole workspace (rustup auto-selects the pinned stable toolchain)
 cargo build --workspace
 
-# 3. Test the whole workspace (all 55 tests should pass)
+# 3. Test the whole workspace (all 108 tests should pass)
 cargo test --workspace
 
 # 4. Run a single crate's tests while iterating (example: the inbound rotor)
 cargo test -p gyre-shield
+
+# 4b. Just the property tests for a crate (see "How we test" below)
+cargo test -p gyre-fec --test properties
 
 # 5. Run the demos — each prints its mechanism and its HONEST ceiling
 cargo run -p gyre-adversary   # THE GATE: correlation sweep + multipath exposure report
@@ -201,7 +205,7 @@ cargo fmt --all -- --check
 # Gate 2 — lint with WARNINGS AS ERRORS (-D warnings). Clippy must be silent.
 cargo clippy --workspace --all-targets -- -D warnings
 
-# Gate 3 — the full test suite (all 55 tests)
+# Gate 3 — the full test suite (all 108 tests)
 cargo test --workspace
 ```
 
@@ -233,9 +237,63 @@ Pre-PR checklist:
 
 - [ ] `cargo fmt --all -- --check` is clean
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` is silent
-- [ ] `cargo test --workspace` is green (55 tests, or 55 + your new ones)
+- [ ] `cargo test --workspace` is green (108 tests, or 108 + your new ones)
 - [ ] New behavior is covered by a test that asserts **behavior, not timing**
+- [ ] A new invariant is covered by a **property**, and a new parser of untrusted input by
+      a "never panics on arbitrary bytes" property (see [How we test](#how-we-test-unit-property-fuzz))
+- [ ] Any new property was confirmed to **fail** when the code it guards is broken
 - [ ] No overclaim introduced (see [Documentation changes](#documentation-changes))
+
+---
+
+## How we test: unit, property, fuzz
+
+Three layers, each catching what the one before it misses. The first two run on stable in
+CI; the third is on-demand and needs nightly.
+
+### 1. Unit tests — the named cases
+
+`#[cfg(test)] mod tests` inside each crate. These pin down specific, hand-chosen
+behaviours and the exact regressions we care about.
+
+### 2. Property tests — the invariants
+
+`crates/*/tests/properties.rs`, using [proptest](https://proptest-rs.github.io/proptest/).
+Each property states an invariant that must hold for *every* input, and proptest generates
+hundreds of cases per run and **shrinks any failure to a minimal counterexample**. Two
+kinds carry most of the weight:
+
+- **Domain invariants** — "any `data` of the `data + parity` fragments reconstruct the
+  message", "a solved puzzle always verifies", "a larger crowd is never treated more
+  restrictively", "acceptance tracks the *distinct* signer count".
+- **Robustness (fuzz-like) properties** — "parsing arbitrary bytes never panics", applied
+  to every parser that reads untrusted input. This gives fuzzing-style coverage on stable,
+  inside the normal `cargo test` run.
+
+> [!TIP]
+> Properties draw fresh seeds each run, so a single green run is weak evidence. When you
+> add or change one, run it several times (`for i in 1 2 3; do cargo test -p <crate>; done`)
+> before trusting it — and confirm a new property actually *fails* when you break the code
+> it guards. A property that cannot fail is worse than no property.
+
+### 3. Fuzzing — coverage-guided, on demand
+
+`fuzz/fuzz_targets/` holds [cargo-fuzz](https://rust-fuzz.github.io/book/cargo-fuzz.html)
+targets for the same parsers the robustness properties cover; libFuzzer explores deeper
+paths than random generation reaches. The `fuzz/` directory is **its own workspace and is
+excluded from the root one**, so the stable toolchain CI uses never tries to build it.
+
+```bash
+rustup toolchain install nightly
+cargo install cargo-fuzz
+
+cargo +nightly fuzz list                       # sphinx_packet_parse, fec_fragment_parse, …
+cargo +nightly fuzz run sphinx_packet_parse     # run until it finds something (Ctrl-C to stop)
+cargo +nightly fuzz run stego_extract -- -max_total_time=60
+```
+
+Any crash reproducer that fuzzing finds should become a **unit test** (so it is pinned
+forever on stable) as part of the fix.
 
 ---
 
@@ -305,7 +363,7 @@ repository.workspace = true
 
 > [!NOTE]
 > Adding a crate changes the ground-truth counts. If crate #14 lands with its own
-> tests, the "13 crates / 55 tests" numbers move **together, everywhere** — see the
+> tests, the "13 crates / 108 tests" numbers move **together, everywhere** — see the
 > next section.
 
 ---
@@ -339,7 +397,7 @@ security or performance improvement without a number is incomplete.
 Docs are held to the same honesty bar as code.
 
 - **Keep the ground-truth numbers consistent across every doc.** The canonical values
-  are **13 crates**, **55 tests**, and the **GATE** verdict below. If you change any of
+  are **13 crates**, **108 tests**, and the **GATE** verdict below. If you change any of
   them, grep the repo and update *all* occurrences in the same PR — a doc that says "12
   crates" or "54 tests" is a bug.
 - **Never introduce an overclaim.** Before writing any comparative or absolute claim,

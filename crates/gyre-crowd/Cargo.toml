@@ -13,3 +13,6 @@ name = "gyre-crowd"
 path = "src/main.rs"
 
 [dependencies]
+
+[dev-dependencies]
+proptest = { workspace = true }

@@ -2,6 +2,14 @@
 /target
 **/*.rs.bk
 
+# cargo-fuzz: build output, generated corpora, and crash artifacts. The targets
+# themselves (fuzz/Cargo.toml, fuzz/fuzz_targets/) are tracked.
+/fuzz/target
+/fuzz/corpus
+/fuzz/artifacts
+/fuzz/coverage
+/fuzz/Cargo.lock
+
 # macOS
 .DS_Store
 

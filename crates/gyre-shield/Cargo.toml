@@ -20,3 +20,6 @@ curve25519-dalek.workspace = true
 getrandom.workspace = true
 tokio.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+proptest = { workspace = true }

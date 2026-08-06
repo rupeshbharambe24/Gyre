@@ -12,3 +12,6 @@ description = "S0: ergonomic wrapper over the audited Sphinx mix-packet format f
 sphinx-packet.workspace = true
 x25519-dalek.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+proptest = { workspace = true }

@@ -11,3 +11,6 @@ description = "S3: erasure-coded fragmentation (Reed-Solomon m-of-k) for Gyre mu
 [dependencies]
 reed-solomon-erasure.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+proptest = { workspace = true }

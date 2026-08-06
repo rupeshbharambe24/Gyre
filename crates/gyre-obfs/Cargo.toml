@@ -17,3 +17,6 @@ hmac.workspace = true
 sha2.workspace = true
 getrandom.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+proptest = { workspace = true }

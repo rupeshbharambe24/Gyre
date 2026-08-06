@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Rust: 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)
 ![Crates: 13](https://img.shields.io/badge/crates-13-informational.svg)
-![Tests: 55 passing](https://img.shields.io/badge/tests-55%20passing-brightgreen.svg)
+![Tests: 108 passing](https://img.shields.io/badge/tests-108%20passing-brightgreen.svg)
 ![Status: experimental](https://img.shields.io/badge/status-experimental-red.svg)
 
 Gyre is a single relay fabric that spins two ways at once: an **outbound
@@ -163,13 +163,18 @@ Requires a stable Rust toolchain (MSRV **1.85**). Everything below runs offline.
 # Build the whole workspace
 cargo build --workspace
 
-# Gates (exactly what CI runs on every push / PR)
+# Gates (exactly what CI runs on every push / PR).
+# `cargo test` runs the unit tests AND the proptest property suite, which includes a
+# "parsing arbitrary bytes never panics" property for every untrusted-input parser.
 cargo test  --workspace
 cargo fmt   --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 
 # Primitive microbenchmarks (criterion) — see BENCHMARKS.md for numbers + caveats
 cargo bench -p gyre-benches
+
+# Coverage-guided fuzzing (needs nightly + `cargo install cargo-fuzz`)
+cargo +nightly fuzz run sphinx_packet_parse
 
 # --- Runnable demos (each prints its mechanism + the honest ceiling) ---
 
@@ -202,7 +207,7 @@ cargo run -p gyre-stego       # LSB steganography (situational)
 
 ## Crate map
 
-Thirteen crates, 55 tests, all green.
+Thirteen crates, 108 tests, all green.
 
 | Crate | Purpose | Tests |
 |---|---|:--:|

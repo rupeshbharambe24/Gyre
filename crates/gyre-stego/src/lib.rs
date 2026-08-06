@@ -14,7 +14,9 @@
 //! find and nothing to compel. This crate is an illustrative primitive, not a hardened
 //! covert channel.
 
-const LENGTH_HEADER_BITS: usize = 32;
+/// Cover bytes consumed by the 32-bit secret-length header (one bit per cover byte). A
+/// cover smaller than this cannot carry a message at all, not even an empty one.
+pub const LENGTH_HEADER_BITS: usize = 32;
 
 /// Errors from embedding or extracting.
 #[derive(Debug, thiserror::Error)]
@@ -32,18 +34,31 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 /// How many secret bytes fit in a cover of `cover_len` bytes (one bit per cover byte,
 /// minus the length header). Deliberately tiny — that is the honest limit.
+///
+/// This alone is **not** a "will it fit?" predicate: it returns `0` both for a cover that
+/// can carry an empty message and for one too small to carry anything at all (a cover
+/// under [`LENGTH_HEADER_BITS`] bytes has no room for the length header itself). Use
+/// [`fits`] to test [`embed`]'s actual precondition.
 pub fn capacity_bytes(cover_len: usize) -> usize {
     cover_len.saturating_sub(LENGTH_HEADER_BITS) / 8
+}
+
+/// Whether [`embed`] will accept a `secret_len`-byte secret into a `cover_len`-byte
+/// cover. This is *exactly* `embed`'s precondition, so callers can check before building
+/// a carrier instead of relying on the ambiguous zero from [`capacity_bytes`].
+pub fn fits(cover_len: usize, secret_len: usize) -> bool {
+    cover_len >= LENGTH_HEADER_BITS && secret_len <= capacity_bytes(cover_len)
 }
 
 /// Embed `secret` into the least-significant bits of `cover`, leaving the high 7 bits of
 /// every byte untouched (so the carrier looks unchanged).
 pub fn embed(cover: &[u8], secret: &[u8]) -> Result<Vec<u8>> {
     let secret_len = u32::try_from(secret.len()).map_err(|_| Error::SecretTooLong)?;
-    let need = LENGTH_HEADER_BITS + secret.len() * 8;
-    if cover.len() < need {
+    // `fits` is the single source of truth for this precondition, so the predicate a
+    // caller can test and the check performed here can never drift apart.
+    if !fits(cover.len(), secret.len()) {
         return Err(Error::CoverTooSmall {
-            need,
+            need: LENGTH_HEADER_BITS + secret.len() * 8,
             have: cover.len(),
         });
     }

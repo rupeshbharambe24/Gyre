@@ -153,9 +153,18 @@ impl Puzzle {
 /// Admission difficulty as a function of observed load in `[0, 1]` (0 = idle, 1 =
 /// under flood). A normal client always pays the base cost; attackers pay far more
 /// as they drive the load up.
+///
+/// **Fails closed on a bad estimate.** A load figure is typically a ratio (`active /
+/// capacity`), so it can legitimately arrive as `NaN` — `0.0 / 0.0` from a reset counter
+/// or a stalled sampler. `f64::clamp` propagates `NaN`, and `NaN as u32` saturates to
+/// `0`, which would mean *no proof-of-work at all* precisely when the load estimator is
+/// broken. An admission gate must never fail open, so a non-finite load is treated as
+/// "unknown" and charged the base cost. The result is always in `[BASE, BASE + MAX_EXTRA]`
+/// for **every** `f64` input.
 pub fn difficulty_for_load(load: f64) -> u32 {
     const BASE_BITS: f64 = 8.0;
     const MAX_EXTRA_BITS: f64 = 12.0;
+    let load = if load.is_nan() { 0.0 } else { load };
     (BASE_BITS + load.clamp(0.0, 1.0) * MAX_EXTRA_BITS) as u32
 }
 
@@ -225,5 +234,26 @@ mod tests {
     fn difficulty_rises_with_load() {
         assert!(difficulty_for_load(1.0) > difficulty_for_load(0.0));
         assert_eq!(difficulty_for_load(-5.0), difficulty_for_load(0.0)); // clamped
+    }
+
+    /// Regression: admission must **fail closed** on a broken load estimate.
+    ///
+    /// A load figure is usually a ratio, so `0.0 / 0.0` (reset counter, stalled sampler)
+    /// yields `NaN`. `f64::clamp` propagates `NaN` and `NaN as u32` saturates to `0` — so
+    /// without an explicit guard this returned a **zero-bit puzzle, i.e. free admission**,
+    /// precisely when the estimator was broken. Non-finite loads must charge the base cost.
+    #[test]
+    fn a_non_finite_load_never_disables_proof_of_work() {
+        let base = difficulty_for_load(0.0);
+        assert_eq!(
+            difficulty_for_load(f64::NAN),
+            base,
+            "NaN must not disable PoW"
+        );
+        assert_eq!(difficulty_for_load(f64::NEG_INFINITY), base);
+        assert_eq!(difficulty_for_load(f64::INFINITY), difficulty_for_load(1.0));
+        for load in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert!((8..=20).contains(&difficulty_for_load(load)));
+        }
     }
 }

@@ -16,3 +16,6 @@ path = "src/main.rs"
 hmac.workspace = true
 sha2.workspace = true
 zeroize.workspace = true
+
+[dev-dependencies]
+proptest = { workspace = true }
