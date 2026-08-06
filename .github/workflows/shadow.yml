@@ -125,6 +125,14 @@ jobs:
             cat "sim/shadow/shadow.data/hosts/$r"/*.stdout "sim/shadow/shadow.data/hosts/$r"/*.stderr 2>/dev/null || echo "(none)"
           done
 
+      # The run's own verdict on whether mixing did anything, rather than leaving a human
+      # to eyeball a 40-line delivery log and guess.
+      - name: Did mixing actually reorder anything?
+        if: always()
+        run: |
+          python3 scripts/analyse-shadow-mixing.py \
+            sim/shadow/shadow.data/hosts/destination/*.stdout
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:

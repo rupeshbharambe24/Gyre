@@ -56,6 +56,10 @@ async fn main() -> ExitCode {
     let packets: usize = flag(&args, "--packets")
         .and_then(|v| v.parse().ok())
         .unwrap_or(1);
+    // Tags the payload so a receiver can tell WHICH client sent it. Without this, several
+    // clients emit identical payloads and out-of-order arrivals cannot be attributed:
+    // reordering caused by mixing looks exactly like clients drifting apart.
+    let tag = flag(&args, "--tag");
 
     // Resolve the route to entry address + relay nodes.
     let relays: Vec<_> = route_labels.iter().map(|l| testnet_relay(l)).collect();
@@ -83,7 +87,11 @@ async fn main() -> ExitCode {
     let started = Instant::now();
     let mut sent = 0usize;
     for i in 0..packets {
-        let payload = format!("gyre packet {i}").into_bytes();
+        let payload = match &tag {
+            Some(tag) => format!("{tag}:{i}"),
+            None => format!("gyre packet {i}"),
+        }
+        .into_bytes();
         let t0 = Instant::now();
         match send_onion(
             entry.addr,
