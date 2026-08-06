@@ -194,10 +194,10 @@ Stated plainly, because they bound every number above:
 
 ## Shadow results — real binaries, simulated network stack
 
-[Shadow](https://shadow.github.io) runs the **real, unmodified** `gyre-relay` /
-`gyre-client` / `gyre-sink` binaries against a simulated network stack, so timing includes
-real TCP: connect handshakes, congestion control, and loss. That is exactly what `gyre-sim`
-models rather than provides.
+[Shadow](https://shadow.github.io) runs the **real, unmodified** `gyre-relay` / `gyre-client`
+/ `gyre-sink` binaries against a simulated network stack, so timing includes real TCP:
+connect handshakes, congestion control, and loss. That is what `gyre-sim` models rather than
+provides.
 
 It is Linux-only, so it runs in CI ([`.github/workflows/shadow.yml`](../.github/workflows/shadow.yml)),
 where GitHub's free runners make it reproducible for anyone at no cost.
@@ -211,9 +211,9 @@ packets on the MIX lane through `r1 → r2 → r3` to a sink. Shadow v3.3.0.
 | Measurement | Result |
 |---|---|
 | End-to-end delivery | **40/40** payloads |
-| Client → entry relay, per packet | **140 ms** (real TCP connect) |
-| End-to-end latency | 3.6 – 4.9 s across the run |
-| **Intra-client reordering (evidence of mixing)** | **4 inversions** |
+| End-to-end latency | 3.56 – 4.89 s |
+| Client → entry relay, every packet | **140.009 ms**, identical to 5 decimal places |
+| **Intra-client reordering (evidence of mixing)** | **4 of 36 adjacent pairs** |
 | Raw inversions across all clients | 17 |
 
 ```text
@@ -224,46 +224,72 @@ c4: [0,1,3,2,4,5,6,7,8,9]  -> REORDERED
 ```
 
 **Mixing measurably reorders packets over real TCP.** Three of four clients had a packet
-overtake one they had sent earlier — something no amount of client drift can explain,
-because within a single client the send order is known.
+overtake one they had sent earlier — which no amount of client drift can explain, because
+within a single client the send order is known.
 
-### Two cautions that matter more than the headline
+### The reordering rate matches the delay distribution
+
+That identical **140.009 ms** is the interesting number. It is not network jitter; it is the
+test client **serializing** — one TCP connect per packet, waiting for each to be accepted
+before sending the next. So packets enter the fabric exactly 140 ms apart, and the mixing
+has to overcome that gap to reorder anything.
+
+The MIX lane is 50 ms/hop over 3 hops, so a packet's total delay is Erlang(3, 50 ms) — mean
+150 ms, σ ≈ 87 ms. Two packets sent 140 ms apart invert when the second one's delay beats
+the first's by more than the gap:
+
+| | adjacent-pair inversion rate |
+|---|---|
+| Predicted, `P(D₂ − D₁ < −140 ms)`, D ~ Erlang(3, 50 ms) | **0.113** → 4.1 of 36 |
+| Observed | **0.111** → **4 of 36** |
+
+The implementation produces the delay distribution it claims. A broken or silently-dropped
+delay schedule would not have landed here. (With n = 36 the 95% interval is [0.044, 0.253],
+so this is a sanity check that would have caught a real bug — not a precision measurement.)
+
+The same model says a client that **didn't** serialize — sending packets back to back
+instead of one connect at a time — would invert **~50%** of adjacent pairs at this identical
+mixing setting. That is the ceiling by symmetry, not a security claim: two packets injected
+at the same instant arrive in either order half the time whether or not anything meaningful
+is happening. The point is narrower and worth stating plainly: **the modest reordering here
+is a property of the test client, not a weakness of the mixing.**
+
+### The caution that matters
 
 > [!IMPORTANT]
-> **The naive metric overstates mixing by about 4×.** The raw count of out-of-order
-> arrivals is 17; only **4** are real. The other 13 are simply independent clients drifting
-> apart, which happens with no mixing at all. Any measurement that does not attribute
-> payloads to a sender cannot tell these apart — an earlier version of this experiment
-> could not, and 17 was the number it would have reported.
+> **The naive metric overstates mixing by ~4×.** The raw count of out-of-order arrivals is
+> 17; only **4** are real. The other 13 are independent clients drifting apart, which
+> happens with no mixing at all. Any measurement that does not attribute payloads to a
+> sender cannot tell these apart — an earlier version of this experiment could not, and 17
+> is the number it would have reported.
+
+### What this does and does not say
 
 > [!WARNING]
-> **The mixing is weak at the default MIX setting.** Only 4 of 36 adjacent pairs (~11%)
-> reordered. The reason is visible in the same data: each client hands a packet to the
-> entry relay **140 ms** apart (dominated by the real TCP connect), while 50 ms/hop mixing
-> spreads packets by only ~100 ms. Delays smaller than a client's own send gap mostly
-> cannot overtake anything.
->
-> This **independently corroborates** the `gyre-sim` result above, which found the 50 ms
-> MIX lane leaves an optimal attacker at ≈0.50 accuracy. Two harnesses, different methods,
-> same conclusion: **the default MIX setting is too weak, and useful resistance starts
-> nearer 150 ms/hop.**
+> **Reordering is not anonymity, and this section must not be read as corroborating the
+> attacker numbers above.** Shadow shows the mixing *mechanism* behaves as specified over a
+> real network stack. It says nothing about whether an adversary can correlate flows — there
+> is no adversary in this experiment. The anonymity figures come from `gyre-sim`, and they
+> are the ones that say 50 ms/hop leaves an optimal attacker at ≈0.50. The two harnesses
+> answer different questions; agreement on one is not evidence about the other.
 
 ### What Shadow added that `gyre-sim` could not
 
-`gyre-sim` models the network, so it never charged 140 ms for a TCP connect — and that one
-number is what makes the mixing weak here. The local loopback testnet
-(`./scripts/testnet.sh`) reorders far more freely because its sends are ~1 ms apart. Same
-code, same mixing setting, three different answers depending on how honestly the network is
-modelled. That is the argument for running all three.
+`gyre-sim` models the network, so it never charged 140 ms for a TCP connect — and it is that
+one number, not the mixing setting, that governs how much reordering was visible here. The
+local loopback testnet (`./scripts/testnet.sh`) reorders far more freely because its sends
+are ~1 ms apart. Same code, same mixing parameter, three different pictures depending on how
+honestly the network and the client are modelled. That is the argument for running all
+three.
 
 ### Limits of this run
 
 - **Small.** Three relays, four clients, 40 packets. Enough to show the mechanism operates
   over real TCP; nowhere near enough to say anything about behaviour at scale.
-- **Synthetic traffic.** Fixed-size sequential sends, not real application traffic.
+- **Synthetic, serialized traffic.** Fixed-size sends, one connect at a time — not how a
+  real application behaves, and as shown above that choice dominates the reordering result.
 - **A toy topology.** Two regions and one slow link, not a model of the internet.
-- **No adversary.** This measures *reordering*, not correlation resistance. The attacker
-  results above come from `gyre-sim`.
+- **No adversary.** See the warning above.
 
 Reproduce: trigger **Shadow simulation** from the Actions tab, or run locally on Linux per
 [`sim/shadow/README.md`](../sim/shadow/README.md).

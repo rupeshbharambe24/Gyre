@@ -239,12 +239,13 @@ a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition
   machine of your own. Three relays, four concurrent clients, 40/40 payloads delivered.
   **Mixing measurably reorders packets over real TCP**: three of four clients had a packet
   overtake one they had sent earlier.
-  *Two caveats carried in the write-up rather than buried:* the naive out-of-order count
-  (17) **overstates mixing by ~4×** — only 4 inversions are real, the rest is independent
-  clients drifting apart — and the reordering is **weak at the default MIX setting** (4 of
-  36 adjacent pairs), because a client's own 140 ms TCP connect gap exceeds the ~100 ms the
-  mixing spreads. That independently corroborates `gyre-sim`'s finding that 50 ms/hop is
-  too weak. Full results in [`docs/SIMULATION.md`](docs/SIMULATION.md).
+  The reordering rate also **matches the delay distribution** — Erlang(3, 50 ms) against the
+  measured 140 ms send gap predicts 4.1 of 36 adjacent pairs invert; 4 were observed — so
+  the implementation produces the schedule it claims. Two things the write-up is careful
+  about: the naive out-of-order count (17) **overstates mixing by ~4×** (13 of those are
+  independent clients drifting apart), and **reordering is not anonymity** — there is no
+  adversary in this experiment, so it does not corroborate the `gyre-sim` attacker numbers.
+  Full results in [`docs/SIMULATION.md`](docs/SIMULATION.md).
 - **`scripts/validate-shadow-gml.py`** — validates a network graph in *Shadow's* GML
   dialect, which is stricter than networkx's (no `#` comments, limited attributes).
   networkx is useless as a check here in both directions: it accepts comments Shadow
