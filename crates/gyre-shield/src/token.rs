@@ -44,6 +44,7 @@ use std::collections::HashSet;
 use curve25519_dalek::constants::RISTRETTO_BASEPOINT_POINT;
 use curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
+use gyre_directory::VerifiedParams;
 use sha2::{Digest, Sha512};
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -177,10 +178,44 @@ fn dleq_verify(
 
 /// The issuer's published public key, `Y = k·G`.
 ///
-/// Clients **must** obtain this from the signed directory consensus, not from the issuer
-/// inline — see the module docs.
+/// The inner bytes are **private on purpose**. Verifying a DLEQ proof against a key the
+/// issuer supplied in the same response proves nothing, so the type is built to make the
+/// provenance of a key visible at every call site:
+///
+/// - [`from_verified_params`](Self::from_verified_params) — the blessed path. Takes
+///   [`VerifiedParams`], which can only be produced by threshold-verifying a consensus, so
+///   a key obtained this way is *provably* one a quorum of authorities published.
+/// - [`Issuer::public_key`] — an issuer's own key, for the issuer itself.
+/// - [`from_unverified_bytes`](Self::from_unverified_bytes) — deliberately ugly, for tests
+///   and local setups. A grep for the name finds every place trust was assumed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct PublicKey(pub [u8; 32]);
+pub struct PublicKey([u8; 32]);
+
+impl PublicKey {
+    /// **The blessed path.** Take the issuer key from parameters a quorum of directory
+    /// authorities signed.
+    ///
+    /// Because [`VerifiedParams`] cannot be constructed without passing threshold
+    /// verification, holding one is proof the key was published by the authorities rather
+    /// than chosen by whoever is on the other end of the connection.
+    pub fn from_verified_params(params: &VerifiedParams) -> Self {
+        PublicKey(params.issuer_public_key())
+    }
+
+    /// Take a key on trust, with no proof of where it came from.
+    ///
+    /// Named to be conspicuous. Using this with a key the issuer supplied reintroduces the
+    /// key-partitioning deanonymisation attack the DLEQ proof exists to prevent — see the
+    /// module docs and `docs/AUDIT.md`.
+    pub fn from_unverified_bytes(bytes: [u8; 32]) -> Self {
+        PublicKey(bytes)
+    }
+
+    /// The raw encoding, for publishing this key into a consensus document.
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0
+    }
+}
 
 /// What the issuer returns: the blind evaluation plus the proof it used the right key.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -335,7 +370,7 @@ pub struct Token {
 /// `issuer_public` **must** be the key from the signed directory consensus. Passing a key
 /// the issuer supplied alongside the response makes the proof worthless.
 pub fn unblind(state: Blinding, issued: Issued, issuer_public: PublicKey) -> Result<Token, Error> {
-    let y = decompress(&issuer_public.0)?;
+    let y = decompress(&issuer_public.to_bytes())?;
     let z = decompress(&issued.evaluated)?;
     let b = hash_to_point(&state.seed) * state.blind;
 

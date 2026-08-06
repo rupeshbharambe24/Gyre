@@ -11,7 +11,7 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 ![Audit](https://img.shields.io/badge/audit-unaudited-red.svg)
 ![MSRV](https://img.shields.io/badge/MSRV-1.85-blue.svg)
 ![Crates](https://img.shields.io/badge/crates-14-informational.svg)
-![Tests](https://img.shields.io/badge/tests-141%20green-success.svg)
+![Tests](https://img.shields.io/badge/tests-157%20green-success.svg)
 [![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 
 > [!NOTE]
@@ -167,11 +167,25 @@ a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition
 
 **Tooling & quality gates**
 
-- **Workspace.** 14 crates, 141 tests, all green. See [`README.md`](README.md) and
+- **Workspace.** 14 crates, 157 tests, all green. See [`README.md`](README.md) and
   [`docs/DESIGN.md`](docs/DESIGN.md).
 - **Gates.** `cargo fmt --all -- --check`, `cargo clippy --workspace
   --all-targets -- -D warnings`, and `cargo test --workspace`. CI runs all three
   on every pull request and on pushes to `main`.
+- **Q4 — consensus-pinned issuer key (completes the token fix).** The DLEQ proof is only
+  worth anything if the key it is checked against did not come from the issuer, so the
+  consensus body is now a **typed, canonically encoded** `NetworkParams` document
+  (`gyre-directory::params`) carrying the issuer public key, PoW difficulty, MTD window and
+  relay set. Decoding is strict — exact length, known magic and version, **no trailing
+  bytes** — so each document has exactly one valid encoding; a lenient parser would let a
+  signature over one byte string appear to cover another. `VerifiedParams` can be produced
+  **only** by `verify_consensus` (non-zero threshold, enough distinct valid signatures,
+  well-formed body, and the body's epoch bound to the envelope), and
+  `token::PublicKey::from_verified_params` is the blessed way to obtain a key. The
+  unverified path survives for tests but is named `from_unverified_bytes` so a grep finds
+  every place trust was assumed. End-to-end coverage in
+  `crates/gyre-shield/tests/consensus_pinned_key.rs`, including the full attack: a rogue
+  issuer with an internally valid proof for *its own* key is refused.
 - **Cryptographic audit package** ([`docs/AUDIT.md`](docs/AUDIT.md)) for the one hand-built
   construction: full specification, security model with the four claimed properties,
   a table of every deviation from RFC 9497, seven self-review findings (one critical, see
@@ -234,6 +248,13 @@ a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition
   > **Deployment caveat:** the fix only holds if clients pin the public key from the
   > threshold-signed consensus. That wiring is **not yet implemented** and is tracked as
   > open question Q4 in the audit package.
+- **HIGH — `accept_consensus` accepted unsigned documents at threshold 0.** The check was
+  `distinct_valid_signers(...) >= threshold`, which is **always true** for `threshold == 0`
+  — so a caller deriving its threshold from configuration (an empty authority list gives
+  `0`) would accept a completely unsigned consensus, and with it any issuer key an attacker
+  chose. Confirmed by probe before fixing. Both `accept_consensus` and `verify_consensus`
+  now reject a zero threshold outright: trust decisions fail closed. A property asserts it
+  for arbitrary signature sets.
 - **Token secrets are now zeroized.** `Blinding.blind` — the scalar whose secrecy *is*
   unlinkability — and `Issuer.key` were left in memory on drop, inconsistent with
   `gyre-endpoint`. Both are now `ZeroizeOnDrop`, along with intermediate hash buffers.

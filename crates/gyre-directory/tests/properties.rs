@@ -5,7 +5,8 @@
 //! *distinct, valid* signers for arbitrary consensus bodies and signer sets.
 
 use gyre_directory::{
-    accept_consensus, build_is_blessed, detect_equivocation, Authority, Consensus,
+    accept_consensus, build_is_blessed, detect_equivocation, Authority, Consensus, NetworkParams,
+    RelayDescriptor,
 };
 use proptest::prelude::*;
 
@@ -120,5 +121,64 @@ proptest! {
         let sigs: Vec<_> = (0..signed).map(|i| (i, keys_owned[i].sign(&hash))).collect();
 
         prop_assert_eq!(build_is_blessed(&hash, &sigs, &keys, threshold), signed >= threshold);
+    }
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(64))]
+
+    /// Any parameters document survives the canonical encoding exactly.
+    #[test]
+    fn params_survive_a_round_trip(
+        epoch in any::<u64>(),
+        issuer_public_key in prop::array::uniform32(any::<u8>()),
+        pow_difficulty_bits in any::<u32>(),
+        mtd_window_secs in any::<u32>(),
+        n in 0usize..12,
+    ) {
+        let relays: Vec<RelayDescriptor> = (0..n)
+            .map(|i| RelayDescriptor { address: [i as u8; 32], public_key: [(i + 1) as u8; 32] })
+            .collect();
+        let params = NetworkParams { epoch, issuer_public_key, pow_difficulty_bits, mtd_window_secs, relays };
+        prop_assert_eq!(NetworkParams::decode(&params.encode()).unwrap(), params);
+    }
+
+    /// Robustness: the consensus body arrives from the network, so decoding arbitrary bytes
+    /// must never panic — and must never allocate beyond what the buffer could hold.
+    #[test]
+    fn decoding_arbitrary_bytes_never_panics(bytes in prop::collection::vec(any::<u8>(), 0..800)) {
+        if let Ok(params) = NetworkParams::decode(&bytes) {
+            prop_assert!(params.relays.len() * 64 <= bytes.len());
+        }
+    }
+
+    /// The encoding is canonical: appending anything at all invalidates the document, so a
+    /// signature over one byte string can never appear to cover a different one.
+    #[test]
+    fn no_document_has_a_second_valid_encoding(
+        epoch in any::<u64>(),
+        extra in prop::collection::vec(any::<u8>(), 1..8),
+    ) {
+        let params = NetworkParams {
+            epoch,
+            issuer_public_key: [1u8; 32],
+            pow_difficulty_bits: 8,
+            mtd_window_secs: 30,
+            relays: Vec::new(),
+        };
+        let mut bytes = params.encode();
+        bytes.extend_from_slice(&extra);
+        prop_assert!(NetworkParams::decode(&bytes).is_err());
+    }
+
+    /// A threshold of zero must never accept a document, however many signatures exist.
+    #[test]
+    fn a_zero_threshold_never_accepts(epoch in any::<u64>(), signers in 0usize..4) {
+        let authorities: Vec<Authority> = (0..3).map(|_| Authority::generate()).collect();
+        let keys: Vec<_> = authorities.iter().map(Authority::public).collect();
+        let consensus = Consensus::new(epoch, b"anything".to_vec());
+        let msg = consensus.signing_bytes();
+        let sigs: Vec<_> = (0..signers.min(3)).map(|i| (i, authorities[i].sign(&msg))).collect();
+        prop_assert!(!accept_consensus(&consensus, &sigs, &keys, 0));
     }
 }

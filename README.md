@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Rust: 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)
 ![Crates: 14](https://img.shields.io/badge/crates-14-informational.svg)
-![Tests: 141 passing](https://img.shields.io/badge/tests-141%20passing-brightgreen.svg)
+![Tests: 157 passing](https://img.shields.io/badge/tests-157%20passing-brightgreen.svg)
 ![Status: experimental](https://img.shields.io/badge/status-experimental-red.svg)
 
 Gyre is a single relay fabric that spins two ways at once: an **outbound
@@ -214,7 +214,7 @@ cargo run -p gyre-stego       # LSB steganography (situational)
 
 ## Crate map
 
-Fourteen crates, 141 tests, all green.
+Fourteen crates, 157 tests, all green.
 
 | Crate | Purpose | Tests |
 |---|---|:--:|
@@ -224,10 +224,10 @@ Fourteen crates, 141 tests, all green.
 | `gyre-net` | Async transport, directory, relay server, mixing, cover traffic | 4 |
 | `gyre-node` | Demo binary: spin up a testnet + integration tests (lanes, multipath) | 2 |
 | `gyre-adversary` | **The GATE:** partial-observer timing-correlation harness + verdict | 4 |
-| `gyre-shield` | Inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens | 33 |
+| `gyre-shield` | Inbound rotor: MTD hopping, PoW admission, rendezvous, capability tokens | 38 |
 | `gyre-obfs` | Pluggable-transport framework + transports + an entropy meter | 4 |
 | `gyre-endpoint` | Endpoint hardening: forward-secret ratchet, personas, uniform fingerprint | 3 |
-| `gyre-directory` | Threshold-signed consensus, equivocation detection, build attestation | 5 |
+| `gyre-directory` | Threshold-signed consensus, typed network params, equivocation detection | 21 |
 | `gyre-pir` | Private directory retrieval: 2-server IT-PIR (default is full download) | 3 |
 | `gyre-stego` | Deniability: LSB steganography (situational; honest limits) | 4 |
 | `gyre-crowd` | P4: k-anonymity admission governor + staking Sybil-pricing model | 8 |

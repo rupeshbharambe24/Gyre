@@ -25,7 +25,7 @@ fn hex(bytes: &[u8]) -> String {
 fn vector_issuer_public_key() {
     let issuer = Issuer::from_secret_seed(&ISSUER_SEED);
     assert_eq!(
-        hex(&issuer.public_key().0),
+        hex(&issuer.public_key().to_bytes()),
         "0a9a69c0ab673b88dd084370deb7a78bca331eb8d3a5dda5ec893271694f6819",
         "issuer public key vector"
     );

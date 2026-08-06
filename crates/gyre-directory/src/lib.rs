@@ -27,6 +27,9 @@ use std::collections::HashSet;
 
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 
+pub mod params;
+pub use params::{NetworkParams, ParamsError, RelayDescriptor, PARAMS_VERSION};
+
 fn random_32() -> [u8; 32] {
     let mut bytes = [0u8; 32];
     getrandom::fill(&mut bytes).expect("OS RNG");
@@ -101,13 +104,96 @@ impl Consensus {
 }
 
 /// Accept a consensus only if at least `threshold` distinct authorities signed it.
+///
+/// **A `threshold` of zero is rejected**, not treated as "no signatures required". A caller
+/// that derives its threshold from configuration can easily compute `0` — from an empty
+/// authority list, say — and a naive `count >= 0` would then accept a completely unsigned
+/// document. Trust decisions fail closed.
 pub fn accept_consensus(
     consensus: &Consensus,
     sigs: &[(usize, Signature)],
     authorities: &[VerifyingKey],
     threshold: usize,
 ) -> bool {
+    if threshold == 0 {
+        return false;
+    }
     distinct_valid_signers(&consensus.signing_bytes(), sigs, authorities) >= threshold
+}
+
+/// Network parameters that have been **threshold-verified**.
+///
+/// This type is the whole point: it can only be produced by [`verify_consensus`], so a
+/// value of this type is proof that a quorum of authorities signed these parameters. Code
+/// that requires pinned values takes a `&VerifiedParams` and therefore cannot be handed
+/// unverified ones by accident.
+#[derive(Clone, Debug)]
+pub struct VerifiedParams {
+    params: NetworkParams,
+}
+
+impl VerifiedParams {
+    /// The verified parameters.
+    pub fn params(&self) -> &NetworkParams {
+        &self.params
+    }
+
+    /// The capability-token issuer's public key, as published by the authorities.
+    ///
+    /// This is the value a client must pin when checking an issuer's DLEQ proof.
+    pub fn issuer_public_key(&self) -> [u8; 32] {
+        self.params.issuer_public_key
+    }
+
+    /// The epoch these parameters describe.
+    pub fn epoch(&self) -> u64 {
+        self.params.epoch
+    }
+}
+
+/// Errors from verifying a consensus document.
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum VerifyError {
+    /// A threshold of zero would accept anything; refused.
+    #[error("a threshold of zero would accept an unsigned document")]
+    ZeroThreshold,
+    /// Fewer than `threshold` distinct authorities produced a valid signature.
+    #[error("not enough distinct valid signatures to meet the threshold")]
+    BelowThreshold,
+    /// The signed body is not a well-formed parameters document.
+    #[error("consensus body: {0}")]
+    Body(#[from] ParamsError),
+    /// The body's epoch disagrees with the consensus that carries it.
+    #[error("body is for epoch {body} but the consensus is for epoch {consensus}")]
+    EpochMismatch { body: u64, consensus: u64 },
+}
+
+/// Verify a consensus and return its parameters — **the only way to obtain
+/// [`VerifiedParams`]**.
+///
+/// Checks, in order: a non-zero threshold, enough distinct valid signatures, a well-formed
+/// body, and that the body's epoch matches the consensus carrying it (so a validly signed
+/// body cannot be spliced into a different epoch's envelope).
+pub fn verify_consensus(
+    consensus: &Consensus,
+    sigs: &[(usize, Signature)],
+    authorities: &[VerifyingKey],
+    threshold: usize,
+) -> Result<VerifiedParams, VerifyError> {
+    if threshold == 0 {
+        return Err(VerifyError::ZeroThreshold);
+    }
+    if !accept_consensus(consensus, sigs, authorities, threshold) {
+        return Err(VerifyError::BelowThreshold);
+    }
+    let params = NetworkParams::decode(&consensus.body)?;
+    if params.epoch != consensus.epoch {
+        return Err(VerifyError::EpochMismatch {
+            body: params.epoch,
+            consensus: consensus.epoch,
+        });
+    }
+    Ok(VerifiedParams { params })
 }
 
 /// Detect equivocation: two *different* consensus bodies for the *same* epoch, each

@@ -177,9 +177,43 @@ links **0 of 5** — see
 > [!IMPORTANT]
 > The fix is only effective if `Y` is pinned from the **threshold-signed directory
 > consensus** (`gyre-directory`). Verifying a proof against a key the issuer supplied in the
-> same response proves nothing — the attacker simply sends the matching key. **Wiring the
-> consensus-published key into the client is deployment work that is not yet done**, and is
-> listed as Q4 below.
+> same response proves nothing — the attacker simply sends the matching key.
+> **This wiring is now implemented** (see §5a): the consensus body is a typed
+> `NetworkParams` document carrying the issuer key, and `PublicKey::from_verified_params`
+> takes a `VerifiedParams` that can *only* be produced by threshold verification. The
+> unverified path still exists for tests but is named `from_unverified_bytes`, so a grep
+> finds every place trust was assumed.
+
+### F1a — key distribution, now implemented (was open question Q4)
+
+The DLEQ proof is only as good as the provenance of the key it is checked against, so the
+consensus now carries that key in a typed, canonically encoded body:
+
+- `gyre-directory::NetworkParams` — magic ‖ version ‖ epoch ‖ **issuer public key** ‖ PoW
+  difficulty ‖ MTD window ‖ relay list. **Strict** decoding: exact length, known magic and
+  version, and **no trailing bytes**, so each document has exactly one valid encoding. A
+  lenient parser here would let a signature over one byte string appear to cover another.
+- `gyre-directory::VerifiedParams` — constructible *only* by `verify_consensus`, which
+  requires a non-zero threshold, enough distinct valid signatures, a well-formed body, and
+  that the body's epoch matches the envelope (so a signed body cannot be spliced into a
+  different epoch).
+- `gyre-shield::token::PublicKey` — inner bytes private; the blessed constructor takes
+  `&VerifiedParams`.
+
+End-to-end coverage is in
+[`tests/consensus_pinned_key.rs`](../crates/gyre-shield/tests/consensus_pinned_key.rs),
+including the full attack: a rogue issuer answering with a valid proof *for its own key* is
+refused because the client pinned the consensus key.
+
+### F8 — HIGH (fixed): `accept_consensus` accepted unsigned documents at threshold 0
+
+Found while wiring the above. `accept_consensus(..., threshold: 0)` evaluated
+`distinct_valid_signers(...) >= 0`, which is **always true** — so a caller that derived its
+threshold from configuration (an empty authority list gives `0`) would accept a completely
+unsigned consensus, and therefore any issuer key an attacker liked. Verified by probe
+before fixing. **Fix:** both `accept_consensus` and `verify_consensus` reject a zero
+threshold outright; trust decisions fail closed. A property now asserts it for arbitrary
+signature sets.
 
 ### F2 — MEDIUM (fixed): secrets were not zeroized
 
@@ -229,9 +263,11 @@ Ranked by how much they would change our confidence:
    there any distinguisher or bias we have missed?
 3. **Q3 — Is the DLEQ transcript complete?** It binds `G, Y, B, Z, A₁, A₂`. Is anything
    missing that would enable proof reuse across sessions, epochs, or issuers?
-4. **Q4 — Key distribution.** The fix for F1 assumes clients pin `Y` from the signed
-   consensus. That wiring is **not yet implemented**. What is the minimum safe design, and
-   what happens during key rotation for a client with a stale consensus?
+4. **Q4 — Key distribution *(implemented — please review the design)*.** Clients now pin
+   `Y` from `VerifiedParams`, obtainable only by threshold verification (§F1a). Open parts:
+   is the `NetworkParams` encoding genuinely canonical, is the epoch-binding check
+   sufficient, and **what should a client do with a stale consensus during key rotation** —
+   today it would simply fail to verify tokens from the new epoch.
 5. **Q5 — Rotation policy.** What epoch length bounds the spent set without stranding honest
    clients mid-flight? Should tokens carry an explicit epoch identifier?
 6. **Q6 — Should we simply adopt an audited implementation instead?** Given D11, the honest

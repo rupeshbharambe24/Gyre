@@ -471,6 +471,7 @@ dependencies = [
  "ed25519-dalek",
  "getrandom 0.3.4",
  "proptest",
+ "thiserror",
 ]
 
 [[package]]
@@ -537,7 +538,9 @@ name = "gyre-shield"
 version = "0.0.1"
 dependencies = [
  "curve25519-dalek",
+ "ed25519-dalek",
  "getrandom 0.3.4",
+ "gyre-directory",
  "gyre-net",
  "hmac",
  "proptest",

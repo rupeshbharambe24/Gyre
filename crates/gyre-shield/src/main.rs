@@ -88,8 +88,30 @@ async fn main() {
     // ---- Anonymous capability tokens ----
     println!("Capability tokens — redeem an unlinkable token to skip the PoW:");
     let mut issuer = gyre_shield::token::Issuer::new();
-    // The public key is pinned out of band (in production: from the signed consensus).
-    let published = issuer.public_key();
+
+    // The client pins the issuer key from a THRESHOLD-SIGNED consensus, not from the
+    // issuer. Verifying a proof against a key the issuer supplied proves nothing.
+    let authorities: Vec<gyre_directory::Authority> = (0..4)
+        .map(|_| gyre_directory::Authority::generate())
+        .collect();
+    let authority_keys: Vec<_> = authorities
+        .iter()
+        .map(gyre_directory::Authority::public)
+        .collect();
+    let params = gyre_directory::NetworkParams {
+        epoch: 7,
+        issuer_public_key: issuer.public_key().to_bytes(),
+        pow_difficulty_bits: 12,
+        mtd_window_secs: 30,
+        relays: Vec::new(),
+    };
+    let consensus = gyre_directory::Consensus::new(7, params.encode());
+    let msg = consensus.signing_bytes();
+    let sigs: Vec<_> = (0..3).map(|i| (i, authorities[i].sign(&msg))).collect();
+    let verified = gyre_directory::verify_consensus(&consensus, &sigs, &authority_keys, 3)
+        .expect("3 of 4 authorities signed");
+    let published = gyre_shield::token::PublicKey::from_verified_params(&verified);
+    println!("  issuer key pinned from a 3-of-4 threshold-signed consensus (epoch 7)");
     let (state, blinded) = gyre_shield::token::blind();
     let issued = issuer.issue(blinded).expect("issue");
     let token = gyre_shield::token::unblind(state, issued, published).expect("unblind");
