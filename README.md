@@ -168,6 +168,9 @@ cargo test  --workspace
 cargo fmt   --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 
+# Primitive microbenchmarks (criterion) — see BENCHMARKS.md for numbers + caveats
+cargo bench -p gyre-benches
+
 # --- Runnable demos (each prints its mechanism + the honest ceiling) ---
 
 # The GATE: partial-observer correlation sweep + multipath exposure
@@ -321,6 +324,7 @@ bearing on anonymity properties.
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | How the crates fit together and data flows through the fabric |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Milestone history and what "complete" means for each phase |
 | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) | Terms of art: mixnet, Loopix, VOPRF, MTD, anonymity set, and friends |
+| [`BENCHMARKS.md`](BENCHMARKS.md) | Reproducible criterion microbenchmarks of the primitives (with honest caveats) |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to build, test, and propose changes |
 | [`SECURITY.md`](SECURITY.md) | How to report a vulnerability (GitHub private advisories) |
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Community expectations |

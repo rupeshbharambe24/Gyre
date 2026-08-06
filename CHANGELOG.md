@@ -169,6 +169,12 @@ a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition
 - **Gates.** `cargo fmt --all -- --check`, `cargo clippy --workspace
   --all-targets -- -D warnings`, and `cargo test --workspace`. CI runs all three
   on every pull request and on pushes to `main`.
+- **Primitive benchmark suite.** A dev-only `gyre-benches` crate (criterion)
+  microbenchmarks the building blocks — onion wrap/unwrap, Reed–Solomon coding, the
+  VOPRF token stages, proof-of-work solve/verify, the key ratchet, PIR, and
+  steganography — with results and honest caveats in [`BENCHMARKS.md`](BENCHMARKS.md).
+  These measure the primitives in isolation, **not** end-to-end anonymity or latency.
+  Run with `cargo bench -p gyre-benches`.
 - **Integration hygiene (D11).** Cryptography and transport are built on audited,
   known-good crates (`sphinx-packet`, `x25519-dalek`, `curve25519-dalek`,
   `ed25519-dalek`, `reed-solomon-erasure`, `hmac`, `sha2`, `zeroize`, `tokio`)

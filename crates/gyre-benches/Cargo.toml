@@ -1,0 +1,36 @@
+[package]
+name = "gyre-benches"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Criterion microbenchmarks for Gyre's primitives (dev-only, not published)."
+publish = false
+
+[lib]
+path = "src/lib.rs"
+bench = false
+test = false
+
+[dev-dependencies]
+criterion = { workspace = true }
+gyre-sphinx = { path = "../gyre-sphinx" }
+gyre-fec = { path = "../gyre-fec" }
+gyre-shield = { path = "../gyre-shield" }
+gyre-endpoint = { path = "../gyre-endpoint" }
+gyre-pir = { path = "../gyre-pir" }
+gyre-stego = { path = "../gyre-stego" }
+
+[[bench]]
+name = "data_plane"
+harness = false
+
+[[bench]]
+name = "admission"
+harness = false
+
+[[bench]]
+name = "primitives"
+harness = false
