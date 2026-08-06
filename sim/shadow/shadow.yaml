@@ -1,0 +1,42 @@
+# Shadow experiment skeleton for Gyre. NOT YET RUN — see README.md in this directory.
+#
+# This will not work until the crates expose standalone, socket-bound relay and client
+# binaries (today `gyre-node` runs an in-process testnet). The shape is here so that work
+# has an obvious target.
+general:
+  stop_time: 120s
+  model_unblocked_syscall_latency: true
+
+network:
+  graph:
+    type: gml
+    file: network.gml
+
+hosts:
+  # --- relays -------------------------------------------------------------------
+  relay1:
+    network_node_id: 0
+    processes:
+      - path: ../../target/release/gyre-relay      # TODO: binary does not exist yet
+        args: --listen 0.0.0.0:9001 --identity relay1
+        start_time: 1s
+  relay2:
+    network_node_id: 0
+    processes:
+      - path: ../../target/release/gyre-relay
+        args: --listen 0.0.0.0:9001 --identity relay2
+        start_time: 1s
+  relay3:
+    network_node_id: 1
+    processes:
+      - path: ../../target/release/gyre-relay
+        args: --listen 0.0.0.0:9001 --identity relay3
+        start_time: 1s
+
+  # --- clients ------------------------------------------------------------------
+  client1:
+    network_node_id: 1
+    processes:
+      - path: ../../target/release/gyre-client     # TODO: binary does not exist yet
+        args: --route relay1,relay2,relay3 --lane mix --packets 8
+        start_time: 10s

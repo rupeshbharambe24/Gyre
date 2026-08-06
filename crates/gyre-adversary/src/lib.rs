@@ -19,8 +19,23 @@
 //!    multipath widens endpoint exposure; it is not partial-observer correlation
 //!    resistance). This is measured and stated plainly.
 //!
-//! The attacker is a simple greedy timing matcher; a stronger attacker would only make
-//! anonymity look *weaker*, so using it keeps us honest about what mixing buys.
+//! # ⚠️ These numbers are OPTIMISTIC — read `gyre-sim` for the honest ones
+//!
+//! This harness has two properties that both make anonymity look **better** than it is,
+//! and an earlier version of this doc-comment had the direction of that error backwards:
+//!
+//! 1. **The attacker is a greedy timing matcher.** Correlation is an assignment problem;
+//!    a greedy matcher solves it badly. A *stronger* attacker scores higher, so measuring
+//!    against a weak one **understates the risk**.
+//! 2. **Each flow is a single message.** Real flows are streams, and every extra packet
+//!    hands the attacker another independent likelihood term. Single-message flows are
+//!    close to the hardest case for an attacker.
+//!
+//! [`gyre_sim`] fixes both — real Sphinx packets, multi-packet circuits, and an optimal
+//! (Hungarian) maximum-likelihood attacker — and measures the MIX lane at its default
+//! 50 ms/hop as roughly **0.51** accuracy where this model reports **0.11**. Treat the
+//! figures here as a fast, deterministic *regression signal* for the mechanism, **not** as
+//! the project's anonymity claim. See `docs/SIMULATION.md`.
 
 /// A tiny, fast, deterministic PRNG (xorshift64*). Deterministic on purpose: the
 /// harness must be reproducible so its numbers can be trusted and regression-tested.

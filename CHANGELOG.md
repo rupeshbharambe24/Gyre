@@ -10,8 +10,8 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 ![Release](https://img.shields.io/badge/release-none%20tagged-inactive.svg)
 ![Audit](https://img.shields.io/badge/audit-unaudited-red.svg)
 ![MSRV](https://img.shields.io/badge/MSRV-1.85-blue.svg)
-![Crates](https://img.shields.io/badge/crates-13-informational.svg)
-![Tests](https://img.shields.io/badge/tests-108%20green-success.svg)
+![Crates](https://img.shields.io/badge/crates-14-informational.svg)
+![Tests](https://img.shields.io/badge/tests-127%20green-success.svg)
 [![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 
 > [!NOTE]
@@ -165,11 +165,23 @@ a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition
 
 **Tooling & quality gates**
 
-- **Workspace.** 13 crates, 108 tests, all green. See [`README.md`](README.md) and
+- **Workspace.** 14 crates, 127 tests, all green. See [`README.md`](README.md) and
   [`docs/DESIGN.md`](docs/DESIGN.md).
 - **Gates.** `cargo fmt --all -- --check`, `cargo clippy --workspace
   --all-targets -- -D warnings`, and `cargo test --workspace`. CI runs all three
   on every pull request and on pushes to `main`.
+- **Simulation harness (`gyre-sim`) — the GATE, run against the real code.** A
+  discrete-event simulator that drives the **actual** protocol implementation (real Sphinx
+  onions, real X25519 relay keys, the real Loopix delay sampler, real packet sizes) over a
+  modelled network, and attacks it with the **strongest matcher we can construct**:
+  a maximum-likelihood (Erlang) cost solved **optimally** by the Hungarian algorithm
+  (verified against brute force for `n ≤ 6`). Flows are multi-packet circuits, because
+  single-message flows understate stream correlation. Reports coverage, accuracy, the
+  end-to-end **deanonymisation rate** (`coverage × accuracy`), latency percentiles, and
+  wire overhead. Run with `cargo run --release -p gyre-sim`; full write-up in
+  [`docs/SIMULATION.md`](docs/SIMULATION.md).
+- **Shadow scaffolding** (`sim/shadow/`) for the Linux-only next step — explicitly marked
+  **not yet executed**, since Shadow cannot run on the machine used here.
 - **Property-based test suite (proptest).** `crates/*/tests/properties.rs` adds **52
   properties** across ten crates, each generating hundreds of inputs per run and shrinking
   any failure to a minimal counterexample. They assert the domain invariants (any `data`
@@ -198,7 +210,21 @@ a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition
 
 ### Fixed
 
-Both of these were found by the property suite above, not by review — which is rather the
+- **Corrected an overclaim in the GATE's own documentation, and the numbers it produced.**
+  `gyre-adversary` described its greedy matcher as chosen "so anonymity never looks better
+  than it is" — exactly backwards. A *weaker* attacker makes anonymity look **better**, so
+  the published figures were optimistic. Combined with modelling each flow as a single
+  message rather than a stream, the MIX lane at 50 ms/hop was reported as `0.11` where the
+  real code under an optimal attacker scores **≈ 0.50** — about **4.5×** off. The GATE is
+  retained as a fast regression signal, its docs corrected, and every place quoting its
+  numbers now carries the correction and points at
+  [`docs/SIMULATION.md`](docs/SIMULATION.md).
+- **`gyre-sphinx` now re-exports `SphinxPacket`.** The type appears throughout the crate's
+  public API, but was not nameable downstream — so a caller could not hold a packet in a
+  struct or queue without adding its own `sphinx-packet` dependency, defeating the wrapper's
+  purpose (**D11**). Found while building the simulation harness, which needs exactly that.
+
+The two below were found by the property suite, not by review — which is rather the
 point of adding it.
 
 - **Admission control could fail open on a bad load estimate** (`gyre-shield`).

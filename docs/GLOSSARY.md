@@ -3,8 +3,8 @@
 ![status: experimental](https://img.shields.io/badge/status-experimental-orange.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![MSRV](https://img.shields.io/badge/rustc-1.85%2B-blue.svg)
-![crates](https://img.shields.io/badge/crates-13-informational.svg)
-![tests](https://img.shields.io/badge/tests-108%20passing-brightgreen.svg)
+![crates](https://img.shields.io/badge/crates-14-informational.svg)
+![tests](https://img.shields.io/badge/tests-127%20passing-brightgreen.svg)
 [![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 
 Plain-English definitions of the privacy and networking terms used across the
@@ -205,8 +205,12 @@ flowchart TB
   random delay drawn from a Poisson/exponential distribution, then releasing it.
   This reorders packets so an observer can't line up "went in" with "came out" by
   timing. It is the real correlation-resistance lever — and it costs latency.
-  - _In Gyre:_ per-hop mixing lives in `gyre-net`; its effect is *measured*
-    by `gyre-adversary`. Measured result: correlation accuracy drops from **1.00**
+  - _In Gyre:_ per-hop mixing lives in `gyre-net`; its effect is *measured* by
+    `gyre-sim` against an **optimal** attacker (see [SIMULATION.md](SIMULATION.md)):
+    accuracy **1.000** with no mixing, **0.497** at 50 ms/hop, **0.057** at 150 ms/hop
+    (chance 0.0067, 150 concurrent flows). The older `gyre-adversary` model reports
+    lower — and optimistic — figures, because its attacker is greedy and its flows are
+    single messages. Measured result: correlation accuracy drops from **1.00**
     (no mixing) to **0.11** at 50 ms/hop and **0.04** at 150 ms/hop — against a
     chance floor of **0.02** for 50 flows — but only with that healthy crowd. With
     5 flows the same 150 ms/hop mixing yields **0.44** against a chance of **0.20**:

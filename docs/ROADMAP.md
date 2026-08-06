@@ -3,8 +3,8 @@
 ![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![MSRV](https://img.shields.io/badge/rustc-1.85%2B-orange.svg)
-![crates](https://img.shields.io/badge/crates-13-informational.svg)
-![tests](https://img.shields.io/badge/tests-108%20green-success.svg)
+![crates](https://img.shields.io/badge/crates-14-informational.svg)
+![tests](https://img.shields.io/badge/tests-127%20green-success.svg)
 ![status](https://img.shields.io/badge/status-experimental-red.svg)
 
 Where Gyre has been, what is actually finished, and the one thing that no
@@ -42,7 +42,7 @@ amount of code can finish. This is a research roadmap, not a release plan.
 
 ## Done
 
-All phases are complete and measured. The workspace is **13 crates, 108 tests, all
+All phases are complete and measured. The workspace is **14 crates, 127 tests, all
 green**, gated in CI by `cargo fmt --all -- --check`, `cargo clippy --workspace
 --all-targets -- -D warnings`, and `cargo test --workspace`.
 
@@ -80,6 +80,14 @@ Milestone by milestone, with the one-line result that closed it:
 > artifact, not a deployable credential system.
 
 ### The GATE: the go/no-go number
+
+> [!WARNING]
+> **Superseded for anonymity claims.** This harness models each flow as a *single
+> message* and attacks it with a *greedy* matcher — both choices flatter the defence.
+> Re-measured with multi-packet streams and an **optimal** maximum-likelihood attacker
+> against the real Sphinx code, the MIX lane at 50 ms/hop scores **≈ 0.50**, not `0.11`.
+> See [SIMULATION.md](SIMULATION.md). The table below remains a fast regression signal
+> for the mechanism.
 
 The GATE is why this roadmap can say "done" without overclaiming. `gyre-adversary`
 plays a **partial network observer** — sees some links, correlates flows by timing —

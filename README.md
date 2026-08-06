@@ -5,8 +5,8 @@
 [![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Rust: 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)
-![Crates: 13](https://img.shields.io/badge/crates-13-informational.svg)
-![Tests: 108 passing](https://img.shields.io/badge/tests-108%20passing-brightgreen.svg)
+![Crates: 14](https://img.shields.io/badge/crates-14-informational.svg)
+![Tests: 127 passing](https://img.shields.io/badge/tests-127%20passing-brightgreen.svg)
 ![Status: experimental](https://img.shields.io/badge/status-experimental-red.svg)
 
 Gyre is a single relay fabric that spins two ways at once: an **outbound
@@ -170,6 +170,10 @@ cargo test  --workspace
 cargo fmt   --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 
+# End-to-end simulation: the REAL protocol code under an OPTIMAL correlation
+# attacker. This supersedes the GATE numbers — see docs/SIMULATION.md.
+cargo run --release -p gyre-sim
+
 # Primitive microbenchmarks (criterion) — see BENCHMARKS.md for numbers + caveats
 cargo bench -p gyre-benches
 
@@ -207,7 +211,7 @@ cargo run -p gyre-stego       # LSB steganography (situational)
 
 ## Crate map
 
-Thirteen crates, 108 tests, all green.
+Fourteen crates, 127 tests, all green.
 
 | Crate | Purpose | Tests |
 |---|---|:--:|
@@ -223,14 +227,26 @@ Thirteen crates, 108 tests, all green.
 | `gyre-directory` | Threshold-signed consensus, equivocation detection, build attestation | 5 |
 | `gyre-pir` | Private directory retrieval: 2-server IT-PIR (default is full download) | 3 |
 | `gyre-stego` | Deniability: LSB steganography (situational; honest limits) | 4 |
-| `gyre-crowd` | P4: k-anonymity admission governor + staking Sybil-pricing model | 3 |
+| `gyre-crowd` | P4: k-anonymity admission governor + staking Sybil-pricing model | 8 |
+| `gyre-sim` | Simulation harness: real code over a modelled network + an **optimal** correlation attacker | 19 |
 | **Total** | | **55** |
 
 ---
 
 ## The GATE: what the measurement actually says
 
-This is the go/no-go. A deterministic timing model runs a *partial observer*
+> [!WARNING]
+> **These GATE numbers are optimistic and have been superseded.** The harness below
+> models each flow as a *single message* and attacks it with a *greedy* matcher — two
+> choices that both make anonymity look better than it is. Measured properly, with
+> multi-packet streams and an **optimal maximum-likelihood attacker** against the real
+> Sphinx implementation, the MIX lane at 50 ms/hop scores **≈ 0.50**, not `0.11` —
+> about **4.5× worse** than this table reports. See
+> [`docs/SIMULATION.md`](docs/SIMULATION.md) for the corrected figures and the method.
+> The table is kept because it remains a fast, deterministic regression signal for the
+> *mechanism* — it is no longer the basis for an anonymity claim.
+
+This is the original go/no-go. A deterministic timing model runs a *partial observer*
 correlation attack over many concurrent flows and measures accuracy against a
 baseline. The numbers are quoted verbatim from the harness.
 
@@ -257,6 +273,30 @@ The honest verdict this produces — and it matches the design analysis:
 3. **Multipath does *not* buy partial-observer correlation resistance** — it
    *widens* exposure (0.23 → 0.56). It buys availability and content-splitting, per
    **D7**.
+
+### Measured against a real attacker
+
+Findings (1) and (2) survive the stronger measurement; the *magnitudes* do not.
+Running the real Sphinx/Loopix code with multi-packet circuits and an optimal
+maximum-likelihood attacker ([`gyre-sim`](crates/gyre-sim)):
+
+| mix / hop | optimal attacker | greedy attacker | chance |
+|---:|---:|---:|---:|
+| 0 ms (FAST) | **1.000** | 0.949 | 0.0067 |
+| 50 ms (MIX) | **0.497** | 0.282 | 0.0067 |
+| 150 ms (MIX) | **0.057** | 0.028 | 0.0067 |
+| 500 ms (MIX) | **0.021** | 0.016 | 0.0067 |
+
+Two things this changes, stated plainly:
+
+- **FAST is a performance lane, not an anonymity lane.** Against an observer holding
+  both ends it links *every* stream.
+- **The default 50 ms MIX setting still loses about half of them.** Real resistance
+  starts around 150 ms/hop — messaging latency, not browsing latency.
+
+```bash
+cargo run --release -p gyre-sim      # reproduce; full write-up in docs/SIMULATION.md
+```
 
 ---
 
@@ -329,6 +369,7 @@ bearing on anonymity properties.
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | How the crates fit together and data flows through the fabric |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Milestone history and what "complete" means for each phase |
 | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) | Terms of art: mixnet, Loopix, VOPRF, MTD, anonymity set, and friends |
+| [`docs/SIMULATION.md`](docs/SIMULATION.md) | **End-to-end simulation results** against an optimal attacker — supersedes the GATE numbers |
 | [`BENCHMARKS.md`](BENCHMARKS.md) | Reproducible criterion microbenchmarks of the primitives (with honest caveats) |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to build, test, and propose changes |
 | [`SECURITY.md`](SECURITY.md) | How to report a vulnerability (GitHub private advisories) |

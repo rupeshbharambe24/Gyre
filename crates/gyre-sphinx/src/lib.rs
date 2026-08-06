@@ -24,13 +24,19 @@ use sphinx_packet::packet::ProcessedPacketData;
 use sphinx_packet::route::{
     Destination, DestinationAddressBytes, NodeAddressBytes, SURBIdentifier,
 };
-use sphinx_packet::SphinxPacket;
 use x25519_dalek::{PublicKey, StaticSecret};
 
-/// Re-exported so callers can build routes and delay schedules without depending
-/// on `sphinx-packet` directly.
+/// Re-exported so callers can build routes, delay schedules, and *hold packets* without
+/// depending on `sphinx-packet` directly.
+///
+/// `SphinxPacket` appears throughout this crate's public API ([`wrap`], [`unwrap`],
+/// [`Relay::process`], [`packet_from_bytes`]), so a caller that wants to store one — in a
+/// queue, an event, or a struct field — must be able to *name* the type. Without this
+/// re-export they would have to add their own `sphinx-packet` dependency, which is exactly
+/// the coupling this wrapper exists to prevent (**D11**).
 pub use sphinx_packet::header::delays::Delay;
 pub use sphinx_packet::route::Node;
+pub use sphinx_packet::SphinxPacket;
 
 /// Length, in bytes, of a relay address label in the Sphinx format we use.
 pub const ADDRESS_LEN: usize = NODE_ADDRESS_LENGTH;

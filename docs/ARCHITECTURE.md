@@ -3,8 +3,8 @@
 [![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Rust](https://img.shields.io/badge/rust-1.85%2B-orange.svg)
-![crates](https://img.shields.io/badge/crates-13-informational.svg)
-![tests](https://img.shields.io/badge/tests-108%20green-brightgreen.svg)
+![crates](https://img.shields.io/badge/crates-14-informational.svg)
+![tests](https://img.shields.io/badge/tests-127%20green-brightgreen.svg)
 ![status](https://img.shields.io/badge/status-experimental-red.svg)
 
 This document describes **how the code is organized** — the workspace, the crate
@@ -23,7 +23,7 @@ the way it is. For the project overview and quickstart, see [`../README.md`](../
 
 ## Table of contents
 
-- [1. Overview — one fabric, two rotors, 13 crates](#1-overview--one-fabric-two-rotors-13-crates)
+- [1. Overview — one fabric, two rotors, 14 crates](#1-overview--one-fabric-two-rotors-14-crates)
 - [2. Life of an outbound packet](#2-life-of-an-outbound-packet)
 - [3. Life of an inbound connection](#3-life-of-an-inbound-connection)
 - [4. Crate-by-crate reference](#4-crate-by-crate-reference)
@@ -32,7 +32,7 @@ the way it is. For the project overview and quickstart, see [`../README.md`](../
 
 ---
 
-## 1. Overview — one fabric, two rotors, 13 crates
+## 1. Overview — one fabric, two rotors, 14 crates
 
 Gyre is one relay fabric hosting **two rotors** that point in opposite
 directions:
@@ -42,7 +42,7 @@ directions:
 - **Inbound rotor** — hides and gates a *system* (rendezvous origin-hiding,
   moving-target-defense ingress hopping, proof-of-work admission, capability tokens).
 
-The workspace is a Cargo workspace of **13 crates, 108 tests, all green** (edition
+The workspace is a Cargo workspace of **14 crates, 127 tests, all green** (edition
 2021, MSRV `rust-version = 1.85`, MIT). Crates fall into layers by role:
 
 | Layer | Crates | Tests |
@@ -54,6 +54,7 @@ The workspace is a Cargo workspace of **13 crates, 108 tests, all green** (editi
 | Inbound rotor | `gyre-shield` | 20 |
 | Orthogonal hardening | `gyre-obfs`, `gyre-endpoint`, `gyre-directory`, `gyre-pir`, `gyre-stego` | 9 · 8 · 10 · 6 · 10 |
 | Crowd / incentive | `gyre-crowd` | 8 |
+| Simulation / measurement | `gyre-sim` | 19 |
 
 ### Dependency graph
 
@@ -302,7 +303,8 @@ crate's ceiling.** Read the source and the limit is the first thing you see.
 | `gyre-fec` | Probabilistic middle-path hardening vs a *partial* observer — **not** a reconstruction threshold; multipath *widens* endpoint exposure (**D7**). |
 | `gyre-net` | TCP length-prefixed frames today; the directory is an in-memory testnet map; QUIC/MASQUE is a later, contained swap. |
 | `gyre-node` | Demo and integration tests only — it routes packets to *measure* the fabric, it is not a deployment. |
-| `gyre-adversary` | A deterministic timing *model*, not real packets; the greedy matcher is deliberately weak so anonymity never looks better than it is. |
+| `gyre-adversary` | A deterministic timing *model*, not real packets, and its greedy single-message attacker **understates** a real one — so its numbers are optimistic. `gyre-sim` supersedes them for any anonymity claim. |
+| `gyre-sim` | A *simulation*, not a deployment: real protocol code over a modelled network, with no TCP, cross-traffic, or queueing. Measures the mechanism against a named adversary; proves nothing about the open internet. |
 | `gyre-shield` | MTD serves a **closed/authorized** client set; PoW re-prices but does not beat a resourced adversary; **no L3/L4 volumetric defence** (**D22**); the VOPRF token is an **unaudited** prototype. |
 | `gyre-obfs` | Appearance only — **zero** anonymity effect; "unblockable" is false; `Polymorphic` uniform output is a *positive* entropy-DPI fingerprint. |
 | `gyre-endpoint` | Isolation *contains* a compromise; it cannot make an untrusted endpoint trusted. Forward secrecy protects *past* sessions, not an *active* keylogger; uniformity needs a real crowd. |

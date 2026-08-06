@@ -547,6 +547,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gyre-sim"
+version = "0.0.1"
+dependencies = [
+ "gyre-adversary",
+ "gyre-common",
+ "gyre-sphinx",
+ "proptest",
+]
+
+[[package]]
 name = "gyre-sphinx"
 version = "0.0.1"
 dependencies = [

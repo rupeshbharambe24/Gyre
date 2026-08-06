@@ -3,8 +3,8 @@
 [![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![MSRV](https://img.shields.io/badge/rustc-1.85%2B-orange.svg)](Cargo.toml)
-[![Crates](https://img.shields.io/badge/crates-13-blue.svg)](#the-workspace-at-a-glance)
-[![Tests](https://img.shields.io/badge/tests-108%20green-brightgreen.svg)](#the-workspace-at-a-glance)
+[![Crates](https://img.shields.io/badge/crates-14-blue.svg)](#the-workspace-at-a-glance)
+[![Tests](https://img.shields.io/badge/tests-127%20green-brightgreen.svg)](#the-workspace-at-a-glance)
 [![Status](https://img.shields.io/badge/status-experimental-yellow.svg)](#project-ethos)
 
 Thanks for your interest in **Gyre** — a layered privacy-and-defense network
@@ -92,7 +92,7 @@ They are project law.
 
 ## The workspace at a glance
 
-Thirteen crates, **one crate per orthogonal concern**, 108 tests, all green.
+Fourteen crates, **one crate per orthogonal concern**, 127 tests, all green.
 
 | Crate | Purpose | Tests |
 | --- | --- | :---: |
@@ -109,9 +109,10 @@ Thirteen crates, **one crate per orthogonal concern**, 108 tests, all green.
 | `gyre-pir` | private directory retrieval: 2-server IT-PIR (default is full download) | 6 |
 | `gyre-stego` | deniability: LSB steganography (situational; honest limits) | 10 |
 | `gyre-crowd` | k-anonymity admission governor + staking Sybil-pricing model | 8 |
-| **Total** | | **108** |
+| `gyre-sim` | simulation harness: real code, modelled network, optimal-assignment attacker | 19 |
+| **Total** | | **127** |
 
-These three numbers — **13 crates / 108 tests / the GATE verdict** — are ground truth.
+These three numbers — **14 crates / 127 tests / the GATE verdict** — are ground truth.
 See [Documentation changes](#documentation-changes) for keeping them consistent.
 
 ---
@@ -149,7 +150,7 @@ cd Gyre
 # 2. Build the whole workspace (rustup auto-selects the pinned stable toolchain)
 cargo build --workspace
 
-# 3. Test the whole workspace (all 108 tests should pass)
+# 3. Test the whole workspace (all 127 tests should pass)
 cargo test --workspace
 
 # 4. Run a single crate's tests while iterating (example: the inbound rotor)
@@ -205,7 +206,7 @@ cargo fmt --all -- --check
 # Gate 2 — lint with WARNINGS AS ERRORS (-D warnings). Clippy must be silent.
 cargo clippy --workspace --all-targets -- -D warnings
 
-# Gate 3 — the full test suite (all 108 tests)
+# Gate 3 — the full test suite (all 127 tests)
 cargo test --workspace
 ```
 
@@ -237,7 +238,7 @@ Pre-PR checklist:
 
 - [ ] `cargo fmt --all -- --check` is clean
 - [ ] `cargo clippy --workspace --all-targets -- -D warnings` is silent
-- [ ] `cargo test --workspace` is green (108 tests, or 108 + your new ones)
+- [ ] `cargo test --workspace` is green (127 tests, or 127 + your new ones)
 - [ ] New behavior is covered by a test that asserts **behavior, not timing**
 - [ ] A new invariant is covered by a **property**, and a new parser of untrusted input by
       a "never panics on arbitrary bytes" property (see [How we test](#how-we-test-unit-property-fuzz))
@@ -363,7 +364,7 @@ repository.workspace = true
 
 > [!NOTE]
 > Adding a crate changes the ground-truth counts. If crate #14 lands with its own
-> tests, the "13 crates / 108 tests" numbers move **together, everywhere** — see the
+> tests, the "14 crates / 127 tests" numbers move **together, everywhere** — see the
 > next section.
 
 ---
@@ -397,7 +398,7 @@ security or performance improvement without a number is incomplete.
 Docs are held to the same honesty bar as code.
 
 - **Keep the ground-truth numbers consistent across every doc.** The canonical values
-  are **13 crates**, **108 tests**, and the **GATE** verdict below. If you change any of
+  are **14 crates**, **127 tests**, and the **GATE** verdict below. If you change any of
   them, grep the repo and update *all* occurrences in the same PR — a doc that says "12
   crates" or "54 tests" is a bug.
 - **Never introduce an overclaim.** Before writing any comparative or absolute claim,
@@ -414,7 +415,14 @@ Docs are held to the same honesty bar as code.
 
 ### The GATE — the numbers, quoted exactly
 
-These are the go/no-go measurements. Reproduce them with `cargo run -p gyre-adversary`.
+> [!WARNING]
+> **Optimistic and superseded.** This model uses single-message flows and a greedy
+> matcher; both make anonymity look better than it is. `cargo run --release -p gyre-sim`
+> re-measures the real code against an optimal attacker and reports **≈ 0.50** where
+> this table says `0.11`. Quote [`docs/SIMULATION.md`](docs/SIMULATION.md) for any
+> anonymity claim; the table below is a regression signal for the mechanism.
+
+These are the original go/no-go measurements. Reproduce them with `cargo run -p gyre-adversary`.
 
 | flows | window | mix/hop | accuracy | chance | note |
 | :---: | :---: | :---: | :---: | :---: | --- |

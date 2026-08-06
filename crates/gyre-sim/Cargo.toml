@@ -1,0 +1,21 @@
+[package]
+name = "gyre-sim"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Discrete-event network simulation of the Gyre fabric, driving the real protocol code, with an optimal-assignment correlation attacker."
+
+[[bin]]
+name = "gyre-sim"
+path = "src/main.rs"
+
+[dependencies]
+gyre-common = { path = "../gyre-common" }
+gyre-sphinx = { path = "../gyre-sphinx" }
+gyre-adversary = { path = "../gyre-adversary" }
+
+[dev-dependencies]
+proptest = { workspace = true }
