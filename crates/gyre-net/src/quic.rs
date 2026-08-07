@@ -47,6 +47,7 @@ use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, Server
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, ServerName, UnixTime};
 use rustls::{DigitallySignedStruct, SignatureScheme};
 use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 
 use crate::{Error, Result, MAX_FRAME};
 
@@ -84,14 +85,20 @@ impl RelayIdentity {
     }
 }
 
-/// Constant-time byte comparison. The fingerprint is public, so this is belt-and-braces
-/// rather than strictly required — but a comparison that short-circuits on the first
-/// differing byte is never the one you want in a verifier.
+/// Constant-time byte comparison, via [`subtle`]. The fingerprint is public, so this is
+/// belt-and-braces rather than strictly required — but a comparison that short-circuits on
+/// the first differing byte is never the one you want in a verifier.
+///
+/// F19a. This was hand-rolled, in the same file `docs/AUDIT.md` asks a reviewer to read,
+/// while F11 recorded that exactly such a hand-rolled comparison had been replaced with
+/// `subtle` elsewhere. The fold was very likely fine — but "very likely fine" is the
+/// argument D11 exists to refuse, and a reviewer meeting the condemned pattern 90 seconds
+/// into the file has no reason to believe the rest.
 fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }
-    a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+    a.ct_eq(b).into()
 }
 
 /// Accepts exactly one certificate: the one whose SHA-256 hash matches the pinned value.

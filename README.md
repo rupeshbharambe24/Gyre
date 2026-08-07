@@ -53,7 +53,7 @@ ceilings come first, on purpose:
 - **Endpoint compromise deanonymises** regardless of the network. A login, a
   device, or a fingerprint undoes everything upstream of it.
 
-What it *can* be is a **well-integrated** fabric built from audited, known-good
+What it *can* be is a **well-integrated** fabric built from established, widely-used
 primitives, tuned for a **named adversary** — a *partial* network observer that
 sees some links and correlates by timing, plus a censoring ISP and Sybil relay
 operators — with one thing no anonymity network offers alongside a
@@ -114,7 +114,7 @@ flowchart LR
 Dissolves a sender into the concurrent crowd. No single relay ever sees both
 ends of a flow.
 
-- **Sphinx onion routing (3 hops)** over the audited `sphinx-packet` format —
+- **Sphinx onion routing (3 hops)** over the `sphinx-packet` format —
   each hop peels one layer, learns only the next hop, never the whole path.
 - **Per-hop Poisson mixing** — every relay holds a packet for an independent
   exponential delay, so packets can leave in a different order than they arrived.
@@ -149,14 +149,18 @@ inbound address**.
   volumetric floods.
 - **Unlinkable capability tokens** — **RFC 9497 VOPRF** (`ristretto255-SHA512`) via the
   [`voprf`](https://crates.io/crates/voprf) crate (unaudited — see
-  [`SECURITY.md`](SECURITY.md)): a client that paid once redeems
+  [`SECURITY.md`](SECURITY.md)). **Not yet bound to admission** (finding F14): issuance is
+  open to anyone who can reach the issuer, so today the token grants no scarcity — the
+  design below is what the mechanism is *for*, not what it currently enforces. A client that
+  paid once redeems
   a token to skip the PoW, and the issuer — which only ever saw a random *blinded* point —
   cannot link redemption to issuance. Single-use; double-spend rejected. The issuer must
   attach a **DLEQ proof** that it used its published key, and the client pins that key from
   the **threshold-signed consensus** — without both, a malicious issuer deanonymises every
   client by handing out a different key each time. That was a real, reproduced flaw in an
   earlier hand-rolled version; see [`docs/AUDIT.md`](docs/AUDIT.md). The construction is now
-  an audited library; **the integration around it is still unreviewed.**
+  an upstream library rather than ours — but **neither it nor the integration around it has
+  been audited**; see [`SECURITY.md`](SECURITY.md).
 
 ---
 
@@ -225,7 +229,7 @@ Fifteen crates, 171 tests, all green.
 | Crate | Purpose | Tests |
 |---|---|:--:|
 | `gyre-common` | Shared constants & types (`FlowClass`, `DEFAULT_HOPS = 3`) | 3 |
-| `gyre-sphinx` | Typed wrapper over the audited Sphinx mix-packet format | 5 |
+| `gyre-sphinx` | Typed wrapper over the `sphinx-packet` mix-packet format | 5 |
 | `gyre-fec` | Reed–Solomon erasure coding: fragment a message, reassemble any `m` | 4 |
 | `gyre-net` | Async transport (TCP + QUIC), directory, relay server, mixing, cover traffic | 14 |
 | `gyre-node` | Demo binary: spin up a testnet + integration tests (lanes, multipath) | 2 |
@@ -363,12 +367,20 @@ bearing on anonymity properties.
   wealth concentration; neither piece *makes* a crowd.
 
 ### S5 — QUIC transport
-- [x] **QUIC transport with consensus-pinned relay certificates.** Each circuit gets its
-  own stream, so a loss on one no longer stalls the others (cross-circuit head-of-line
-  blocking). Relays have no CA certificates, so a client pins the **SHA-256 fingerprint
-  published in the threshold-signed consensus** and refuses anything else — signature
-  verification is delegated to `rustls`, never stubbed. Honest scope: this is a
-  **performance and authentication** change, **not** an anonymity one.
+- [x] **QUIC transport with consensus-pinned relay certificates** — *as a library
+  (`gyre_net::quic`), tested but **not yet reachable from any binary***. Relays have no CA
+  certificates, so a client pins the **SHA-256 fingerprint published in the threshold-signed
+  consensus** and refuses anything else — signature verification is delegated to `rustls`,
+  never stubbed. Honest scope: this is a **performance and authentication** change, **not**
+  an anonymity one.
+  > **Status, stated precisely.** Every shipped binary (`gyre-relay`, `gyre-client`,
+  > `gyre-sink`) is **TCP-only**; nothing in `crates/gyre-cli` imports `gyre_net::quic`. The
+  > verifier and the pinning logic are real and tested — the wiring is not written. An
+  > earlier version of this list claimed per-circuit streams end cross-circuit head-of-line
+  > blocking; that claim is **withdrawn**, because `send_framed` opens a *new connection per
+  > message*, and without a shared connection there is no shared congestion context in which
+  > that blocking could occur. It cannot be true until the transport is wired in and
+  > measured. See [Wiring QUIC into the binaries](docs/ROADMAP.md).
 - [ ] **MASQUE (RFC 9298 CONNECT-UDP)** — tunnelling inside real HTTP/3 to look like
   ordinary web traffic. A censorship-resistance feature that belongs with `gyre-obfs`;
   **not implemented**, and not assumed present anywhere.
@@ -398,7 +410,7 @@ bearing on anonymity properties.
 ## Design principle
 
 > [!IMPORTANT]
-> **Never roll your own crypto or transport (D11).** The risky parts are audited
+> **Never roll your own crypto or transport (D11).** The risky parts are established
 > crates we integrate, not code we invent. Gyre's value is in *combining*
 > known-good primitives well and *measuring* honestly.
 

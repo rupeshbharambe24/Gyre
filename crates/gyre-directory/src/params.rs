@@ -14,6 +14,12 @@
 const MAGIC: &[u8; 4] = b"GYRE";
 /// Encoding version. Bumping this is a wire-format break.
 pub const PARAMS_VERSION: u16 = 1;
+
+/// The most relays one consensus body can carry — the u16 length field's ceiling.
+///
+/// Check [`NetworkParams::fits`] before [`NetworkParams::encode`]; over-large lists are a
+/// caller bug, not something to truncate away (F19).
+pub const MAX_RELAYS: usize = u16::MAX as usize;
 /// Bytes before the relay list: magic ‖ version ‖ epoch ‖ issuer key ‖ pow ‖ mtd ‖ count.
 const HEADER_LEN: usize = 4 + 2 + 8 + 32 + 4 + 4 + 2;
 /// Bytes per relay entry: address ‖ x25519 public key ‖ QUIC certificate fingerprint.
@@ -71,6 +77,18 @@ pub struct NetworkParams {
 
 impl NetworkParams {
     /// Serialize to the canonical byte encoding that authorities sign.
+    /// Whether this document can be encoded at all — i.e. the relay list fits the u16
+    /// length field. Mirrors `gyre-stego`'s `fits()`: a predicate the caller can actually
+    /// ask, rather than a limit discovered by producing a wrong answer.
+    pub fn fits(&self) -> bool {
+        self.relays.len() <= MAX_RELAYS
+    }
+
+    /// Encode to the canonical wire form.
+    ///
+    /// # Panics
+    ///
+    /// If `!self.fits()`. See [`MAX_RELAYS`].
     pub fn encode(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(HEADER_LEN + self.relays.len() * RELAY_LEN);
         out.extend_from_slice(MAGIC);
@@ -79,12 +97,25 @@ impl NetworkParams {
         out.extend_from_slice(&self.issuer_public_key);
         out.extend_from_slice(&self.pow_difficulty_bits.to_be_bytes());
         out.extend_from_slice(&self.mtd_window_secs.to_be_bytes());
-        // A relay count above u16::MAX is not representable; saturate rather than wrap, so
-        // an over-large list encodes to something that will fail its own length check
-        // instead of silently encoding a different document.
-        let count = u16::try_from(self.relays.len()).unwrap_or(u16::MAX);
+        // A relay count above MAX_RELAYS is not representable in the u16 length field.
+        //
+        // F19. This previously saturated and then `.take(count)`, with a comment claiming
+        // the result "will fail its own length check". It does not: truncating to 65,535
+        // produces a perfectly valid document, so `decode(encode(x)) != x` and an authority
+        // would sign a *silently shortened* relay list without any error. Signing something
+        // other than what you were handed is exactly the failure a canonical encoding exists
+        // to prevent. Callers must check [`NetworkParams::fits`] first; encoding an
+        // over-large list is a caller bug and panics rather than silently lying.
+        assert!(
+            self.fits(),
+            "NetworkParams::encode called with {} relays, above the MAX_RELAYS limit of {}; \
+             check fits() first — silently truncating would sign a different document",
+            self.relays.len(),
+            MAX_RELAYS
+        );
+        let count = self.relays.len() as u16;
         out.extend_from_slice(&count.to_be_bytes());
-        for relay in self.relays.iter().take(count as usize) {
+        for relay in self.relays.iter() {
             out.extend_from_slice(&relay.address);
             out.extend_from_slice(&relay.public_key);
             out.extend_from_slice(&relay.quic_fingerprint);
