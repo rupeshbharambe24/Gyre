@@ -414,7 +414,7 @@ bearing on anonymity properties.
 > crates we integrate, not code we invent. Gyre's value is in *combining*
 > known-good primitives well and *measuring* honestly.
 
-Integrated known-good building blocks: `sphinx-packet 0.7.0` (Nym-audited
+Integrated known-good building blocks: `sphinx-packet 0.7.0` (Nym's implementation of the peer-reviewed
 Sphinx), `x25519-dalek 3.0`, `curve25519-dalek 5`, `ed25519-dalek 3`,
 `reed-solomon-erasure 6`, `hmac 0.13`, `sha2 0.11`, `zeroize 1`, `tokio 1`,
 `quinn 0.11` + `rustls 0.23` (QUIC), and **`voprf 0.5`** (RFC 9497 capability tokens). There is **no longer a hand-rolled

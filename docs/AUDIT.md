@@ -9,7 +9,7 @@ What an external reviewer needs to assess the cryptography in Gyre — which, as
 `voprf` port, is **a much smaller surface than it used to be.**
 
 > [!WARNING]
-> **Correction (2026-08-07): nothing in this stack is audited, including upstream.**
+> **Correction (2026-08-07): no crate in this stack is audited at the version we use.**
 > Earlier revisions of this document called `voprf` "the audited library" and treated
 > upstream crates as audited-and-therefore-out-of-scope. That was not substantiated.
 > `voprf` has **no published third-party cryptographic audit**. NCC Group's
@@ -19,10 +19,16 @@ What an external reviewer needs to assess the cryptography in Gyre — which, as
 > in precisely that code, which was then rewritten against successive drafts up to RFC 9497
 > and never re-reviewed. **Code lineage is not audit coverage.**
 >
-> Depending on it remains the right call under **D11** — a widely-used RFC 9497
-> implementation by a competent team beats a construction of ours, and the hand-rolled
-> version it replaced was demonstrably broken (F1). But a reviewer should know that the
-> layer beneath Gyre's code is unreviewed too, and size their scepticism accordingly.
+> `sphinx-packet` is the one partial exception, and it is worth stating exactly rather than
+> rounding in either direction: its **repository** was named in the scope of a 2021 review by
+> JP Aumasson, but that review predates the crate's first crates.io release by 17 months and
+> three cryptographic changes, including a payload-key-derivation redesign in v0.6.0. We use
+> 0.7.0. So: a real review, of code that is not the code we run.
+>
+> Depending on these crates remains the right call under **D11** — they are the best-reviewed
+> implementations available, and the hand-rolled VOPRF that `voprf` replaced was demonstrably
+> broken (F1). But a reviewer should know the layer beneath Gyre's code is largely unreviewed
+> too, and size their scepticism accordingly.
 
 > [!IMPORTANT]
 > **The scope of this document shrank dramatically, on purpose.**
@@ -75,9 +81,12 @@ about 60 lines: `blind()`, `unblind()`, `Issuer::verify`, `Issuer::redeem` in `t
 | Threshold verification | `crates/gyre-directory/src/lib.rs` | Quorum + epoch-binding checks |
 | QUIC certificate pinning | `crates/gyre-net/src/quic.rs` | The `ServerCertVerifier` implementation |
 
-**Not in scope — upstream crates used as-is (D11).** Not because they are audited (see
-the correction above — most are not), but because reviewing them is a different and much
-larger job than reviewing Gyre:
+**Not in scope — upstream crates used as-is (D11).** Not because they are audited — see the
+correction above, and the audit-provenance note in [`../SECURITY.md`](../SECURITY.md) — but
+because reviewing them is a different and much larger job than reviewing Gyre. The honest
+one-line summary of the tree beneath us: `sphinx-packet`'s **repository** was reviewed by
+JP Aumasson in 2021, 17 months before its first release and three cryptographic changes ago;
+`voprf` has no published audit; the rest are widely-used but unaudited-for-our-purposes:
 
 `voprf` (RFC 9497 VOPRF — **the construction itself**) · `sphinx-packet` (onion format) ·
 `curve25519-dalek` · `x25519-dalek` · `ed25519-dalek` · `rustls` (TLS 1.3) · `sha2` ·

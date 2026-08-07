@@ -212,6 +212,29 @@ anti-overclaim rule the project treats as law.
   supplied cannot reach the verification path by accident. What is *not* handled: a client
   holding a stale consensus during key rotation simply fails to verify tokens from the new
   epoch. See open question Q-C in [`docs/AUDIT.md`](docs/AUDIT.md).
+- **No dependency in the cryptographic path is audited at the version we use — including
+  `sphinx-packet`.** Stated precisely, because "built on audited crates" was doing unearned
+  work here too:
+  - `sphinx-packet` implements the **peer-reviewed** Sphinx format (Danezis & Goldberg, IEEE
+    S&P 2009). Peer review of a paper is not a code audit, and the two must not be conflated.
+  - Its source repository (`nymtech/sphinx`) **was** named in the scope of a 2021 security
+    review by [Jean-Philippe Aumasson](https://www.nym.com/nym-audit-report-draft-202109-3.pdf) covering cryptography, code and
+    protocol security; one low-severity Sphinx finding was raised and fixed. That review is
+    real and it is the strongest assurance in our dependency tree.
+  - **But it predates the crate's first release.** The review is dated 2021-09-13; crates.io
+    v0.1.0 landed 2023-02-22 — 17 months later. **No released version has been audited.**
+    Cryptographic changes since include the v0.2.0 x25519 fix, v0.5.0's `ExpandedSharedSecret`,
+    and a **payload-key-derivation redesign in v0.6.0**. We depend on **0.7.0**.
+  - Nym's later audits do not close this: Cure53's 2024 report scopes `nym-vpn-client` and
+    the `nym` monorepo — its Sphinx findings sit in `nym/common/nymsphinx/`, the integration
+    layer, **not** this crate.
+  - `voprf` has no published audit at all (see the correction above).
+
+  The dependency choices are still right under **D11** — these are the best-reviewed
+  implementations available and far better than anything we would write. The point is only
+  that "audited" was a stronger word than the evidence supports, and this project does not
+  get to use stronger words than its evidence supports.
+
 - **Cover traffic is not concurrent real senders.** A cover-inflated "effective
   set" must never be read as the number of real people actually present. The
   anonymity that counts is the concurrent *real* crowd, and it is always the

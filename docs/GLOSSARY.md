@@ -246,7 +246,9 @@ flowchart TB
   relay. Each relay peels its layer to learn only the next hop — never both the
   origin and the destination together. Gyre caps this at 3 hops (decision
   **D5**): more hops buy negligible anonymity for real latency.
-  - _In Gyre:_ built on the audited Sphinx packet format via `gyre-sphinx`;
+  - _In Gyre:_ built on the peer-reviewed Sphinx packet format (Danezis & Goldberg,
+    IEEE S&P 2009) via `gyre-sphinx` — peer review of the *paper*, which is not a code
+    audit of the crate;
     `DEFAULT_HOPS = 3` in `gyre-common`. See **Sphinx**.
 
 ## P

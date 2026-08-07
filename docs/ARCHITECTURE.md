@@ -61,7 +61,7 @@ The workspace is a Cargo workspace of **15 crates, 171 tests, all green** (editi
 
 Arrows point **from a crate to the workspace crate it depends on**. Only three
 crates have intra-workspace edges (`gyre-net`, `gyre-node`, `gyre-shield`);
-everything else depends solely on audited third-party crates and stands alone. That
+everything else depends solely on established third-party crates and stands alone. That
 is deliberate — the hardening additions, the measurement gate, and the crowd model
 are **an orthogonal matrix, not a stack** (design decision **D10**), so each can be
 added by threat rather than pulled in by default.
@@ -231,7 +231,7 @@ description.
 | Crate | Key public types / fns | Responsibility |
 |---|---|---|
 | `gyre-common` | `DEFAULT_HOPS`, `FlowClass::{Fast, Mix}`, `FlowClass::default_mean_hop_delay` | Dependency-free shared constants and the per-flow service-level enum sealed inside the onion. |
-| `gyre-sphinx` | `Relay` (`new`, `process`), `wrap`, `wrap_with_delays`, `unwrap`, `Unwrapped`, `exponential_delays`, `packet_to_bytes` / `packet_from_bytes`, re-exports `Node`, `Delay` | Ergonomic, typed wrapper over the audited `sphinx-packet` format — no relay learns both ends. Does **not** roll its own crypto (**D11**). |
+| `gyre-sphinx` | `Relay` (`new`, `process`), `wrap`, `wrap_with_delays`, `unwrap`, `Unwrapped`, `exponential_delays`, `packet_to_bytes` / `packet_from_bytes`, re-exports `Node`, `Delay` | Ergonomic, typed wrapper over the `sphinx-packet` format — no relay learns both ends. Does **not** roll its own crypto (**D11**). |
 | `gyre-fec` | `Fragment`, `encode(msg, msg_id, data, parity)`, `Reassembler` (`insert`) | Reed–Solomon `m`-of-`k` erasure coding: fragment a message, reassemble from any `data` shards. |
 | `gyre-net` | `RelayServer` (`new`, `verbose`, `serve`), `Directory` (`from_entries`, `lookup`), `send_onion`, `emit_loops`, `write_frame` / `read_frame`, `MAX_FRAME` | Async TCP transport, in-memory directory, relay server, per-hop mixing and Loopix cover-loop emission. |
 | `gyre-node` | binary `gyre-node`; integration tests `lanes`, `multipath` | Demo: spins up a local testnet and times a FAST vs MIX flow on the same route; houses the lanes and multipath integration tests. |
@@ -300,7 +300,7 @@ crate's ceiling.** Read the source and the limit is the first thing you see.
 | Crate | The ceiling its `lib.rs` documents |
 |---|---|
 | `gyre-common` | FAST/MIX are separable by observable delay, so lanes *partition* the anonymity set rather than sharing one crowd (**D8**/**D21**). |
-| `gyre-sphinx` | Does not implement Sphinx — wraps the audited `sphinx-packet` crate (**D11**). 3 hops is a deliberate cap (**D5**). |
+| `gyre-sphinx` | Does not implement Sphinx — wraps the `sphinx-packet` crate (**D11**); see the audit-provenance note in [`../SECURITY.md`](../SECURITY.md). 3 hops is a deliberate cap (**D5**). |
 | `gyre-fec` | Probabilistic middle-path hardening vs a *partial* observer — **not** a reconstruction threshold; multipath *widens* endpoint exposure (**D7**). |
 | `gyre-net` | TCP length-prefixed frames today; the directory is an in-memory testnet map; QUIC/MASQUE is a later, contained swap. |
 | `gyre-node` | Demo and integration tests only — it routes packets to *measure* the fabric, it is not a deployment. |

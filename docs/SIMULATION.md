@@ -38,7 +38,7 @@ cargo run --release -p gyre-sim     # release matters: real crypto is slow in de
 
 | Real — the actual shipped code | Modelled — simulated |
 |---|---|
-| Sphinx onion construction and hop-by-hop processing (`gyre-sphinx` over the audited `sphinx-packet` crate) | Link latency and jitter |
+| Sphinx onion construction and hop-by-hop processing (`gyre-sphinx` over the `sphinx-packet` crate) | Link latency and jitter |
 | The per-hop Poisson delay schedule, sampled by the real Loopix sampler and sealed inside each onion | Relay selection, flow start times, packet pacing (seeded) |
 | Real X25519 relay keys; every hop peels exactly one real layer | Observer placement |
 | Real packet sizes on the wire (fixed-size Sphinx padding) | No queueing, bandwidth limits, or loss |
