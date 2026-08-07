@@ -67,7 +67,7 @@ layer at one relay.
 
 ### VOPRF capability token (inbound admission)
 
-RFC 9497 `ristretto255-SHA512`, via the audited [`voprf`](https://crates.io/crates/voprf)
+RFC 9497 `ristretto255-SHA512`, via the [`voprf`](https://crates.io/crates/voprf)
 crate. One full unlinkable issue→redeem path is the four stages below.
 
 | Stage | Who | Time |

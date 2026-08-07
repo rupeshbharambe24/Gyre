@@ -1,12 +1,28 @@
 # Gyre — Cryptographic Audit Package
 
 ![status: experimental](https://img.shields.io/badge/status-experimental-orange.svg)
-![construction: RFC 9497 lib](https://img.shields.io/badge/construction-audited%20library-brightgreen.svg)
+![construction: RFC 9497 lib](https://img.shields.io/badge/construction-upstream%20crate-yellow.svg)
 ![integration: unreviewed](https://img.shields.io/badge/integration-not%20reviewed-red.svg)
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
 What an external reviewer needs to assess the cryptography in Gyre — which, as of the
 `voprf` port, is **a much smaller surface than it used to be.**
+
+> [!WARNING]
+> **Correction (2026-08-07): nothing in this stack is audited, including upstream.**
+> Earlier revisions of this document called `voprf` "the audited library" and treated
+> upstream crates as audited-and-therefore-out-of-scope. That was not substantiated.
+> `voprf` has **no published third-party cryptographic audit**. NCC Group's
+> [2021 `opaque-ke` review](https://www.nccgroup.com/research/public-report-whatsapp-opaque-ke-cryptographic-implementation-review/) covered `opaque-ke` v0.5.0, which did **not**
+> depend on `voprf` — the crate was first published two months after the fieldwork. `voprf`
+> was later extracted from `opaque-ke`'s inline OPRF code, and that review found real bugs
+> in precisely that code, which was then rewritten against successive drafts up to RFC 9497
+> and never re-reviewed. **Code lineage is not audit coverage.**
+>
+> Depending on it remains the right call under **D11** — a widely-used RFC 9497
+> implementation by a competent team beats a construction of ours, and the hand-rolled
+> version it replaced was demonstrably broken (F1). But a reviewer should know that the
+> layer beneath Gyre's code is unreviewed too, and size their scepticism accordingly.
 
 > [!IMPORTANT]
 > **The scope of this document shrank dramatically, on purpose.**
@@ -46,7 +62,11 @@ What an external reviewer needs to assess the cryptography in Gyre — which, as
 ## 1. Scope
 
 **In scope — Gyre's remaining cryptographic surface.** Note that none of it is a *protocol*
-any more; it is integration and policy around an audited implementation.
+any more; it is integration and policy around an upstream implementation.
+
+**Size, so you can decide whether to spend the time:** ~1,010 lines of implementation across
+the four files below, of which roughly 250 are cryptographically sensitive. The core is
+about 60 lines: `blind()`, `unblind()`, `Issuer::verify`, `Issuer::redeem` in `token.rs`.
 
 | Component | File | What is Gyre's own |
 |---|---|---|
@@ -55,7 +75,9 @@ any more; it is integration and policy around an audited implementation.
 | Threshold verification | `crates/gyre-directory/src/lib.rs` | Quorum + epoch-binding checks |
 | QUIC certificate pinning | `crates/gyre-net/src/quic.rs` | The `ServerCertVerifier` implementation |
 
-**Not in scope — audited upstream crates used as-is (D11):**
+**Not in scope — upstream crates used as-is (D11).** Not because they are audited (see
+the correction above — most are not), but because reviewing them is a different and much
+larger job than reviewing Gyre:
 
 `voprf` (RFC 9497 VOPRF — **the construction itself**) · `sphinx-packet` (onion format) ·
 `curve25519-dalek` · `x25519-dalek` · `ed25519-dalek` · `rustls` (TLS 1.3) · `sha2` ·
@@ -228,6 +250,33 @@ before fixing. **Fix:** both `accept_consensus` and `verify_consensus` reject a 
 threshold outright; trust decisions fail closed. A property now asserts it for arbitrary
 signature sets.
 
+### F18 — HIGH (fixed): `build_is_blessed` had the *same* zero-threshold fail-open as F8
+
+**Found while preparing this document for external review**, by checking whether every
+threshold comparison in the crate carried the F8 guard rather than trusting that the fix had
+been applied wherever it applied. It had not: `build_is_blessed`
+(`crates/gyre-directory/src/lib.rs`) still computed `distinct_valid_signers(...) >= threshold`
+with no guard — in the *same file*, 99 lines below the F8 fix.
+
+Verified by probe before fixing, not inferred:
+
+```text
+build_is_blessed(unknown hash, NO sigs, NO rebuilders, threshold=0) = true
+```
+
+So an unsigned, unknown build hash was reported as **blessed**. Build attestation is the
+weaker of the two trust mechanisms to begin with — it proves `binary == source`, never what
+a relay is actually running — and a fail-open version of it is worth less than nothing: it
+reports agreement no rebuilder ever expressed.
+
+**Fix:** the same fail-closed guard, plus a regression test with a negative control (a
+genuinely signed hash must still bless at threshold 1, so the test cannot pass by the
+function simply refusing everything).
+
+> **The lesson is the finding.** F8 was recorded as fixed and this document said so. One
+> instance was fixed; the *class* was not swept. When a fail-open is found, grep for every
+> comparison of the same shape before calling it closed.
+
 ### F2 — MEDIUM (fixed): secrets were not zeroized
 
 `Blinding.blind` (the scalar whose secrecy *is* unlinkability) and `Issuer.key` were left in
@@ -377,7 +426,7 @@ None of these are cryptographic defects and none would be fixed by an audit of t
   attack; the token cannot address it.
 - **Endpoint compromise.** A client whose device is compromised is deanonymised regardless.
 - **The rest of the fabric.** Sphinx, mixing, MTD, PoW, PIR, and the directory are
-  integrations of audited crates, covered by [`DESIGN.md`](DESIGN.md) and
+  integrations of upstream crates, covered by [`DESIGN.md`](DESIGN.md) and
   [`../SECURITY.md`](../SECURITY.md).
 
 ---

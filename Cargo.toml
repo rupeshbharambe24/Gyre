@@ -36,7 +36,12 @@ authors = ["rupeshbharambe24 <rupeshbharambe2004@gmail.com>"]
 sphinx-packet = "0.7.0"
 x25519-dalek = { version = "3.0.0", features = ["static_secrets", "getrandom"] }
 curve25519-dalek = "5"
-# RFC 9497 VOPRF — an audited implementation, replacing the hand-rolled construction.
+# RFC 9497 VOPRF, replacing the hand-rolled construction. NOT audited — see below.
+# The crate has no published third-party cryptographic audit. NCC Group's 2021 review
+# covered `opaque-ke` v0.5.0, which did not depend on this crate (it did not yet exist),
+# and that review found real bugs in the inline OPRF code this crate was later extracted
+# from. D11 still favours it over hand-rolling — a widely-used RFC 9497 implementation by
+# a competent team beats our own construction — but 'audited' was never true of it.
 # `ristretto255-ciphersuite` gives the RFC's ristretto255-SHA512 suite. NOTE: this crate
 # pins sha2 0.10 / curve25519-dalek 4 internally, so those appear alongside the workspace's
 # newer versions. That duplication is the price of not rolling our own crypto (D11).

@@ -8,7 +8,7 @@
 //! implementation are now incompatible, and that must be a deliberate, versioned decision.
 //!
 //! **These values changed once already**, when the hand-rolled construction was replaced
-//! with the audited [`voprf`] crate's RFC 9497 implementation. That was intentional — the
+//! with the [`voprf`] crate's RFC 9497 implementation. That was intentional — the
 //! old encoding was never deployed — and the vectors below pin the RFC-conformant one.
 
 use gyre_shield::token::{blind, unblind, Issuer, Token, OUTPUT_LEN, SEED_LEN};

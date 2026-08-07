@@ -148,7 +148,8 @@ inbound address**.
   in one hash. It re-prices attacker asymmetry but does nothing for L3/L4
   volumetric floods.
 - **Unlinkable capability tokens** — **RFC 9497 VOPRF** (`ristretto255-SHA512`) via the
-  audited [`voprf`](https://crates.io/crates/voprf) crate: a client that paid once redeems
+  [`voprf`](https://crates.io/crates/voprf) crate (unaudited — see
+  [`SECURITY.md`](SECURITY.md)): a client that paid once redeems
   a token to skip the PoW, and the issuer — which only ever saw a random *blinded* point —
   cannot link redemption to issuance. Single-use; double-spend rejected. The issuer must
   attach a **DLEQ proof** that it used its published key, and the client pins that key from

@@ -15,9 +15,11 @@ honest** rather than reassuring. Read the caution below before anything else.
 >
 > - No third party has audited this code, its protocols, or its assumptions.
 >   Every property here is self-measured by the project's own harness.
-> - The capability token's **construction** is now the audited `voprf` crate's RFC 9497
->   implementation, but the **integration around it** — key provenance, single-use,
->   rotation — is Gyre's own code and has had no cryptographic review. It replaced a
+> - The capability token's **construction** is now the `voprf` crate's RFC 9497
+>   implementation. **That crate has no published audit either** — see the note below;
+>   earlier versions of this document called it "audited", which was wrong. The
+>   **integration around it** — key provenance, single-use, rotation — is Gyre's own
+>   code and has had no cryptographic review. It replaced a
 >   hand-rolled version whose unlinkability was found to be **entirely broken**; see
 >   [`docs/AUDIT.md`](docs/AUDIT.md).
 > - If your safety, freedom, or a production system depends on the outcome, use a
@@ -182,9 +184,23 @@ anti-overclaim rule the project treats as law.
   threshold-signed directory download is already leak-free and cheaper. When PIR
   *is* used, its guarantee collapses entirely the moment the two servers collude
   (Decision D18).
-- **The capability token is no longer our own cryptography — but the integration is still
-  unreviewed.** The construction is now the audited [`voprf`](https://crates.io/crates/voprf)
-  crate's RFC 9497 implementation. Getting there was not voluntary: a self-review found the
+- **The capability token is no longer our own cryptography — but nothing in this path is
+  audited.** The construction is now the [`voprf`](https://crates.io/crates/voprf) crate's
+  RFC 9497 implementation.
+  > **Correction (2026-08-07).** This document previously described `voprf` as "audited".
+  > That was not substantiated and has been removed everywhere. There is no published
+  > third-party cryptographic audit of the crate. The nearest thing is NCC Group's
+  > [2021 review of `opaque-ke`](https://www.nccgroup.com/research/public-report-whatsapp-opaque-ke-cryptographic-implementation-review/), which covered `opaque-ke` v0.5.0 — a version
+  > that did **not** depend on `voprf` (the crate was first published two months after the
+  > fieldwork). `voprf` was later extracted from `opaque-ke`'s inline OPRF code, and that
+  > review found real bugs in exactly that code, which was then rewritten against
+  > successive drafts up to RFC 9497 and never re-reviewed. Code lineage is not audit
+  > coverage. We depend on `voprf` 0.5 (the latest *stable*; 0.6.0-pre.1 is a pre-release).
+  >
+  > Using it is still the right call under **D11** — a widely-used RFC 9497 implementation
+  > by a competent team beats a construction of ours, and the hand-rolled version it
+  > replaced was *broken*. But the word "audited" was doing work it had not earned, in a
+  > project whose entire value is not overclaiming. Getting there was not voluntary: a self-review found the
   previous hand-rolled version was labelled "verifiable" while carrying **no DLEQ proof**,
   which broke unlinkability outright — a malicious issuer could tag every client with a
   per-client key and link every redemption (reproduced: 5 of 5). That is exactly the class

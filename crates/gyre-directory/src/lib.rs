@@ -214,12 +214,22 @@ pub fn detect_equivocation(
 
 /// A relay build hash is "blessed" only when at least `threshold` independent rebuilders
 /// each signed the same hash.
+///
+/// Like [`accept_consensus`], this **fails closed on a zero threshold**. Without the guard
+/// the comparison is `count >= 0`, which is true for the empty signature set — so an
+/// unknown hash nobody signed would be reported as blessed. Attestation is the weaker of
+/// the two trust mechanisms anyway (it proves `binary == source`, never what a relay is
+/// actually running), and a fail-open version of it is worth strictly less than nothing:
+/// it would report agreement that no rebuilder ever expressed.
 pub fn build_is_blessed(
     hash: &[u8; 32],
     sigs: &[(usize, Signature)],
     rebuilders: &[VerifyingKey],
     threshold: usize,
 ) -> bool {
+    if threshold == 0 {
+        return false;
+    }
     distinct_valid_signers(hash, sigs, rebuilders) >= threshold
 }
 
