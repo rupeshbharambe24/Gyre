@@ -137,9 +137,19 @@ inbound address**.
 
 - **Rendezvous origin-hiding** — the origin dials *out* to a rendezvous relay and
   waits behind a shared cookie; the relay splices it to a client presenting the
-  same cookie, copying opaque bytes between them. The relay learns neither
-  endpoint nor the end-to-end-encrypted content — a trust topology a reverse-proxy
-  CDN structurally cannot offer.
+  same cookie, copying opaque bytes between them. The relay never learns the
+  origin's location, because the origin never accepts an inbound connection. That
+  part is real over real sockets.
+  > **What is not true yet.** This previously read "the relay learns neither endpoint
+  > nor the end-to-end-encrypted content." **The splice carries plaintext today** —
+  > `copy_bidirectional` copies whatever arrives, so the relay operator sees
+  > everything. An end-to-end tunnel terminating only at the origin is the endpoints'
+  > responsibility and is **not implemented**. The relay-blindness argument also only
+  > pays off on a *multi-tenant* relay pool: an operator running their own rendezvous
+  > relay already knows both ends. Two further gaps: the cookie is an unauthenticated
+  > bearer secret and whoever arrives second is spliced to whoever parked, so anyone
+  > who learns a cookie can race the client and take the origin's session; and the
+  > parking map is unbounded with no TTL or cap.
 - **Moving-target-defense (MTD) address hopping** — the public ingress is
   `HMAC(key, time_window)`, so an authorized client and the origin agree on it
   while a scanner cannot pre-target it. Honest ceiling (**D22**): MTD serves a
@@ -243,7 +253,11 @@ Fifteen crates, 171 tests, all green.
 | `gyre-crowd` | P4: k-anonymity admission governor + staking Sybil-pricing model | 8 |
 | `gyre-sim` | Simulation harness: real code over a modelled network + an **optimal** correlation attacker | 19 |
 | `gyre-cli` | Standalone `gyre-relay` / `gyre-client` / `gyre-sink` binaries — real processes on real sockets | 4 |
-| **Total** | | **55** |
+| **Total (unit tests in this table)** | | **140** |
+
+> The workspace total is **172** passing tests — this column counts only the unit tests
+> per crate, and excludes integration suites, property tests and doc-tests. Verify with
+> `cargo test --workspace`.
 
 ---
 
