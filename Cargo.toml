@@ -31,7 +31,7 @@ repository = "https://github.com/rupeshbharambe24/Gyre"
 authors = ["rupeshbharambe24 <rupeshbharambe2004@gmail.com>"]
 
 [workspace.dependencies]
-# The audited Nym Sphinx mix-packet format. We do NOT roll our own onion
+# Nym's Sphinx mix-packet format. We do NOT roll our own onion
 # construction (design decision D11).
 sphinx-packet = "0.7.0"
 x25519-dalek = { version = "3.0.0", features = ["static_secrets", "getrandom"] }

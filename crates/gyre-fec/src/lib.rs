@@ -15,7 +15,7 @@
 //! points. What this buys is real but narrow: it raises how many paths an adversary
 //! must own, at the cost of the trilemma's bandwidth axis.
 //!
-//! The Reed–Solomon coding itself is the audited [`reed_solomon_erasure`] crate
+//! The Reed–Solomon coding itself is the [`reed_solomon_erasure`] crate
 //! (D11 — never roll your own crypto/coding).
 
 use reed_solomon_erasure::galois_8::ReedSolomon;

@@ -7,7 +7,7 @@
 //!
 //! We do **not** implement the Sphinx construction ourselves — that would violate
 //! design decision **D11** (never roll your own crypto). All the cryptography lives
-//! in the audited [`sphinx_packet`] crate (Nym's implementation of the Sphinx paper,
+//! in the [`sphinx_packet`] crate (Nym's implementation of the Sphinx paper,
 //! Danezis–Goldberg). This crate only adds an ergonomic, well-typed wrapper.
 //!
 //! Per-hop Poisson mixing delays (S2) are supported here via [`wrap_with_delays`]

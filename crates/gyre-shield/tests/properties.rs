@@ -54,16 +54,27 @@ proptest! {
 
     /// **Admission must never fail open.** For *every* `f64` — including infinities and
     /// `NaN`, which a ratio-based load estimator can genuinely produce (`0.0 / 0.0` from a
-    /// reset counter) — the difficulty stays within the designed band and never drops
-    /// below the base cost. A regression here would silently mean "no proof-of-work
-    /// required" exactly when the load estimator is broken.
+    /// reset counter) — the difficulty stays within the designed band.
+    ///
+    /// F20: this band check alone is a **weak** property. It passes for any in-range
+    /// constant, so it cannot tell "fails closed" from "fails to the cheapest price in the
+    /// band" — which is exactly the bug it was believed to be guarding. The band assertion
+    /// is kept because it is still a real invariant, and the discriminating assertion lives
+    /// beside it.
     #[test]
-    fn difficulty_never_falls_below_the_base_cost_for_any_load(load in any_load()) {
+    fn difficulty_stays_in_band_and_prices_the_unmeasurable_as_worst_case(load in any_load()) {
+        let d = difficulty_for_load(load);
         prop_assert!(
-            (8..=20).contains(&difficulty_for_load(load)),
-            "load {load} produced an out-of-band difficulty {}",
-            difficulty_for_load(load)
+            (8..=20).contains(&d),
+            "load {load} produced an out-of-band difficulty {d}"
         );
+        if !load.is_finite() {
+            prop_assert_eq!(
+                d,
+                difficulty_for_load(1.0),
+                "a non-finite load must cost the MAXIMUM, not merely stay in band"
+            );
+        }
     }
 
     /// The difficulty metric can never exceed the bit length of what it measures.

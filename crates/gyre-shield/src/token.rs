@@ -17,7 +17,7 @@
 //! proof** — the base OPRF mode. That let a malicious issuer give each client its own key
 //! and, at redemption, try every key to see which verified: a **key-partitioning**
 //! deanonymisation that linked *every* redemption in a proof-of-concept. Rather than keep
-//! maintaining a bespoke construction, the whole thing now delegates to an audited
+//! maintaining a bespoke construction, the whole thing now delegates to an upstream
 //! implementation of the standard — which is what design decision **D11** asked for in the
 //! first place.
 //!

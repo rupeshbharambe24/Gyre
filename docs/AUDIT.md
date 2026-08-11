@@ -286,6 +286,40 @@ function simply refusing everything).
 > instance was fixed; the *class* was not swept. When a fail-open is found, grep for every
 > comparison of the same shape before calling it closed.
 
+### F20 — MEDIUM (fixed): "fails closed" actually failed to the *cheapest* price
+
+`difficulty_for_load` maps a load ratio onto 8..20 PoW bits. The original bug was that a
+`NaN` load (`0.0/0.0` from a reset counter) saturated to a **zero-bit puzzle — free
+admission**. The fix mapped non-finite loads to `0.0` and was documented as *"fails closed"*.
+
+It does not. `0.0` yields `BASE_BITS` = 8, the **cheapest price the gate can charge**, and
+the estimator's most likely reason for breaking is that the box is being flooded. So free
+admission under a broken sampler was replaced by *cheapest* admission under a broken sampler
+— quieter, same direction.
+
+**Fix:** an unmeasurable load is now priced as **full** load. The tradeoff is deliberate and
+documented in the code: during an estimator outage with no attack, legitimate clients pay the
+maximum, which is a latency cost. The alternative costs admission control exactly when it is
+most likely to be needed.
+
+> **The test is the more useful finding.** The property guarding this asserted only
+> `difficulty ∈ [8,20]` — which **passes for any in-range constant**, and therefore could not
+> distinguish "fails closed" from "fails to base". It was a band check wearing a security
+> property's name. Both tests now assert the discriminating condition, and both were
+> confirmed to **fail** when the fix is reverted before being accepted.
+
+### F21 — INFORMATIONAL (corrected): the PoW asymmetry headline was wrong by 3 orders of magnitude
+
+`BENCHMARKS.md` headlined **~230,000×**, computed as one 3.52 ms solve sample over the 15.0 ns
+verify. Expected work at 16 bits is 2¹⁶ ≈ 65,536 hashes (≈0.98 ms), so the quoted sample ran
+**3.6× over the mean** — and the file's own note already said single samples are not means.
+Worse, `difficulty_for_load` floors at **8 bits**, so the asymmetry actually charged at rest
+is **256×**. Now quoted as `2^bits`, with the bits named.
+
+Also now stated where it belongs: the puzzle is **SHA-256**, the most ASIC/GPU-friendly
+choice available. Tor's deployed onion-service PoW (proposal 327) chose Equi-X + Blake2b
+specifically to reject this design. No memory-hard alternative has been evaluated.
+
 ### F2 — MEDIUM (fixed): secrets were not zeroized
 
 `Blinding.blind` (the scalar whose secrecy *is* unlinkability) and `Issuer.key` were left in

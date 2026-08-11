@@ -21,7 +21,7 @@
 //! for compactness. All of this is control-plane hardening: **zero** effect on the
 //! anonymity trilemma or a global observer.
 //!
-//! Signatures are the audited [`ed25519_dalek`] crate (D11).
+//! Signatures are the [`ed25519_dalek`] crate (D11).
 
 use std::collections::HashSet;
 

@@ -74,7 +74,7 @@ honest ceiling inline, wherever one applies.
 
 **P0 — Outbound data plane (protect a person)**
 
-- **S0 — Sphinx onion echo.** `gyre-sphinx`, a typed wrapper over the audited
+- **S0 — Sphinx onion echo.** `gyre-sphinx`, a typed wrapper over the
   `sphinx-packet` mix-packet format, with end-to-end onion encrypt/echo. Shared
   constants and types land in `gyre-common` (`FlowClass`, `DEFAULT_HOPS = 3`).
 - **S1 — Networked relays.** `gyre-net` async transport, directory, and relay
@@ -272,16 +272,16 @@ a matrix, not a stack — D10). Shipped in landing order 1, 2, 4, 6, 5; Addition
   steganography — with results and honest caveats in [`BENCHMARKS.md`](BENCHMARKS.md).
   These measure the primitives in isolation, **not** end-to-end anonymity or latency.
   Run with `cargo bench -p gyre-benches`.
-- **Integration hygiene (D11).** Cryptography and transport are built on audited,
+- **Integration hygiene (D11).** Cryptography and transport are built on established,
   known-good crates (`sphinx-packet`, `x25519-dalek`, `curve25519-dalek`,
   `ed25519-dalek`, `reed-solomon-erasure`, `hmac`, `sha2`, `zeroize`, `tokio`)
   rather than rolled from scratch. The VOPRF token construction is the one
-  exception — hand-built on those audited `curve25519-dalek` primitives — and it is
+  exception — hand-built on those `curve25519-dalek` primitives — and it is
   flagged as an unaudited prototype above.
 
 ### Changed
 
-- **The capability token now uses an audited RFC 9497 implementation instead of our own.**
+- **The capability token now uses an upstream RFC 9497 implementation instead of our own.**
   `gyre-shield::token` delegates the construction to the
   [`voprf`](https://crates.io/crates/voprf) crate (`ristretto255-SHA512`, the library behind
   OPAQUE). Gyre keeps only what is *policy* rather than cryptography: where the issuer's

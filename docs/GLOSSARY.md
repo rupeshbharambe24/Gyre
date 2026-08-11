@@ -295,8 +295,8 @@ flowchart TB
   is the same size and is unlinkable from hop to hop, so a relay can't tell packets
   apart or link an incoming packet to an outgoing one. It is the well-studied
   building block onion routing rides on.
-  - _In Gyre:_ `gyre-sphinx` is a **typed wrapper over the audited
-    `sphinx-packet` crate** (Nym's audited implementation) — deliberately *not*
+  - _In Gyre:_ `gyre-sphinx` is a **typed wrapper over the
+    `sphinx-packet` crate** (Nym's implementation) — deliberately *not*
     rolled from scratch (decision **D11**).
 
 - **Staking / Sybil pricing** — Requiring operators to lock up a scarce resource

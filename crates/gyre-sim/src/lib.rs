@@ -7,7 +7,7 @@
 //! This crate closes both gaps:
 //!
 //! 1. **It drives the real protocol code.** Every packet is a real Sphinx onion built by
-//!    `gyre-sphinx` over the audited `sphinx-packet` crate, carrying a real Loopix delay
+//!    `gyre-sphinx` over the `sphinx-packet` crate, carrying a real Loopix delay
 //!    schedule, peeled hop by hop with real X25519 keys. The timing an attacker sees is
 //!    the timing the implementation actually produces — not a model of it.
 //!

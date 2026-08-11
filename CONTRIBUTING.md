@@ -53,12 +53,14 @@ in a healthy crowd. That number is the point, not the prose around it.
 
 ### 2. Never roll your own crypto or transport
 
-**Integrate audited crates; do not reinvent primitives** (design decision **D11**).
+**Integrate established crates; do not reinvent primitives** (design decision **D11**).
+Note "established", not "audited" — no crate in the cryptographic path is audited at the
+version we use. See the provenance note in [`SECURITY.md`](SECURITY.md).
 Gyre is an *integration*, not a from-scratch cryptosystem. We build on top of:
 
 | Concern | Crate we integrate |
 | --- | --- |
-| Sphinx mix-packet format | `sphinx-packet` 0.7.0 (Nym-audited) |
+| Sphinx mix-packet format | `sphinx-packet` 0.7.0 (Nym; see audit provenance in `SECURITY.md`) |
 | X25519 / Curve25519 | `x25519-dalek` 3.0, `curve25519-dalek` 5 |
 | Ed25519 signatures | `ed25519-dalek` 3 |
 | Erasure coding | `reed-solomon-erasure` 6 |
@@ -97,7 +99,7 @@ Fifteen crates, **one crate per orthogonal concern**, 171 tests, all green.
 | Crate | Purpose | Tests |
 | --- | --- | :---: |
 | `gyre-common` | shared constants & types (`FlowClass`, `DEFAULT_HOPS = 3`) | 3 |
-| `gyre-sphinx` | typed wrapper over the audited Sphinx mix-packet format | 11 |
+| `gyre-sphinx` | typed wrapper over the `sphinx-packet` mix-packet format | 11 |
 | `gyre-fec` | Reed-Solomon erasure coding: fragment a message, reassemble any *m* | 9 |
 | `gyre-net` | async transport (TCP + QUIC), directory, relay server, mixing, cover traffic | 14 |
 | `gyre-node` | demo binary: spin up a testnet + integration tests (lanes, multipath) | 2 |
@@ -360,7 +362,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-# Pull audited crates from [workspace.dependencies] — never a fresh primitive (D11).
+# Pull established crates from [workspace.dependencies] — never a fresh primitive (D11).
 ```
 
 > [!NOTE]

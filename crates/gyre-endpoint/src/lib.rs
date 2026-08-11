@@ -14,7 +14,7 @@
 //! distinguishable when there are only a few of them. The real payoff is cross-context
 //! unlinkability and feeding the crowd — not endpoint invincibility.
 //!
-//! Crypto is the audited [`hmac`]/[`sha2`] crates; key material is wiped with [`zeroize`].
+//! Crypto is the [`hmac`]/[`sha2`] crates; key material is wiped with [`zeroize`].
 
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;

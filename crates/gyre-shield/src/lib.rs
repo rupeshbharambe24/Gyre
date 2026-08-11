@@ -20,7 +20,7 @@
 //! volumetric floods that saturate a link before any puzzle is evaluated. The win here
 //! is a trust-topology and targeting win for authenticated tunnels, not raw capacity.
 //!
-//! The cryptography is the audited [`hmac`] + [`sha2`] crates (D11).
+//! The cryptography is the [`hmac`] + [`sha2`] crates (D11).
 
 use std::time::Duration;
 
@@ -154,17 +154,30 @@ impl Puzzle {
 /// under flood). A normal client always pays the base cost; attackers pay far more
 /// as they drive the load up.
 ///
-/// **Fails closed on a bad estimate.** A load figure is typically a ratio (`active /
-/// capacity`), so it can legitimately arrive as `NaN` — `0.0 / 0.0` from a reset counter
-/// or a stalled sampler. `f64::clamp` propagates `NaN`, and `NaN as u32` saturates to
-/// `0`, which would mean *no proof-of-work at all* precisely when the load estimator is
-/// broken. An admission gate must never fail open, so a non-finite load is treated as
-/// "unknown" and charged the base cost. The result is always in `[BASE, BASE + MAX_EXTRA]`
-/// for **every** `f64` input.
+/// **Fails closed on a bad estimate — charging the MAXIMUM, not the base.** A load figure
+/// is typically a ratio (`active / capacity`), so it can legitimately arrive as `NaN` —
+/// `0.0 / 0.0` from a reset counter or a stalled sampler. `f64::clamp` propagates `NaN`,
+/// and `NaN as u32` saturates to `0`, which would mean *no proof-of-work at all* precisely
+/// when the estimator is broken.
+///
+/// F20. The first fix mapped a non-finite load to `0.0`, i.e. `BASE_BITS` — and was
+/// documented as "fails closed". It does not: `BASE` is the **cheapest** price the gate can
+/// charge, and the estimator's most likely reason for breaking is that the box is being
+/// flooded. So the original bug (free admission under a broken sampler) was replaced by a
+/// quieter version of itself (cheapest admission under a broken sampler). Failing closed
+/// means assuming the worst about what you cannot measure, so an unknown load is now priced
+/// as **full** load.
+///
+/// The tradeoff is real and is chosen deliberately: during an estimator outage with no
+/// attack, legitimate clients pay the maximum. That is a latency cost. The alternative
+/// costs admission control at the exact moment it is most likely to be needed.
+///
+/// The result is always in `[BASE, BASE + MAX_EXTRA]` for **every** `f64` input.
 pub fn difficulty_for_load(load: f64) -> u32 {
     const BASE_BITS: f64 = 8.0;
     const MAX_EXTRA_BITS: f64 = 12.0;
-    let load = if load.is_nan() { 0.0 } else { load };
+    // NOT `0.0` — see F20 above. An unmeasurable load is priced as the worst case.
+    let load = if load.is_finite() { load } else { 1.0 };
     (BASE_BITS + load.clamp(0.0, 1.0) * MAX_EXTRA_BITS) as u32
 }
 
@@ -236,22 +249,31 @@ mod tests {
         assert_eq!(difficulty_for_load(-5.0), difficulty_for_load(0.0)); // clamped
     }
 
-    /// Regression: admission must **fail closed** on a broken load estimate.
+    /// Regression: admission must **fail closed** on a broken load estimate — and "closed"
+    /// means the MAXIMUM price, not the base one (F20).
     ///
     /// A load figure is usually a ratio, so `0.0 / 0.0` (reset counter, stalled sampler)
     /// yields `NaN`. `f64::clamp` propagates `NaN` and `NaN as u32` saturates to `0` — so
-    /// without an explicit guard this returned a **zero-bit puzzle, i.e. free admission**,
-    /// precisely when the estimator was broken. Non-finite loads must charge the base cost.
+    /// without a guard this returned a **zero-bit puzzle, i.e. free admission**. The first
+    /// fix charged the *base* cost and called that fail-closed; it is not, because base is
+    /// the cheapest price available and a sampler most plausibly breaks *because* the box is
+    /// under load. An unmeasurable load must cost the most, not the least.
     #[test]
-    fn a_non_finite_load_never_disables_proof_of_work() {
+    fn a_non_finite_load_is_priced_as_full_load_not_base() {
         let base = difficulty_for_load(0.0);
-        assert_eq!(
-            difficulty_for_load(f64::NAN),
-            base,
-            "NaN must not disable PoW"
+        let max = difficulty_for_load(1.0);
+        assert!(
+            max > base,
+            "the band must be non-degenerate for this test to mean anything"
         );
-        assert_eq!(difficulty_for_load(f64::NEG_INFINITY), base);
-        assert_eq!(difficulty_for_load(f64::INFINITY), difficulty_for_load(1.0));
+        for load in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                difficulty_for_load(load),
+                max,
+                "an unmeasurable load ({load}) must be priced as FULL load, not base — \
+                 charging base is the cheapest admission at the moment it is least safe"
+            );
+        }
         for load in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
             assert!((8..=20).contains(&difficulty_for_load(load)));
         }

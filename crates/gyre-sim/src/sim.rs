@@ -4,7 +4,7 @@
 //!
 //! | Real (the actual shipped code) | Modelled (simulated) |
 //! |---|---|
-//! | Sphinx onion construction and per-hop processing (`gyre-sphinx`, on the audited `sphinx-packet` crate) | Link latency and jitter |
+//! | Sphinx onion construction and per-hop processing (`gyre-sphinx`, on the `sphinx-packet` crate) | Link latency and jitter |
 //! | The per-hop Poisson delay schedule, sampled by the real Loopix sampler and sealed inside each onion | Relay selection, flow start times, packet pacing (seeded) |
 //! | Real X25519 relay keys; each hop peels exactly one real layer | No queueing, bandwidth limits, or loss |
 //! | Real packet sizes on the wire | Observer placement |

@@ -213,7 +213,7 @@ Rust; **Sphinx** (`sphinx-packet`) + **Noise**/**WireGuard** + **QUIC/MASQUE**;
 Hardening uses obfs4/uTLS/Snowflake, libsignal, Privacy-Pass/RLN, threshold-BLS +
 reproducible builds, and PIR only where it earns its cost. Testing uses Shadow,
 container/netns devnets, and a custom adversary-emulation harness. We integrate
-audited, known-good crates and do not build crypto or transport from scratch
+established, known-good crates and do not build crypto or transport from scratch
 ([D11](#appendix-a--decisions-log-d1-d22)).
 
 > [!NOTE]

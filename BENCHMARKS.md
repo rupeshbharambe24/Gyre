@@ -95,17 +95,42 @@ SHA-256 leading-zero-bit puzzle. The design point is the **asymmetry**: the clie
 
 | Operation | Time |
 |---|---:|
-| `solve` @ 16 bits (client) | 3.52 ms |
+| `solve` @ 16 bits (client), one sample | 3.52 ms |
 | `verify` (server, one hash) | 15.0 ns |
-| **asymmetry @ 16 bits** | **~230,000×** |
+| **expected asymmetry @ 16 bits** | **2¹⁶ ≈ 65,500×** |
+| **expected asymmetry at the idle default (8 bits)** | **2⁸ = 256×** |
+
+> [!WARNING]
+> **Correction (2026-08-11): this table previously headlined "~230,000×", which was wrong
+> twice over.** The figure was `3.52 ms / 15.0 ns` — a ratio of *one solve sample* to the
+> verify time. Two problems:
+>
+> 1. **It is not the expected cost.** Finding a nonce with 16 leading zero bits takes 2¹⁶ ≈
+>    65,536 hashes in expectation, so at 15 ns/hash the *expected* solve is ≈0.98 ms. The
+>    3.52 ms sample ran **3.6× over the mean** — the note below already said single samples
+>    are not means, and the headline quoted one anyway.
+> 2. **It is not the difficulty the gate charges.** `difficulty_for_load` floors at **8
+>    bits**, so a client arriving at an idle service pays ≈256 hashes, not 65,536. The
+>    asymmetry an attacker actually meets at rest is **256×**, three orders of magnitude
+>    below the retracted headline.
+>
+> The defensible statement is the *shape*, and it is still a good shape: verify is a fixed
+> single hash while solve grows exponentially in the difficulty bits, so raising difficulty
+> costs the server nothing and the attacker everything. Quote **2^bits**, and say which bits.
 
 > [!NOTE]
 > `solve` is **probabilistic and challenge-dependent** — it brute-forces the first
-> qualifying nonce, so any single challenge's solve time is a sample, not the mean. The
-> honest reading is the *shape*: `verify` is a fixed single hash while `solve` cost grows
-> exponentially with the difficulty bits (`difficulty_for_load` raises the bits under
-> flood). Low-difficulty single-challenge samples (8/12-bit ≈ 10 µs here) are not
-> representative of average-case work and are omitted for that reason.
+> qualifying nonce, so any single challenge's solve time is a sample, not the mean.
+> Low-difficulty single-challenge samples (8/12-bit ≈ 10 µs here) are not representative of
+> average-case work and are omitted for that reason.
+
+> [!IMPORTANT]
+> **The puzzle is SHA-256, which is the most ASIC- and GPU-friendly choice available.** Tor's
+> deployed onion-service PoW (proposal 327) chose Equi-X + Blake2b specifically to reject
+> this design, because a hashcash puzzle prices out a laptop far more effectively than it
+> prices out an attacker with commodity GPUs. A memory-hard alternative has **not** been
+> evaluated here. Treat the asymmetry above as an upper bound against a *CPU-bound*
+> attacker only.
 
 ### Hardening primitives
 
