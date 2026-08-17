@@ -94,12 +94,39 @@ where
     }
 }
 
+/// An LSB-steganography transport: embeds the payload in the low bits of a **generated**
+/// cover, so the mechanism runs over a real socket. It implements [`Obfuscator`] so it plugs
+/// into the same framing path as the other transports.
+///
+/// > **Honest ceiling — this is a *mechanism* demonstration, not deniability.** Real
+/// > deniability needs an *innocuous real cover* (a photo, audio) that the fabric does not
+/// > carry; the synthetic cover here is not innocuous, and LSB steganography is detectable by
+/// > standard steganalysis. It also expands the payload **~8×** on the wire (one secret bit
+/// > per cover byte). So this covers the *plumbing*, not the *Existence* dimension's goal.
+struct StegoTransport;
+
+impl Obfuscator for StegoTransport {
+    fn obfuscate(&self, inner: &[u8]) -> Vec<u8> {
+        // A cover exactly large enough: the 32-bit length header plus one byte per secret bit.
+        let cover_len = gyre_stego::LENGTH_HEADER_BITS + inner.len() * 8;
+        let cover = vec![0x80u8; cover_len];
+        gyre_stego::embed(&cover, inner).expect("cover sized from fits() precondition")
+    }
+    fn deobfuscate(&self, wire: &[u8]) -> gyre_obfs::Result<Vec<u8>> {
+        gyre_stego::extract(wire).map_err(|_| gyre_obfs::Error::Malformed)
+    }
+    fn name(&self) -> &'static str {
+        "stego-lsb"
+    }
+}
+
 /// Select a pluggable transport (obfuscator) by name, keyed from the shared `cookie` so both
 /// ends agree on the disguise without a separate key exchange.
 ///
 /// Honest ceiling: this reshapes what the *payload* looks like on the wire — appearance only,
 /// with **zero** effect on anonymity. "Unblockable" is impossible; obfuscation buys "more
-/// expensive to block today", and uniform-random output is itself a DPI fingerprint.
+/// expensive to block today", and uniform-random output is itself a DPI fingerprint. The
+/// `stego` option is a mechanism demo only — see [`StegoTransport`].
 pub fn obfuscator(name: &str, cookie: &[u8]) -> Result<Box<dyn Obfuscator>, String> {
     match name {
         "identity" | "none" => Ok(Box::new(Identity)),
@@ -108,8 +135,9 @@ pub fn obfuscator(name: &str, cookie: &[u8]) -> Result<Box<dyn Obfuscator>, Stri
             Ok(Box::new(Polymorphic::new(key)))
         }
         "tls" | "tls-mimic" => Ok(Box::new(TlsMimic)),
+        "stego" | "stego-lsb" => Ok(Box::new(StegoTransport)),
         other => Err(format!(
-            "unknown --obfs {other:?} (expected identity | polymorphic | tls)"
+            "unknown --obfs {other:?} (expected identity | polymorphic | tls | stego)"
         )),
     }
 }
@@ -174,6 +202,21 @@ mod tests {
         let wire = a.obfuscate(b"hello");
         assert_ne!(wire, b"hello", "the disguise must transform the bytes");
         assert_eq!(b.deobfuscate(&wire).unwrap(), b"hello");
+    }
+
+    #[test]
+    fn stego_transport_embeds_and_recovers_with_the_expected_expansion() {
+        let s = obfuscator("stego", b"cookie").unwrap();
+        assert_eq!(s.name(), "stego-lsb");
+        let payload = b"hidden in the low bits";
+        let wire = s.obfuscate(payload);
+        // Honest cost: ~8x expansion (one secret bit per cover byte) plus a 32-byte header.
+        assert_eq!(
+            wire.len(),
+            gyre_stego::LENGTH_HEADER_BITS + payload.len() * 8,
+            "LSB stego expands the payload ~8x — a real wire cost"
+        );
+        assert_eq!(s.deobfuscate(&wire).unwrap(), payload, "and it round-trips");
     }
 
     #[test]

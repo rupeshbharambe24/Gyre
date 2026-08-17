@@ -764,6 +764,7 @@ dependencies = [
  "gyre-obfs",
  "gyre-shield",
  "gyre-sphinx",
+ "gyre-stego",
  "sha2 0.11.0",
  "tokio",
 ]
