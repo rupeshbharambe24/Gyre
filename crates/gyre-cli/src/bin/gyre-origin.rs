@@ -17,7 +17,7 @@
 use std::net::SocketAddr;
 use std::process::ExitCode;
 
-use gyre_cli::{flag, obfuscator, Session};
+use gyre_cli::{authenticate, flag, obfuscator, rendezvous_id, Session};
 use gyre_net::{read_frame_obfuscated, write_frame_obfuscated};
 use gyre_shield::rendezvous::dial_admitted;
 
@@ -46,12 +46,22 @@ async fn main() -> ExitCode {
         }
     };
 
-    // With --forward-secret, use a compartmentalized, forward-secret session for the payload
-    // instead of a flat transport key. Must match the client's --forward-secret and --context.
+    // --auth: match on the rendezvous ID (not the cookie) and mutually authenticate the peer,
+    // so a party that learned only the relay-visible ID cannot hijack the session.
+    let authenticated = args.iter().any(|a| a == "--auth");
+    // --forward-secret: a compartmentalized, forward-secret session for the payload.
     let forward_secret = args.iter().any(|a| a == "--forward-secret");
     let context = flag(&args, "--context").unwrap_or_else(|| "default".to_string());
 
-    let mode = if forward_secret {
+    let match_key = if authenticated {
+        rendezvous_id(cookie.as_bytes())
+    } else {
+        cookie.as_bytes().to_vec()
+    };
+
+    let mode = if authenticated {
+        "authenticated session".to_string()
+    } else if forward_secret {
         format!("forward-secret session, context {context:?}")
     } else {
         format!("transport {obfs_name}")
@@ -63,7 +73,7 @@ async fn main() -> ExitCode {
     // Serve until killed: park, answer one request, re-park. Each park re-solves the
     // admission puzzle, so an origin costs work to (re)appear just as a client does.
     loop {
-        let mut stream = match dial_admitted(rzv, cookie.as_bytes()).await {
+        let mut stream = match dial_admitted(rzv, &match_key).await {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("gyre-origin: could not park at {rzv}: {e}");
@@ -71,8 +81,20 @@ async fn main() -> ExitCode {
             }
         };
 
-        // A fresh session per park (so keys never repeat across clients).
-        let mut session = forward_secret.then(|| Session::new(cookie.as_bytes(), &context, false));
+        // A fresh session per park (so keys never repeat across clients). With --auth the
+        // session is only established after the peer proves it knows the cookie; a hijacker
+        // who reached us via the rendezvous ID is rejected here and we re-park.
+        let mut session = if authenticated {
+            match authenticate(&mut stream, cookie.as_bytes(), false).await {
+                Ok(s) => Some(s),
+                Err(e) => {
+                    eprintln!("gyre-origin: rejected a peer that failed authentication: {e}");
+                    continue;
+                }
+            }
+        } else {
+            forward_secret.then(|| Session::new(cookie.as_bytes(), &context, false))
+        };
 
         let request = if let Some(s) = session.as_mut() {
             s.recv(&mut stream).await

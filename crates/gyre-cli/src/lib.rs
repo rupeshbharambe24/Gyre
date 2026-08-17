@@ -19,11 +19,28 @@
 use std::net::SocketAddr;
 
 use gyre_endpoint::Ratchet;
-use gyre_net::{read_frame_obfuscated, write_frame_obfuscated};
+use gyre_net::{read_frame, read_frame_obfuscated, write_frame, write_frame_obfuscated};
 use gyre_obfs::{Identity, Obfuscator, Polymorphic, TlsMimic};
 use gyre_sphinx::{Relay, ADDRESS_LEN};
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
+use subtle::ConstantTimeEq;
 use tokio::io::{AsyncRead, AsyncWrite};
+
+/// Keyed HMAC-SHA256 over a sequence of parts.
+fn mac(key: &[u8], parts: &[&[u8]]) -> [u8; 32] {
+    let mut m = Hmac::<Sha256>::new_from_slice(key).expect("HMAC accepts any key length");
+    for part in parts {
+        m.update(part);
+    }
+    m.finalize().into_bytes().into()
+}
+
+fn random32() -> [u8; 32] {
+    let mut b = [0u8; 32];
+    getrandom::fill(&mut b).expect("OS RNG");
+    b
+}
 
 /// Salt for testnet key derivation. Published on purpose: these keys are not secret.
 const TESTNET_SALT: &[u8] = b"gyre-testnet-relay-key/INSECURE-SIMULATION-ONLY";
@@ -160,9 +177,14 @@ impl Session {
         // A compartmentalized per-context persona: two contexts yield unlinkable keys.
         let master: [u8; 32] = Sha256::digest(cookie).into();
         let persona = gyre_endpoint::Identity::new(master).persona(context);
-        let key = persona.key();
-        let c2o = Ratchet::new(subkey(&key, b"gyre-session/client-to-origin"));
-        let o2c = Ratchet::new(subkey(&key, b"gyre-session/origin-to-client"));
+        Self::from_seed(persona.key(), client_side)
+    }
+
+    /// A session from an explicit 32-byte seed (e.g. one produced by the authenticated
+    /// rendezvous handshake). `client_side` selects which direction is outgoing.
+    pub fn from_seed(seed: [u8; 32], client_side: bool) -> Self {
+        let c2o = Ratchet::new(subkey(&seed, b"gyre-session/client-to-origin"));
+        let o2c = Ratchet::new(subkey(&seed, b"gyre-session/origin-to-client"));
         if client_side {
             Self {
                 send: c2o,
@@ -194,6 +216,117 @@ impl Session {
         let key = self.recv.next_message_key();
         read_frame_obfuscated(r, &Polymorphic::new(key)).await
     }
+}
+
+// ---------------------------------------------------------------------------
+// Authenticated rendezvous — close the bearer-cookie session-hijack race.
+// ---------------------------------------------------------------------------
+
+/// The **relay-facing rendezvous ID**: what a client/origin presents to the relay to be
+/// matched, derived from the shared `cookie` by a one-way HMAC.
+///
+/// This is the fix for the bearer-cookie hijack: the relay (and anyone observing it) sees only
+/// this ID, never the cookie. An attacker who learns the ID can still race the splice — but the
+/// mutual [`authenticate`] handshake below then requires proving knowledge of the *cookie*,
+/// which the ID does not reveal, so the hijack fails. (Leaking the cookie itself is
+/// unavoidable — it is the shared secret; this closes the far more realistic leak of the
+/// relay-visible matching value.)
+pub fn rendezvous_id(cookie: &[u8]) -> Vec<u8> {
+    mac(cookie, &[b"gyre/rendezvous-id/v1"]).to_vec()
+}
+
+/// Why an authenticated rendezvous failed.
+#[derive(Debug)]
+pub enum AuthError {
+    /// A transport error during the handshake.
+    Io(gyre_net::Error),
+    /// The peer could not prove it knows the cookie — a hijacker who learned only the
+    /// rendezvous ID, or simply the wrong party.
+    PeerNotAuthenticated,
+    /// The peer closed before completing the handshake, or sent a malformed message.
+    Incomplete,
+}
+
+impl std::fmt::Display for AuthError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AuthError::Io(e) => write!(f, "transport: {e}"),
+            AuthError::PeerNotAuthenticated => {
+                write!(
+                    f,
+                    "peer failed to prove knowledge of the cookie (possible hijack)"
+                )
+            }
+            AuthError::Incomplete => write!(f, "authentication handshake incomplete"),
+        }
+    }
+}
+
+impl From<gyre_net::Error> for AuthError {
+    fn from(e: gyre_net::Error) -> Self {
+        AuthError::Io(e)
+    }
+}
+
+const AUTH_TAG_LEN: usize = 32;
+
+/// Mutually authenticate the spliced peer over `stream`: both sides prove knowledge of
+/// `cookie` by MACing two fresh nonces, and derive a fresh forward-secret [`Session`] on
+/// success. Fails with [`AuthError::PeerNotAuthenticated`] if the peer cannot prove it knows
+/// the cookie — which is exactly what stops a party that learned only the rendezvous ID from
+/// hijacking the session.
+///
+/// The nonces make the session seed fresh per connection, so a recorded handshake reveals no
+/// reusable key.
+pub async fn authenticate<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: &mut S,
+    cookie: &[u8],
+    client_side: bool,
+) -> Result<Session, AuthError> {
+    let my_nonce = random32();
+    let (nonce_c, nonce_o);
+
+    if client_side {
+        // Client speaks first with its nonce, then verifies the origin's tag, then answers.
+        write_frame(stream, &my_nonce).await?;
+        let resp = read_frame(stream).await?.ok_or(AuthError::Incomplete)?;
+        if resp.len() != 32 + AUTH_TAG_LEN {
+            return Err(AuthError::Incomplete);
+        }
+        nonce_c = my_nonce;
+        let mut n = [0u8; 32];
+        n.copy_from_slice(&resp[..32]);
+        nonce_o = n;
+        let tag_o = &resp[32..];
+        let expected_o = mac(cookie, &[b"origin", &nonce_c, &nonce_o]);
+        if expected_o.ct_eq(tag_o).unwrap_u8() != 1 {
+            return Err(AuthError::PeerNotAuthenticated);
+        }
+        let tag_c = mac(cookie, &[b"client", &nonce_c, &nonce_o]);
+        write_frame(stream, &tag_c).await?;
+    } else {
+        // Origin reads the client's nonce, answers with its nonce + tag, then verifies.
+        let cn = read_frame(stream).await?.ok_or(AuthError::Incomplete)?;
+        if cn.len() != 32 {
+            return Err(AuthError::Incomplete);
+        }
+        let mut n = [0u8; 32];
+        n.copy_from_slice(&cn);
+        nonce_c = n;
+        nonce_o = my_nonce;
+        let tag_o = mac(cookie, &[b"origin", &nonce_c, &nonce_o]);
+        let mut resp = nonce_o.to_vec();
+        resp.extend_from_slice(&tag_o);
+        write_frame(stream, &resp).await?;
+        let tag_c = read_frame(stream).await?.ok_or(AuthError::Incomplete)?;
+        let expected_c = mac(cookie, &[b"client", &nonce_c, &nonce_o]);
+        if expected_c.ct_eq(&tag_c).unwrap_u8() != 1 {
+            return Err(AuthError::PeerNotAuthenticated);
+        }
+    }
+
+    let seed = mac(cookie, &[b"session-seed", &nonce_c, &nonce_o]);
+    Ok(Session::from_seed(seed, client_side))
 }
 
 // ---------------------------------------------------------------------------

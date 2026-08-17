@@ -759,6 +759,7 @@ dependencies = [
 name = "gyre-cli"
 version = "0.0.1"
 dependencies = [
+ "getrandom 0.3.4",
  "gyre-common",
  "gyre-endpoint",
  "gyre-net",
@@ -767,7 +768,9 @@ dependencies = [
  "gyre-shield",
  "gyre-sphinx",
  "gyre-stego",
+ "hmac",
  "sha2 0.11.0",
+ "subtle",
  "tokio",
 ]
 

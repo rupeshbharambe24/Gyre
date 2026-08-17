@@ -18,7 +18,7 @@ use std::net::SocketAddr;
 use std::process::ExitCode;
 use std::time::Duration;
 
-use gyre_cli::{flag, flag_or, obfuscator, Session};
+use gyre_cli::{authenticate, flag, flag_or, obfuscator, rendezvous_id, Session};
 use gyre_net::{read_frame, read_frame_obfuscated, write_frame, write_frame_obfuscated};
 use gyre_shield::rendezvous::dial_admitted;
 use tokio::net::TcpStream;
@@ -62,14 +62,55 @@ async fn main() -> ExitCode {
         }
     };
 
+    // With --auth the relay matches on the *rendezvous ID* (a one-way HMAC of the cookie), not
+    // the cookie itself, and the parties then prove knowledge of the cookie end-to-end. So a
+    // party that learned only what the relay sees cannot hijack the session.
+    let authenticated = args.iter().any(|a| a == "--auth");
+    let match_key = if authenticated {
+        rendezvous_id(cookie.as_bytes())
+    } else {
+        cookie.as_bytes().to_vec()
+    };
+
     // Solve the puzzle and reach the origin.
-    let mut stream = match dial_admitted(rzv, cookie.as_bytes()).await {
+    let mut stream = match dial_admitted(rzv, &match_key).await {
         Ok(s) => s,
         Err(e) => {
             eprintln!("gyre-reach: admission failed: {e}");
             return ExitCode::FAILURE;
         }
     };
+
+    if authenticated {
+        let mut session = match authenticate(&mut stream, cookie.as_bytes(), true).await {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("gyre-reach: authentication failed: {e}");
+                return ExitCode::FAILURE;
+            }
+        };
+        if let Err(e) = session.send(&mut stream, message.as_bytes()).await {
+            eprintln!("gyre-reach: send failed: {e}");
+            return ExitCode::FAILURE;
+        }
+        return match session.recv(&mut stream).await {
+            Ok(Some(reply)) => {
+                println!(
+                    "gyre-reach: ADMITTED · authenticated session -> reply {:?}",
+                    String::from_utf8_lossy(&reply)
+                );
+                ExitCode::SUCCESS
+            }
+            Ok(None) => {
+                eprintln!("gyre-reach: origin closed without replying");
+                ExitCode::FAILURE
+            }
+            Err(e) => {
+                eprintln!("gyre-reach: read failed: {e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
 
     // With --forward-secret, the payload runs over a compartmentalized, forward-secret session
     // (a fresh key per message, derived from a per-context persona) instead of one flat

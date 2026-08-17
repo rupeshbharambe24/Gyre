@@ -18,4 +18,7 @@ gyre-stego = { path = "../gyre-stego" }
 gyre-pir = { path = "../gyre-pir" }
 gyre-endpoint = { path = "../gyre-endpoint" }
 sha2.workspace = true
+hmac.workspace = true
+subtle.workspace = true
+getrandom.workspace = true
 tokio.workspace = true
