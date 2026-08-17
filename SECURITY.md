@@ -143,7 +143,9 @@ observer rather than pretend the ceiling does not exist.
 - **L3/L4 volumetric floods.** The inbound rotor's moving-target defense serves an
   **authorized client set** and is a trust-topology mechanism. It provides **no**
   volumetric DDoS scrubbing and cannot match anycast scrubbing capacity. (Decision
-  D22.)
+  D22.) What Gyre *does* do against DoS — remove the origin as a target and price
+  application-layer admission — is laid out layer by layer in [`docs/DOS.md`](docs/DOS.md),
+  along with the mechanisms that are built, needed, and out of scope.
 - **The crowd / adoption problem.** Anonymity *is* the size of the concurrent
   anonymity set. With a small crowd there is little anonymity to provide, and no
   amount of cleverness in the code manufactures a crowd that is not there. This is

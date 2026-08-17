@@ -413,6 +413,7 @@ bearing on anonymity properties.
 | [`docs/GLOSSARY.md`](docs/GLOSSARY.md) | Terms of art: mixnet, Loopix, VOPRF, MTD, anonymity set, and friends |
 | [`docs/SIMULATION.md`](docs/SIMULATION.md) | **End-to-end results**: `gyre-sim` (optimal attacker) **and Shadow** (real binaries, real TCP) — supersedes the GATE numbers |
 | [`docs/AUDIT.md`](docs/AUDIT.md) | **Cryptographic audit package**: spec, security model, RFC deviations, self-review findings, test vectors |
+| [`docs/DOS.md`](docs/DOS.md) | **DoS/DDoS defense plan**: layer-by-layer, what's built vs needed, and the hard volumetric boundary (D22) |
 | [`BENCHMARKS.md`](BENCHMARKS.md) | Reproducible criterion microbenchmarks of the primitives (with honest caveats) |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to build, test, and propose changes |
 | [`SECURITY.md`](SECURITY.md) | How to report a vulnerability (GitHub private advisories) |
