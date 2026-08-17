@@ -94,9 +94,9 @@ pub async fn read_frame<R: AsyncRead + Unpin>(r: &mut R) -> Result<Option<Vec<u8
 /// The outer length prefix is still visible, so this changes what the *payload* looks like,
 /// not that a framed stream exists — a determined censor with traffic analysis is out of scope
 /// (decision on `gyre-obfs`: appearance only, zero effect on the anonymity trilemma).
-pub async fn write_frame_obfuscated<W: AsyncWrite + Unpin>(
+pub async fn write_frame_obfuscated<W: AsyncWrite + Unpin, O: gyre_obfs::Obfuscator + ?Sized>(
     w: &mut W,
-    obfs: &dyn gyre_obfs::Obfuscator,
+    obfs: &O,
     payload: &[u8],
 ) -> Result<()> {
     let wire = obfs.obfuscate(payload);
@@ -106,9 +106,9 @@ pub async fn write_frame_obfuscated<W: AsyncWrite + Unpin>(
 /// Read one obfuscated frame and recover the original payload with `obfs`. Returns
 /// `Ok(None)` on a clean end-of-stream; `Err(Obfuscation(..))` if the bytes do not
 /// de-obfuscate (corrupt, truncated, or the wrong transport).
-pub async fn read_frame_obfuscated<R: AsyncRead + Unpin>(
+pub async fn read_frame_obfuscated<R: AsyncRead + Unpin, O: gyre_obfs::Obfuscator + ?Sized>(
     r: &mut R,
-    obfs: &dyn gyre_obfs::Obfuscator,
+    obfs: &O,
 ) -> Result<Option<Vec<u8>>> {
     match read_frame(r).await? {
         Some(wire) => Ok(Some(obfs.deobfuscate(&wire)?)),

@@ -98,6 +98,40 @@ pub fn flag(args: &[String], name: &str) -> Option<String> {
     args.windows(2).find(|w| w[0] == name).map(|w| w[1].clone())
 }
 
+/// Read **every** value of a repeated `--flag value` argument, in order. Used for a relay pool
+/// (`--rendezvous a --rendezvous b ...`).
+pub fn flags(args: &[String], name: &str) -> Vec<String> {
+    args.windows(2)
+        .filter(|w| w[0] == name)
+        .map(|w| w[1].clone())
+        .collect()
+}
+
+/// A per-relay rendezvous ID for a **pool**: distinct for each relay, so a colluding subset of
+/// relays cannot recognise that they are hosting the same service by a shared cookie. Both the
+/// client and the origin derive it from the shared cookie and the relay's address.
+pub fn rendezvous_id_for(cookie: &[u8], relay: &SocketAddr) -> Vec<u8> {
+    mac(
+        cookie,
+        &[b"gyre/rendezvous-id/pool/v1", relay.to_string().as_bytes()],
+    )
+    .to_vec()
+}
+
+/// A random visiting order over `n` relays: a random first choice, then a fixed rotation. This
+/// spreads clients' first-choice load across the pool while still trying every relay on failover.
+pub fn visiting_order(n: usize) -> Vec<usize> {
+    if n == 0 {
+        return Vec::new();
+    }
+    let start = usize::from_le_bytes({
+        let mut b = [0u8; 8];
+        b[..4].copy_from_slice(&random32()[..4]);
+        b
+    }) % n;
+    (0..n).map(|i| (start + i) % n).collect()
+}
+
 /// Read and parse a typed `--flag value`, or fall back to `default` when the flag is absent.
 ///
 /// A flag that is *present but unparseable* is a configuration error, not a silent fallback —
@@ -406,7 +440,7 @@ async fn pir_query_one(server: SocketAddr, query: &[bool]) -> Result<Vec<u8>, St
 /// with **zero** effect on anonymity. "Unblockable" is impossible; obfuscation buys "more
 /// expensive to block today", and uniform-random output is itself a DPI fingerprint. The
 /// `stego` option is a mechanism demo only — see [`StegoTransport`].
-pub fn obfuscator(name: &str, cookie: &[u8]) -> Result<Box<dyn Obfuscator>, String> {
+pub fn obfuscator(name: &str, cookie: &[u8]) -> Result<Box<dyn Obfuscator + Send + Sync>, String> {
     match name {
         "identity" | "none" => Ok(Box::new(Identity)),
         "polymorphic" | "poly" => {
@@ -465,6 +499,34 @@ mod tests {
     fn a_malformed_relay_arg_is_an_error_not_a_panic() {
         let args = vec!["--relay".to_string(), "no-equals-sign".to_string()];
         assert!(parse_relays(&args).is_err());
+    }
+
+    #[test]
+    fn a_pool_rendezvous_id_is_distinct_per_relay_and_deterministic() {
+        let cookie = b"pool-cookie";
+        let a: SocketAddr = "127.0.0.1:9001".parse().unwrap();
+        let b: SocketAddr = "127.0.0.1:9002".parse().unwrap();
+        assert_eq!(rendezvous_id_for(cookie, &a), rendezvous_id_for(cookie, &a));
+        assert_ne!(
+            rendezvous_id_for(cookie, &a),
+            rendezvous_id_for(cookie, &b),
+            "each relay in the pool must see a distinct ID"
+        );
+        assert_ne!(rendezvous_id_for(cookie, &a), a.to_string().into_bytes());
+    }
+
+    #[test]
+    fn visiting_order_is_a_permutation_covering_every_relay() {
+        for n in [1usize, 2, 3, 7] {
+            let order = visiting_order(n);
+            assert_eq!(order.len(), n);
+            let mut seen = order.clone();
+            seen.sort_unstable();
+            seen.dedup();
+            assert_eq!(seen.len(), n, "every relay must appear exactly once");
+            assert!(order.iter().all(|&i| i < n));
+        }
+        assert!(visiting_order(0).is_empty());
     }
 
     #[test]
