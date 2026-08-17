@@ -240,7 +240,8 @@ completed this session.
 | 5 | Splice idle/duration timeout | minor | Admitted pairs hold a task + two sockets indefinitely |
 | ✅ | Rate-aware AIMD difficulty controller (prop-327) | done | `gyre-shield::effort`; difficulty = max(occupancy, attempt-rate); test confirmed to discriminate |
 | 7 | Memory-hard PoW via pure-Rust `equix`/`hashx` + linear effort | ~days–1 wk + LGPL sign-off | SHA-256 lets a GPU beat honest mobile clients — the asymmetry runs backwards |
-| 8 | Multi-relay pool + authenticated cookies | ~1–2 wks each | Dilutes a relay flood ~linearly by *k*; closes the bearer-cookie splice race |
+| ✅ | Authenticated cookies | done | Relay matches on `HMAC(cookie)`; mutual challenge-response closes the hijack race (`--auth`) |
+| 8 | Multi-relay pool | ~1–2 wks | Dilutes a relay-targeted flood ~linearly by *k* with client failover |
 
 ---
 

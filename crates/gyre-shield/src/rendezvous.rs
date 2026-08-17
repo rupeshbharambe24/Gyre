@@ -28,9 +28,12 @@
 //! - This prices **application-layer** admission. It does **nothing** against a volumetric
 //!   L3/L4 flood that saturates the link before this code runs — that is capacity (anycast
 //!   scrubbing), which Gyre neither has nor claims (**D22**).
-//! - The cookie is still an **unauthenticated bearer secret**: admission controls *how many*
-//!   connections get in, not *who* they are, so a party that learns a cookie can still race
-//!   the legitimate client for the parked peer. Authenticating the cookie is separate work.
+//! - The relay matches parties by an opaque cookie and stays oblivious to who they are. The
+//!   **bearer-cookie hijack race is closed at the client/origin layer** (`gyre-cli`'s
+//!   `rendezvous_id` + mutual `authenticate`): the relay sees only a one-way HMAC of the real
+//!   cookie, and the parties prove knowledge of the cookie end-to-end, so learning the
+//!   relay-visible value does not let an attacker take the session. Leaking the cookie itself
+//!   is unavoidable — it is the shared secret.
 //! - Parked streams are bounded both by count (`capacity`) and by age: a background reaper
 //!   evicts any stream that has waited longer than `parked_ttl` without a peer, so a patient
 //!   attacker cannot hold the map full with admitted-but-idle parks.

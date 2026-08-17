@@ -146,11 +146,13 @@ inbound address**.
   > everything. An end-to-end tunnel terminating only at the origin is the endpoints'
   > responsibility and is **not implemented**. The relay-blindness argument also only
   > pays off on a *multi-tenant* relay pool: an operator running their own rendezvous
-  > relay already knows both ends. One gap remains: the cookie is an unauthenticated
-  > bearer secret and whoever arrives second is spliced to whoever parked, so anyone
-  > who learns a cookie can race the client and take the origin's session. (The DoS
-  > bounds the note used to flag — parked capacity, a TTL reaper, cookie-length and
-  > in-flight caps, a handshake timeout — are now built; see [`docs/DOS.md`](docs/DOS.md).)
+  > relay already knows both ends. The bearer-cookie **hijack race is now closed**: the
+  > relay matches on a one-way `rendezvous_id = HMAC(cookie, …)`, and the client and origin
+  > run a mutual challenge-response proving knowledge of the cookie end-to-end (`--auth`), so
+  > a party that learned only the relay-visible ID cannot take the session. Leaking the cookie
+  > *itself* is still unavoidable — it is the shared secret. The DoS bounds — parked capacity,
+  > a TTL reaper, cookie-length and in-flight caps, a handshake timeout, a rate-aware effort
+  > controller — are also built; see [`docs/DOS.md`](docs/DOS.md).
 - **Moving-target-defense (MTD) address hopping** — the public ingress is
   `HMAC(key, time_window)`, so an authorized client and the origin agree on it
   while a scanner cannot pre-target it. Honest ceiling (**D22**): MTD serves a
