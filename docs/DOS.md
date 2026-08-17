@@ -104,14 +104,14 @@ guarded path.
 | Stateless self-authenticating challenge (SYN-cookie analogue) | **BUILT** | `admission.rs` `issue()` stores nothing; test `issuing_stores_nothing` (10k issues → 0 stored) |
 | Spent set bounded by TTL, not traffic | **BUILT** | `admission.rs` prunes on `redeem`; test `the_spent_set_is_bounded_by_ttl_not_by_traffic` |
 | Per-frame allocation bound (`MAX_FRAME` = 1 MiB) | **BUILT** | `gyre-net` `read_frame` rejects before allocating |
-| Parked-stream **TTL reaper** (evict idle parks by age) | **NEEDED** | capacity caps count, not hold-time; a patient squatter holds every slot |
+| Parked-stream **TTL reaper** (evict idle parks by age) | **BUILT** | `RelayConfig.parked_ttl`; background sweep at half-TTL; test `a_guarded_relay_reaps_a_parked_stream_that_is_never_met` |
 | Splice idle/duration timeout | **NEEDED** | `copy_bidirectional` has no idle cap; lower priority (pair already paid PoW) |
 | Kernel SYN cookies (half-open flood) | **NEVER** (host) | below `accept()`; OS config |
 | Volumetric SYN / link saturation | **NEVER** (D22) | scrubber territory |
 
-> This session closed three of the gaps the design pass flagged: the slowloris **duration**
-> bound, the in-flight **count** bound, and the cookie length cap. What remains here is the
-> parked-TTL reaper and the (lower-priority) splice idle timeout.
+> Closed so far: the slowloris **duration** bound, the in-flight **count** bound, the cookie
+> length cap, and the **parked-TTL reaper**. What remains here is the lower-priority splice
+> idle timeout (the pair already paid PoW).
 
 ---
 
@@ -189,11 +189,11 @@ anonymous capability token both exist and are tested — but two honest points:
 
 - Credentials **authorize**; they do not make identities **scarce**. Only a scarce resource
   does. PoW gives *relative* pricing, not *absolute* scarcity — a big enough botnet still pays.
-- **Finding F14 — issuance is currently a free oracle.** `Issuer::issue` takes a blinded point
-  and *no proof of payment*, so as wired the token is a **free, unlimited skip-the-PoW
-  credential** — a Sybil *bypass*, not a defense. **The token→skip-PoW branch must not be wired
-  into `admit()` until F14 is fixed** (bind issuance to a spent admission: 1 puzzle → ≤1 token →
-  ≤1 admission; ~1 day, no new crypto).
+- **Finding F14 — FIXED: issuance is bound to a solved, single-use puzzle.** `Issuer::issue`
+  now redeems an issuance challenge before minting (`issuance_challenge` → solve → `issue`), so
+  **one solved puzzle authorizes at most one token** and token-count conserves with work-count.
+  Before this it was a free, unlimited skip-the-PoW oracle — a Sybil *bypass*. The token→skip-PoW
+  relay branch can now be wired safely; the difficulty is the tunable, the binding is the fix.
 
 ---
 
@@ -233,9 +233,9 @@ completed this session.
 | ✅ | In-flight handshake cap (Semaphore) | done | Bounds the *count* of concurrent handshakes, not just each one's duration |
 | ✅ | Slowloris handshake timeout | done | Bounds each handshake's *duration* |
 | ✅ | Cookie length cap | done | Removes the `capacity × 1 MiB` parked-map amplification |
-| 2 | Parked-TTL reaper | moderate | A patient squatter holds every parked slot forever without it |
-| 3 | Per-source / per-identity rate limiting (keyed on the token, not IP) | moderate | Zero fairness today; one source monopolizes all slots |
-| 4 | Fix **F14** — bind token issuance to a spent admission | ~1 day | Must land *before* the token skip-PoW branch is wired, or it ships a free bypass |
+| ✅ | Parked-TTL reaper | done | `RelayConfig.parked_ttl` + background sweep; test confirmed to discriminate |
+| 3 | Per-source rate limiting | moderate | Deprioritized: blunt per-IP is defeated by spoofing/NAT; F14 delivers the correctly token-keyed version |
+| ✅ | Fix **F14** — bind token issuance to a spent admission | done | One solved puzzle → ≤1 token; `Error::Unauthorized` otherwise; test confirmed to discriminate |
 | 5 | Splice idle/duration timeout | minor | Admitted pairs hold a task + two sockets indefinitely |
 | 6 | Rate-aware AIMD/EWMA difficulty controller (prop-327) | moderate | Occupancy-only load signal misses a flood that never parks |
 | 7 | Memory-hard PoW via pure-Rust `equix`/`hashx` + linear effort | ~days–1 wk + LGPL sign-off | SHA-256 lets a GPU beat honest mobile clients — the asymmetry runs backwards |
@@ -260,7 +260,7 @@ prop-305). Gyre currently **loses to Tor** on two things: Tor ships **Equi-X mem
 production** (Gyre is on SHA-256, so the asymmetry runs backwards), and Tor has a *deployed*
 gated service (Gyre's gate is demo-only). Gyre is **at parity or better** on the
 stateless-issue / SYN-cookie property, the TTL-bounded spent set, and the VOPRF capability-token
-construction — clean and tested, *once F14 is fixed*. Bluntly: Gyre is prop-327 / onion-services
+construction — clean and tested, and F14 is now fixed. Bluntly: Gyre is prop-327 / onion-services
 minus the memory-hard puzzle minus deployment — both now cheap-to-close items (#1 and #7).
 
 ---

@@ -146,10 +146,11 @@ inbound address**.
   > everything. An end-to-end tunnel terminating only at the origin is the endpoints'
   > responsibility and is **not implemented**. The relay-blindness argument also only
   > pays off on a *multi-tenant* relay pool: an operator running their own rendezvous
-  > relay already knows both ends. Two further gaps: the cookie is an unauthenticated
+  > relay already knows both ends. One gap remains: the cookie is an unauthenticated
   > bearer secret and whoever arrives second is spliced to whoever parked, so anyone
-  > who learns a cookie can race the client and take the origin's session; and the
-  > parking map is unbounded with no TTL or cap.
+  > who learns a cookie can race the client and take the origin's session. (The DoS
+  > bounds the note used to flag — parked capacity, a TTL reaper, cookie-length and
+  > in-flight caps, a handshake timeout — are now built; see [`docs/DOS.md`](docs/DOS.md).)
 - **Moving-target-defense (MTD) address hopping** — the public ingress is
   `HMAC(key, time_window)`, so an authorized client and the origin agree on it
   while a scanner cannot pre-target it. Honest ceiling (**D22**): MTD serves a
@@ -159,10 +160,9 @@ inbound address**.
   volumetric floods.
 - **Unlinkable capability tokens** — **RFC 9497 VOPRF** (`ristretto255-SHA512`) via the
   [`voprf`](https://crates.io/crates/voprf) crate (unaudited — see
-  [`SECURITY.md`](SECURITY.md)). **Not yet bound to admission** (finding F14): issuance is
-  open to anyone who can reach the issuer, so today the token grants no scarcity — the
-  design below is what the mechanism is *for*, not what it currently enforces. A client that
-  paid once redeems
+  [`SECURITY.md`](SECURITY.md)). Issuance is **bound to a solved, single-use admission
+  puzzle** (finding F14, fixed), so one unit of work authorizes at most one token. A client
+  that paid once redeems
   a token to skip the PoW, and the issuer — which only ever saw a random *blinded* point —
   cannot link redemption to issuance. Single-use; double-spend rejected. The issuer must
   attach a **DLEQ proof** that it used its published key, and the client pins that key from

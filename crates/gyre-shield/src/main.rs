@@ -196,8 +196,15 @@ async fn main() {
     let published = gyre_shield::token::PublicKey::from_verified_params(&verified);
     println!("  issuer key pinned from a 3-of-4 threshold-signed consensus (epoch 7)");
     let (state, blinded) = gyre_shield::token::blind();
-    let issued = issuer.issue(blinded).expect("issue");
+    // F14: minting a token requires a solved, single-use issuance challenge — no free oracle.
+    let now = Duration::from_secs(0);
+    let issuance_challenge = issuer.issuance_challenge(now);
+    let issuance_solution = issuance_challenge.puzzle().solve();
+    let issued = issuer
+        .issue(&issuance_challenge, &issuance_solution, blinded, now)
+        .expect("issue");
     let token = gyre_shield::token::unblind(state, issued, published).expect("unblind");
+    println!("  client solved an issuance puzzle to mint the token (F14: not a free oracle)");
     println!("  issuer saw only a blinded point (never the token)");
     println!("  client verified the issuer's DLEQ proof against the published key");
     println!(
@@ -207,9 +214,13 @@ async fn main() {
     );
 
     // Show the protection working: a response computed with a different key is refused.
-    let rogue = gyre_shield::token::Issuer::new();
+    let mut rogue = gyre_shield::token::Issuer::new();
     let (state2, blinded2) = gyre_shield::token::blind();
-    let rogue_issued = rogue.issue(blinded2).expect("issue");
+    let rogue_challenge = rogue.issuance_challenge(now);
+    let rogue_solution = rogue_challenge.puzzle().solve();
+    let rogue_issued = rogue
+        .issue(&rogue_challenge, &rogue_solution, blinded2, now)
+        .expect("issue");
     println!(
         "  response from a DIFFERENT key, checked against the published one: {}",
         match gyre_shield::token::unblind(state2, rogue_issued, published) {

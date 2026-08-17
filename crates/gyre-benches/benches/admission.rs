@@ -4,39 +4,67 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
-use gyre_shield::token::{blind, unblind, Issuer};
+use gyre_shield::token::{blind, unblind, Issued, Issuer};
 use gyre_shield::Puzzle;
+
+/// Mint a token via the F14-authorized path (fetch challenge, solve it, present the solution).
+/// The puzzle solve is not part of what we measure — the client pays it — so callers do it in
+/// setup, not in the measured closure.
+fn mint(issuer: &mut Issuer, blinded: [u8; 32]) -> Issued {
+    let now = std::time::Duration::from_secs(0);
+    let challenge = issuer.issuance_challenge(now);
+    let solution = challenge.puzzle().solve();
+    issuer
+        .issue(&challenge, &solution, blinded, now)
+        .expect("authorized issue")
+}
 
 /// The four VOPRF stages: client `blind`, issuer `issue`, client `unblind`, issuer
 /// `verify`. Each is a small number of ristretto scalar multiplications.
 fn voprf(c: &mut Criterion) {
-    let issuer = Issuer::new();
     let mut g = c.benchmark_group("voprf_token");
 
     g.bench_function("blind", |b| b.iter(|| black_box(blind())));
 
-    let published = issuer.public_key();
-    let (_state, blinded) = blind();
-    // `issue` now also produces a DLEQ proof — that cost is part of issuance.
+    // `issue` now redeems a solved issuance challenge (F14) before the DLEQ blind-evaluate. A
+    // fresh issuer per iteration keeps the single-use spent set from growing and skewing the
+    // measurement; the puzzle solve and keygen happen in setup, unmeasured.
     g.bench_function("issue", |b| {
-        b.iter(|| black_box(issuer.issue(black_box(blinded)).unwrap()))
+        b.iter_batched(
+            || {
+                let issuer = Issuer::new();
+                let now = std::time::Duration::from_secs(0);
+                let challenge = issuer.issuance_challenge(now);
+                let solution = challenge.puzzle().solve();
+                let (_state, blinded) = blind();
+                (issuer, challenge, solution, blinded, now)
+            },
+            |(mut issuer, challenge, solution, blinded, now)| {
+                black_box(issuer.issue(&challenge, &solution, blinded, now).unwrap())
+            },
+            BatchSize::SmallInput,
+        )
     });
 
     g.bench_function("unblind", |b| {
         b.iter_batched(
             || {
+                let mut issuer = Issuer::new();
+                let published = issuer.public_key();
                 let (state, blinded) = blind();
-                let issued = issuer.issue(blinded).unwrap();
-                (state, issued)
+                let issued = mint(&mut issuer, blinded);
+                (state, issued, published)
             },
-            // `unblind` now verifies the issuer's proof before accepting.
-            |(state, issued)| black_box(unblind(state, issued, published).unwrap()),
+            // `unblind` verifies the issuer's proof before accepting.
+            |(state, issued, published)| black_box(unblind(state, issued, published).unwrap()),
             BatchSize::SmallInput,
         )
     });
 
+    let mut issuer = Issuer::new();
+    let published = issuer.public_key();
     let (state, blinded) = blind();
-    let issued = issuer.issue(blinded).unwrap();
+    let issued = mint(&mut issuer, blinded);
     let token = unblind(state, issued, published).unwrap();
     g.bench_function("verify", |b| {
         b.iter(|| black_box(issuer.verify(black_box(&token))))

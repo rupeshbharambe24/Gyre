@@ -9,7 +9,19 @@
 //! alongside its response and every proof verifies.
 
 use gyre_directory::{verify_consensus, Authority, Consensus, NetworkParams, VerifyError};
-use gyre_shield::token::{blind, unblind, Error as TokenError, Issuer, PublicKey};
+use gyre_shield::token::{
+    blind, unblind, Error as TokenError, Issued, Issuer, PublicKey, ELEMENT_LEN,
+};
+
+/// Mint a token via the F14-authorized path (fetch challenge, solve, present solution).
+fn authorized_issue(issuer: &mut Issuer, blinded: [u8; ELEMENT_LEN]) -> Issued {
+    let now = std::time::Duration::from_secs(0);
+    let challenge = issuer.issuance_challenge(now);
+    let solution = challenge.puzzle().solve();
+    issuer
+        .issue(&challenge, &solution, blinded, now)
+        .expect("authorized issue")
+}
 
 /// Build a signed consensus advertising `issuer`'s key, as the authorities would.
 fn signed_consensus(
@@ -48,7 +60,7 @@ fn a_client_pins_the_issuer_key_from_the_signed_consensus() {
     let pinned = PublicKey::from_verified_params(&verified);
 
     let (state, blinded) = blind();
-    let issued = issuer.issue(blinded).expect("issue");
+    let issued = authorized_issue(&mut issuer, blinded);
     let token = unblind(state, issued, pinned).expect("honest issuer, pinned key");
     assert!(issuer.redeem(&token));
 }
@@ -68,9 +80,9 @@ fn an_issuer_using_an_unpublished_key_is_refused() {
     let pinned = PublicKey::from_verified_params(&verified);
 
     // ...but a different issuer answers, with a perfectly valid proof for ITS key.
-    let rogue = Issuer::new();
+    let mut rogue = Issuer::new();
     let (state, blinded) = blind();
-    let issued = rogue.issue(blinded).expect("rogue issues happily");
+    let issued = authorized_issue(&mut rogue, blinded);
 
     assert_eq!(
         unblind(state, issued, pinned).unwrap_err(),

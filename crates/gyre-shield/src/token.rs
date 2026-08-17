@@ -45,8 +45,12 @@
 //! `docs/AUDIT.md`.
 
 use std::collections::HashSet;
+use std::time::Duration;
 
 use gyre_directory::VerifiedParams;
+
+use crate::admission::{Admission, Challenge, Denied};
+use crate::Solution;
 use rand_core::{CryptoRng, RngCore};
 use subtle::ConstantTimeEq;
 use voprf::{
@@ -69,6 +73,20 @@ pub const SEED_LEN: usize = 32;
 /// Domain separator for deterministic issuer-key derivation.
 const KEY_DERIVATION_INFO: &[u8] = b"gyre-capability-token-v2/issuer-key";
 
+/// How long an issuance challenge stays valid.
+const ISSUANCE_TTL: Duration = Duration::from_secs(300);
+
+/// The load at which issuance challenges are priced. Fixed rather than load-scaled: the point
+/// of the issuance puzzle is not to react to a relay's occupancy but to make each token cost a
+/// unit of work, so token-count conserves with work-count.
+///
+/// The security property F14 restores is the **binding** — one solved, single-use challenge
+/// authorizes at most one token — not the puzzle's price. The difficulty is the same 8..20-bit
+/// knob the relay uses; this default sits low (`0.25` → 11 bits, ~2k hashes, tens of
+/// microseconds) so honest clients pay almost nothing. An operator who wants issuance to be
+/// genuinely expensive raises it.
+const ISSUANCE_LOAD: f64 = 0.25;
+
 /// Errors from issuing or accepting a token.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum Error {
@@ -80,6 +98,11 @@ pub enum Error {
     /// clients. Refuse the token.
     #[error("the issuer's DLEQ proof did not verify: it may be using a per-client key")]
     BadProof,
+    /// **Issuance was not authorized.** The caller did not present a valid, unspent, unexpired
+    /// solved issuance challenge (finding F14). Without this, `issue` would be a free,
+    /// unlimited token oracle — a Sybil *bypass* rather than a control.
+    #[error("issuance not authorized: {0}")]
+    Unauthorized(#[from] Denied),
     /// The underlying VOPRF implementation rejected the operation.
     #[error("voprf: {0}")]
     Voprf(String),
@@ -230,10 +253,15 @@ impl PartialEq for Token {
     }
 }
 
-/// The issuer's secret key, plus the set of redeemed seeds for this epoch.
+/// The issuer's secret key, the set of redeemed token seeds for this epoch, and the
+/// admission gate that authorizes issuance.
 pub struct Issuer {
     server: VoprfServer<Suite>,
     spent: HashSet<[u8; SEED_LEN]>,
+    /// Authorizes *issuance*: a client must present a solved, single-use challenge from this
+    /// gate to mint a token (finding F14). This is a **different** gate from any relay's — it
+    /// binds one token to one unit of work, keyed on the work itself rather than on an IP.
+    issuance: Admission,
 }
 
 impl Issuer {
@@ -243,6 +271,7 @@ impl Issuer {
         Self {
             server,
             spent: HashSet::new(),
+            issuance: Admission::new(ISSUANCE_TTL),
         }
     }
 
@@ -258,7 +287,15 @@ impl Issuer {
         Self {
             server,
             spent: HashSet::new(),
+            issuance: Admission::new(ISSUANCE_TTL),
         }
+    }
+
+    /// Hand a client a fresh **issuance challenge**. Stateless (one HMAC, nothing stored), so
+    /// flooding this endpoint costs the issuer nothing. The client must solve it and return
+    /// the solution to [`issue`](Self::issue) to mint a token.
+    pub fn issuance_challenge(&self, now: Duration) -> Challenge {
+        self.issuance.issue(now, ISSUANCE_LOAD)
     }
 
     /// The public key clients verify proofs against. Publish this via the signed consensus.
@@ -267,9 +304,24 @@ impl Issuer {
         PublicKey(fixed(&bytes).expect("ristretto255 elements are 32 bytes"))
     }
 
-    /// Blind-evaluate a client's blinded point, returning the evaluation **and a proof**
-    /// that the published key was used.
-    pub fn issue(&self, blinded: [u8; ELEMENT_LEN]) -> Result<Issued, Error> {
+    /// Blind-evaluate a client's blinded point into a token — **but only against a solved,
+    /// unspent, unexpired issuance challenge** (finding F14). Redeeming the challenge is
+    /// single-use, so one solved puzzle yields at most one token, and token-count therefore
+    /// conserves with issuance-work-count. Returns [`Error::Unauthorized`] otherwise.
+    ///
+    /// This closes the free-oracle bypass: before this, `issue` minted unlimited tokens for
+    /// anyone, making the "skip the PoW" fast path a Sybil *bypass* rather than a control.
+    pub fn issue(
+        &mut self,
+        challenge: &Challenge,
+        solution: &Solution,
+        blinded: [u8; ELEMENT_LEN],
+        now: Duration,
+    ) -> Result<Issued, Error> {
+        // Authorize first: a forged, expired, unsolved, or already-spent challenge is refused
+        // before any token is minted.
+        self.issuance.redeem(challenge, solution, now)?;
+
         let element = BlindedElement::<Suite>::deserialize(&blinded)?;
         let result = self.server.blind_evaluate(&mut OsCsprng, &element);
         Ok(Issued {
@@ -368,20 +420,38 @@ pub fn unblind(state: Blinding, issued: Issued, issuer_public: PublicKey) -> Res
 mod tests {
     use super::*;
 
-    fn issue_to_client(issuer: &Issuer) -> Token {
+    /// Mint a token the way a real client does: fetch an issuance challenge, solve it, and
+    /// present the solution. Encapsulates the F14-authorized path for the tests below.
+    fn issue_to_client(issuer: &mut Issuer) -> Token {
+        let now = Duration::from_secs(0);
         let (state, blinded) = blind();
-        let issued = issuer.issue(blinded).expect("issue");
-        unblind(state, issued, issuer.public_key()).expect("unblind")
+        let challenge = issuer.issuance_challenge(now);
+        let solution = challenge.puzzle().solve();
+        let public = issuer.public_key();
+        let issued = issuer
+            .issue(&challenge, &solution, blinded, now)
+            .expect("authorized issue");
+        unblind(state, issued, public).expect("unblind")
+    }
+
+    /// Convenience for the wire-size and vector tests that need the raw `Issued`.
+    fn authorized_issue(issuer: &mut Issuer, blinded: [u8; ELEMENT_LEN]) -> Issued {
+        let now = Duration::from_secs(0);
+        let challenge = issuer.issuance_challenge(now);
+        let solution = challenge.puzzle().solve();
+        issuer
+            .issue(&challenge, &solution, blinded, now)
+            .expect("authorized issue")
     }
 
     /// The wire sizes are load-bearing: they are fixed-width arrays throughout. If an
     /// upstream change moved them, this fails loudly instead of silently truncating.
     #[test]
     fn the_wire_encodings_are_the_expected_sizes() {
-        let issuer = Issuer::new();
+        let mut issuer = Issuer::new();
         let (state, blinded) = blind();
         assert_eq!(blinded.len(), ELEMENT_LEN);
-        let issued = issuer.issue(blinded).unwrap();
+        let issued = authorized_issue(&mut issuer, blinded);
         assert_eq!(issued.evaluated.len(), ELEMENT_LEN);
         assert_eq!(issued.proof.len(), PROOF_LEN);
         let token = unblind(state, issued, issuer.public_key()).unwrap();
@@ -392,7 +462,7 @@ mod tests {
     #[test]
     fn an_issued_token_verifies_and_redeems_exactly_once() {
         let mut issuer = Issuer::new();
-        let token = issue_to_client(&issuer);
+        let token = issue_to_client(&mut issuer);
         assert!(issuer.verify(&token), "a genuine token must verify");
         assert!(issuer.redeem(&token), "first redemption succeeds");
         assert!(!issuer.redeem(&token), "double-spend is rejected");
@@ -400,17 +470,17 @@ mod tests {
 
     #[test]
     fn a_forged_token_is_rejected() {
-        let issuer = Issuer::new();
-        let mut forged = issue_to_client(&issuer);
+        let mut issuer = Issuer::new();
+        let mut forged = issue_to_client(&mut issuer);
         forged.output[0] ^= 0x01;
         assert!(!issuer.verify(&forged));
     }
 
     #[test]
     fn a_token_from_another_issuer_is_rejected() {
-        let issuer_a = Issuer::new();
+        let mut issuer_a = Issuer::new();
         let mut issuer_b = Issuer::new();
-        let token = issue_to_client(&issuer_a);
+        let token = issue_to_client(&mut issuer_a);
         assert!(issuer_a.verify(&token));
         assert!(
             !issuer_b.redeem(&token),
@@ -423,9 +493,9 @@ mod tests {
     #[test]
     fn a_response_computed_with_the_wrong_key_is_refused() {
         let honest = Issuer::new();
-        let rogue = Issuer::new();
+        let mut rogue = Issuer::new();
         let (state, blinded) = blind();
-        let issued = rogue.issue(blinded).expect("rogue issues happily");
+        let issued = authorized_issue(&mut rogue, blinded);
         assert_eq!(
             unblind(state, issued, honest.public_key()).unwrap_err(),
             Error::BadProof
@@ -434,19 +504,19 @@ mod tests {
 
     #[test]
     fn a_tampered_proof_is_refused() {
-        let issuer = Issuer::new();
+        let mut issuer = Issuer::new();
         let (state, blinded) = blind();
-        let mut issued = issuer.issue(blinded).unwrap();
+        let mut issued = authorized_issue(&mut issuer, blinded);
         issued.proof[0] ^= 0x01;
         assert!(unblind(state, issued, issuer.public_key()).is_err());
     }
 
     #[test]
     fn a_proof_for_a_different_public_key_is_refused() {
-        let issuer = Issuer::new();
+        let mut issuer = Issuer::new();
         let other = Issuer::new();
         let (state, blinded) = blind();
-        let issued = issuer.issue(blinded).unwrap();
+        let issued = authorized_issue(&mut issuer, blinded);
         assert_eq!(
             unblind(state, issued, other.public_key()).unwrap_err(),
             Error::BadProof
@@ -462,15 +532,22 @@ mod tests {
 
     #[test]
     fn garbage_input_is_rejected_not_panicked_on() {
-        let issuer = Issuer::new();
-        assert!(issuer.issue([0xFFu8; ELEMENT_LEN]).is_err());
+        let mut issuer = Issuer::new();
+        let now = Duration::from_secs(0);
+        let challenge = issuer.issuance_challenge(now);
+        let solution = challenge.puzzle().solve();
+        // The challenge is valid, so authorization passes; the blinded point is garbage, so
+        // the VOPRF step rejects it — a malformed input is an error, never a panic.
+        assert!(issuer
+            .issue(&challenge, &solution, [0xFFu8; ELEMENT_LEN], now)
+            .is_err());
     }
 
     #[test]
     fn rotation_bounds_the_spent_set_and_invalidates_old_tokens() {
         let mut issuer = Issuer::new();
         let old_public = issuer.public_key();
-        let token = issue_to_client(&issuer);
+        let token = issue_to_client(&mut issuer);
         assert!(issuer.redeem(&token));
         assert_eq!(issuer.spent_count(), 1);
 
@@ -484,6 +561,45 @@ mod tests {
         assert!(
             !issuer.verify(&token),
             "a token from the previous epoch must no longer verify"
+        );
+    }
+
+    /// **F14.** Issuance is no longer a free oracle: minting a token requires a valid,
+    /// solved, single-use issuance challenge, so one unit of work yields at most one token.
+    #[test]
+    fn issuance_requires_authorization_and_each_puzzle_mints_at_most_one_token() {
+        let mut issuer = Issuer::new();
+        let now = Duration::from_secs(0);
+
+        // A forged challenge (valid PoW, but not one this issuer signed) is refused before
+        // any token is minted — deterministic, unlike guessing a wrong nonce.
+        let challenge = issuer.issuance_challenge(now);
+        let mut bytes = challenge.to_bytes();
+        bytes[0] ^= 0xFF; // corrupt the challenge id -> the issuer's tag will not match
+        let forged = Challenge::from_bytes(&bytes);
+        let forged_solution = forged.puzzle().solve();
+        let (_s, blinded) = blind();
+        assert_eq!(
+            issuer
+                .issue(&forged, &forged_solution, blinded, now)
+                .unwrap_err(),
+            Error::Unauthorized(Denied::Forged),
+            "a forged issuance authorization must mint nothing"
+        );
+
+        // A genuine solved challenge mints one token...
+        let solution = challenge.puzzle().solve();
+        let (_s1, b1) = blind();
+        assert!(
+            issuer.issue(&challenge, &solution, b1, now).is_ok(),
+            "a solved, unspent challenge authorizes issuance"
+        );
+        // ...and cannot be reused to mint a second (single-use, closing the Sybil bypass).
+        let (_s2, b2) = blind();
+        assert_eq!(
+            issuer.issue(&challenge, &solution, b2, now).unwrap_err(),
+            Error::Unauthorized(Denied::Replay),
+            "one solved puzzle must authorize at most one token"
         );
     }
 

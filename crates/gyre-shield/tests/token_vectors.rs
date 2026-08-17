@@ -11,7 +11,20 @@
 //! with the [`voprf`] crate's RFC 9497 implementation. That was intentional — the
 //! old encoding was never deployed — and the vectors below pin the RFC-conformant one.
 
-use gyre_shield::token::{blind, unblind, Issuer, Token, OUTPUT_LEN, SEED_LEN};
+use gyre_shield::token::{
+    blind, unblind, Issued, Issuer, Token, ELEMENT_LEN, OUTPUT_LEN, SEED_LEN,
+};
+
+/// Mint a token via the F14-authorized path (fetch challenge, solve, present solution). The
+/// admission gate is orthogonal to the OPRF output, so the vectors below are unchanged.
+fn authorized_issue(issuer: &mut Issuer, blinded: [u8; ELEMENT_LEN]) -> Issued {
+    let now = std::time::Duration::from_secs(0);
+    let challenge = issuer.issuance_challenge(now);
+    let solution = challenge.puzzle().solve();
+    issuer
+        .issue(&challenge, &solution, blinded, now)
+        .expect("authorized issue")
+}
 
 const ISSUER_SEED: [u8; 32] = [
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -58,12 +71,12 @@ fn vector_token_output() {
 /// randomness *is* the unlinkability), so it is the final output that is deterministic.
 #[test]
 fn vector_blind_path_matches_direct_evaluation() {
-    let issuer = Issuer::from_secret_seed(&ISSUER_SEED);
+    let mut issuer = Issuer::from_secret_seed(&ISSUER_SEED);
     let published = issuer.public_key();
 
     for _ in 0..3 {
         let (state, blinded) = blind();
-        let issued = issuer.issue(blinded).expect("issue");
+        let issued = authorized_issue(&mut issuer, blinded);
         let token = unblind(state, issued, published).expect("honest proof verifies");
 
         // Same seed, computed two completely different ways.
@@ -80,7 +93,7 @@ fn vector_blind_path_matches_direct_evaluation() {
 /// reload a key across restarts without invalidating outstanding tokens.
 #[test]
 fn vector_issuer_is_reproducible_from_its_seed() {
-    let a = Issuer::from_secret_seed(&ISSUER_SEED);
+    let mut a = Issuer::from_secret_seed(&ISSUER_SEED);
     let b = Issuer::from_secret_seed(&ISSUER_SEED);
     assert_eq!(a.public_key(), b.public_key());
     assert_eq!(
@@ -94,7 +107,7 @@ fn vector_issuer_is_reproducible_from_its_seed() {
     // A token issued under one instance verifies under the other — that is the point.
     let published = a.public_key();
     let (state, blinded) = blind();
-    let token = unblind(state, a.issue(blinded).unwrap(), published).unwrap();
+    let token = unblind(state, authorized_issue(&mut a, blinded), published).unwrap();
     assert!(
         b.verify(&token),
         "a reloaded issuer must honour its own tokens"

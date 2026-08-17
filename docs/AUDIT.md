@@ -384,15 +384,29 @@ of smaller issues. These were fixed:
   used. Both fixed — the control now asserts the rogue's proof *does* verify against the
   rogue's *own* key, so the refusals are provably caused by the key mismatch.
 
-### F14–F17 — known gaps, not fixed
+### F14 — FIXED: issuance is now bound to a solved, single-use admission
+
+Issuance was an unauthenticated oracle: `Issuer::issue` took a blinded point and no proof of
+payment, so anyone who could reach the issuer could mint unlimited tokens — a Sybil *bypass*
+of the very PoW the token is meant to reward, not a control.
+
+**Fix.** The issuer now holds its own admission gate. `Issuer::issuance_challenge(now)` hands
+a client a stateless, expiring challenge; `Issuer::issue(challenge, solution, blinded, now)`
+**redeems** it — verifying it is authentic, unexpired, solved, and unspent — before it will
+blind-evaluate. Redemption is single-use, so **one solved puzzle authorizes at most one
+token**, and token-count now conserves with issuance-work-count. A forged, expired, unsolved,
+or replayed authorization returns `Error::Unauthorized`. Test:
+`issuance_requires_authorization_and_each_puzzle_mints_at_most_one_token` (forged → refused;
+one solve → one token; replay → refused), confirmed to fail if the `redeem` call is removed.
+
+The default issuance difficulty sits low (11 bits): the security property restored here is the
+**binding and single-use**, not the puzzle's price, which is the same 8..20-bit tunable the
+relay uses. An operator who wants issuance to be genuinely expensive raises it.
+
+### F15–F17 — known gaps, not fixed
 
 Recorded rather than quietly dropped. None is a defect in the cryptography; each is a real
 limitation an auditor should know about.
-
-- **F14 — `Issuer::issue` is an unauthenticated issuance oracle.** Nothing in this module
-  binds issuance to the proof-of-work admission it is documented to reward. Anyone who can
-  reach the issuer can obtain unlimited tokens. The binding is deployment plumbing that
-  does not exist yet, and until it does the token grants no scarcity.
 - **F15 — `rotate()` has no caller anywhere in the repository.** The bound on the spent set
   is therefore theoretical: nothing schedules an epoch. See Q-D.
 - **F16 — `Issuer::evaluate` is a public token-minting helper.** It requires the secret key,

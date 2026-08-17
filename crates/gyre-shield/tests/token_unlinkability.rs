@@ -17,7 +17,18 @@
 //! The fix is the DLEQ proof: the issuer must prove it used the key behind its *published*
 //! public key, and `unblind` refuses the token otherwise.
 
-use gyre_shield::token::{blind, unblind, Error, Issuer};
+use gyre_shield::token::{blind, unblind, Error, Issued, Issuer, ELEMENT_LEN};
+
+/// Mint a token the way a real client does: fetch an issuance challenge, solve it, and present
+/// the solution (finding F14 — issuance is no longer a free oracle).
+fn authorized_issue(issuer: &mut Issuer, blinded: [u8; ELEMENT_LEN]) -> Issued {
+    let now = std::time::Duration::from_secs(0);
+    let challenge = issuer.issuance_challenge(now);
+    let solution = challenge.puzzle().solve();
+    issuer
+        .issue(&challenge, &solution, blinded, now)
+        .expect("authorized issue")
+}
 
 /// **The attack, run against the fixed construction.** A malicious issuer evaluates with a
 /// key other than the one clients pinned. Every client must refuse, so nothing links.
@@ -32,9 +43,9 @@ fn a_key_partitioning_issuer_cannot_tag_any_client() {
     let clients = 5;
     let mut accepted = 0;
     for _ in 0..clients {
-        let rogue = Issuer::new();
+        let mut rogue = Issuer::new();
         let (state, blinded) = blind();
-        let issued = rogue.issue(blinded).expect("rogue issues happily");
+        let issued = authorized_issue(&mut rogue, blinded);
 
         match unblind(state, issued, published) {
             Ok(_) => accepted += 1,
@@ -57,9 +68,9 @@ fn a_key_partitioning_issuer_cannot_tag_any_client() {
     // key". Here the *same* rogue issuer is checked against its *own* published key: it
     // must succeed. So the refusals above are caused by the key mismatch specifically, and
     // nothing else.
-    let rogue = Issuer::new();
+    let mut rogue = Issuer::new();
     let (state, blinded) = blind();
-    let issued = rogue.issue(blinded).expect("issue");
+    let issued = authorized_issue(&mut rogue, blinded);
     assert!(
         unblind(state, issued, rogue.public_key()).is_ok(),
         "control failed: the rogue's own proof must verify against the rogue's own key, \
@@ -74,7 +85,7 @@ fn an_honest_issuer_is_still_accepted_and_redeemable() {
     let published = issuer.public_key();
 
     let (state, blinded) = blind();
-    let issued = issuer.issue(blinded).expect("issue");
+    let issued = authorized_issue(&mut issuer, blinded);
     let token = unblind(state, issued, published).expect("an honest proof must verify");
 
     assert!(
@@ -88,15 +99,15 @@ fn an_honest_issuer_is_still_accepted_and_redeemable() {
 /// that distinguishes them. This is the positive statement of unlinkability.
 #[test]
 fn the_issuer_sees_nothing_that_distinguishes_two_issuances() {
-    let issuer = Issuer::new();
+    let mut issuer = Issuer::new();
     let published = issuer.public_key();
 
     let (s1, b1) = blind();
     let (s2, b2) = blind();
     assert_ne!(b1, b2, "two blinded points must differ");
 
-    let t1 = unblind(s1, issuer.issue(b1).unwrap(), published).unwrap();
-    let t2 = unblind(s2, issuer.issue(b2).unwrap(), published).unwrap();
+    let t1 = unblind(s1, authorized_issue(&mut issuer, b1), published).unwrap();
+    let t2 = unblind(s2, authorized_issue(&mut issuer, b2), published).unwrap();
 
     // Nothing the issuer saw at issuance (b1, b2) reappears in what it sees at redemption
     // (seed, output). The output is longer than a blinded point, so check every window
@@ -126,7 +137,7 @@ fn rotating_the_epoch_invalidates_outstanding_tokens() {
     let mut issuer = Issuer::new();
     let published = issuer.public_key();
     let (state, blinded) = blind();
-    let token = unblind(state, issuer.issue(blinded).unwrap(), published).unwrap();
+    let token = unblind(state, authorized_issue(&mut issuer, blinded), published).unwrap();
 
     issuer.rotate();
 

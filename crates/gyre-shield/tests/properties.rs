@@ -8,7 +8,23 @@
 
 use std::time::Duration;
 
-use gyre_shield::token::{blind, unblind, Issuer};
+use gyre_shield::token::{blind, unblind, Error as TokenError, Issued, Issuer, ELEMENT_LEN};
+
+/// Mint a token via the F14-authorized path (challenge, solve, present) and expect success.
+fn authorized_issue(issuer: &mut Issuer, blinded: [u8; ELEMENT_LEN]) -> Issued {
+    try_authorized_issue(issuer, blinded).expect("a fresh blinded point is valid")
+}
+
+/// The same, but returning the `Result` for robustness tests that feed arbitrary bytes.
+fn try_authorized_issue(
+    issuer: &mut Issuer,
+    blinded: [u8; ELEMENT_LEN],
+) -> Result<Issued, TokenError> {
+    let now = std::time::Duration::from_secs(0);
+    let challenge = issuer.issuance_challenge(now);
+    let solution = challenge.puzzle().solve();
+    issuer.issue(&challenge, &solution, blinded, now)
+}
 use gyre_shield::{difficulty_for_load, leading_zero_bits, IngressSchedule, Puzzle, ADDR_LEN};
 use proptest::prelude::*;
 
@@ -128,7 +144,7 @@ proptest! {
         let mut issuer = Issuer::new();
         let published = issuer.public_key();
         let (state, blinded) = blind();
-        let issued = issuer.issue(blinded).expect("a fresh blinded point is valid");
+        let issued = authorized_issue(&mut issuer, blinded);
         let token = unblind(state, issued, published).expect("an honest proof must verify");
 
         prop_assert!(issuer.verify(&token));
@@ -144,10 +160,10 @@ proptest! {
     /// must be rejected cleanly rather than panicking.
     #[test]
     fn issuing_arbitrary_bytes_never_panics(blinded in prop::array::uniform32(any::<u8>())) {
-        let issuer = Issuer::new();
+        let mut issuer = Issuer::new();
         // Beyond not panicking: whatever comes back must be well-formed. A success on
         // random bytes would mean the point decoding accepted something it should not.
-        if let Ok(issued) = issuer.issue(blinded) {
+        if let Ok(issued) = try_authorized_issue(&mut issuer, blinded) {
             prop_assert_eq!(issued.evaluated.len(), 32);
             prop_assert_eq!(issued.proof.len(), 64);
         }
