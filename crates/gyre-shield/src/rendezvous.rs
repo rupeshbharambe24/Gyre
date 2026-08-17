@@ -31,9 +31,9 @@
 //! - The cookie is still an **unauthenticated bearer secret**: admission controls *how many*
 //!   connections get in, not *who* they are, so a party that learns a cookie can still race
 //!   the legitimate client for the parked peer. Authenticating the cookie is separate work.
-//! - Parked streams are bounded by count but not yet evicted by age: a slow origin that
-//!   parks and is never met holds its slot until it disconnects. The capacity bound caps the
-//!   total; a TTL reaper is not implemented.
+//! - Parked streams are bounded both by count (`capacity`) and by age: a background reaper
+//!   evicts any stream that has waited longer than `parked_ttl` without a peer, so a patient
+//!   attacker cannot hold the map full with admitted-but-idle parks.
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -50,6 +50,10 @@ use crate::Solution;
 
 /// A rendezvous cookie: the shared identifier two parties use to find each other.
 pub type Cookie = Vec<u8>;
+
+/// A parked stream together with the instant it was parked, so the reaper can evict a stream
+/// that has waited longer than `parked_ttl` without a peer.
+type Parked = (TcpStream, Instant);
 
 /// Errors from the rendezvous relay or dialing.
 #[derive(Debug, thiserror::Error)]
@@ -105,6 +109,12 @@ pub struct RelayConfig {
     /// connections that each stall for the full timeout cannot pin an unbounded number of
     /// tasks and sockets. Excess connections are dropped immediately at accept.
     pub max_inflight: usize,
+    /// How long a parked (admitted, waiting-for-peer) stream may sit unmet before the relay
+    /// evicts it. `capacity` bounds how *many* slots exist; this bounds how *long* one is
+    /// held, so a patient attacker who solves the puzzle and parks on every cookie cannot
+    /// hold the map — and the load signal it drives — full indefinitely. Must exceed a
+    /// legitimate peer's realistic arrival latency.
+    pub parked_ttl: Duration,
 }
 
 /// A rendezvous relay: splices two connections that present the same cookie.
@@ -114,7 +124,7 @@ pub struct RelayConfig {
 /// admission gate first.
 #[derive(Clone)]
 pub struct RendezvousRelay {
-    waiting: Arc<Mutex<HashMap<Cookie, TcpStream>>>,
+    waiting: Arc<Mutex<HashMap<Cookie, Parked>>>,
     gate: Option<Arc<Mutex<Admission>>>,
     /// Bounds the number of admission handshakes in progress. `None` on an unguarded relay.
     inflight: Option<Arc<Semaphore>>,
@@ -167,6 +177,24 @@ impl RendezvousRelay {
 
     /// Serve forever on `listener`, splicing matched pairs.
     pub async fn serve(self, listener: TcpListener) -> Result<()> {
+        // On a guarded relay, sweep stale parks in the background. The sweep runs at half the
+        // TTL, so a parked stream lives at most ~1.5×`parked_ttl` before eviction.
+        if self.gate.is_some() {
+            let waiting = self.waiting.clone();
+            let parked_ttl = self.config.parked_ttl;
+            let period = (parked_ttl / 2).max(Duration::from_millis(10));
+            tokio::spawn(async move {
+                let mut ticker = tokio::time::interval(period);
+                loop {
+                    ticker.tick().await;
+                    let reaped = reap_stale_parks(&waiting, parked_ttl);
+                    if reaped > 0 {
+                        eprintln!("[rendezvous] reaped {reaped} stale parked stream(s)");
+                    }
+                }
+            });
+        }
+
         loop {
             let (stream, _peer) = listener.accept().await?;
 
@@ -210,6 +238,7 @@ impl RelayConfig {
             handshake_timeout: Duration::from_secs(10),
             max_cookie_len: usize::MAX,
             max_inflight: usize::MAX,
+            parked_ttl: Duration::from_secs(3600),
         }
     }
 }
@@ -222,6 +251,7 @@ impl Default for RelayConfig {
             handshake_timeout: Duration::from_secs(10),
             max_cookie_len: 128,
             max_inflight: 256,
+            parked_ttl: Duration::from_secs(60),
         }
     }
 }
@@ -238,7 +268,7 @@ fn load_of(parked: usize, capacity: usize) -> f64 {
 /// authenticated response, or an error that denies the connection.
 async fn admit(
     gate: &Mutex<Admission>,
-    waiting: &Mutex<HashMap<Cookie, TcpStream>>,
+    waiting: &Mutex<HashMap<Cookie, Parked>>,
     config: RelayConfig,
     start: Instant,
     stream: &mut TcpStream,
@@ -282,7 +312,7 @@ async fn admit(
 }
 
 async fn handle(
-    waiting: Arc<Mutex<HashMap<Cookie, TcpStream>>>,
+    waiting: Arc<Mutex<HashMap<Cookie, Parked>>>,
     gate: Option<Arc<Mutex<Admission>>>,
     permit: Option<OwnedSemaphorePermit>,
     config: RelayConfig,
@@ -322,20 +352,31 @@ async fn handle(
     match peer {
         None => {
             // First to arrive: park for the peer to pick up — but never past capacity, so a
-            // flood cannot grow the map without bound even if it solves every puzzle.
+            // flood cannot grow the map without bound even if it solves every puzzle. The
+            // park time is recorded so the reaper can evict it if no peer ever arrives.
             let mut map = waiting.lock().expect("rendezvous map not poisoned");
             if map.len() >= config.capacity {
                 return Err(Error::AtCapacity);
             }
-            map.insert(cookie, stream);
+            map.insert(cookie, (stream, Instant::now()));
             Ok(())
         }
-        Some(mut peer) => {
+        Some((mut peer, _parked_at)) => {
             // Second to arrive: glue the two together and copy opaque bytes both ways.
             copy_bidirectional(&mut stream, &mut peer).await?;
             Ok(())
         }
     }
+}
+
+/// Evict parked streams older than `parked_ttl`, dropping (and so closing) each. Called
+/// periodically by the reaper on a guarded relay.
+fn reap_stale_parks(waiting: &Mutex<HashMap<Cookie, Parked>>, parked_ttl: Duration) -> usize {
+    let now = Instant::now();
+    let mut map = waiting.lock().expect("rendezvous map not poisoned");
+    let before = map.len();
+    map.retain(|_, (_, parked_at)| now.duration_since(*parked_at) < parked_ttl);
+    before - map.len()
 }
 
 /// Dial an **unguarded** rendezvous relay at `rp` and present `cookie`.
@@ -580,6 +621,37 @@ mod tests {
             matches!(got, Ok(Ok(None)) | Ok(Err(_))),
             "with the in-flight permit held, a second handshake must be dropped at accept, \
              not served a challenge"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_guarded_relay_reaps_a_parked_stream_that_is_never_met() {
+        // A patient attacker solves the puzzle and parks, but no peer ever arrives. capacity
+        // caps how many such squatters fit; parked_ttl caps how long each holds its slot.
+        let config = RelayConfig {
+            parked_ttl: Duration::from_millis(200),
+            ..RelayConfig::default()
+        };
+        let relay = RendezvousRelay::guarded(config);
+        let rp_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let rp_addr = rp_listener.local_addr().unwrap();
+        tokio::spawn(relay.clone().serve(rp_listener));
+
+        // Park an origin and never send it a client.
+        let _squatter = dial_admitted(rp_addr, b"unmet-cookie").await.unwrap();
+        tokio::time::sleep(Duration::from_millis(60)).await;
+        assert_eq!(
+            relay.parked(),
+            1,
+            "the solved-and-parked stream should occupy a slot"
+        );
+
+        // After the TTL (plus the reaper's half-TTL sweep period and margin), the slot is freed.
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert_eq!(
+            relay.parked(),
+            0,
+            "a parked stream unmet past parked_ttl must be reaped, freeing the slot"
         );
     }
 

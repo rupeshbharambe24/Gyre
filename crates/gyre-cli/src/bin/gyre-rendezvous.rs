@@ -109,5 +109,10 @@ fn build_config(args: &[String]) -> Result<RelayConfig, String> {
             "--handshake-timeout-secs",
             d.handshake_timeout.as_secs(),
         )?),
+        parked_ttl: Duration::from_secs(flag_or(
+            args,
+            "--parked-ttl-secs",
+            d.parked_ttl.as_secs(),
+        )?),
     })
 }
