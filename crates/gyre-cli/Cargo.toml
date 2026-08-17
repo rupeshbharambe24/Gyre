@@ -12,5 +12,6 @@ description = "Standalone relay and client binaries — real processes on real s
 gyre-common = { path = "../gyre-common" }
 gyre-sphinx = { path = "../gyre-sphinx" }
 gyre-net = { path = "../gyre-net" }
+gyre-shield = { path = "../gyre-shield" }
 sha2.workspace = true
 tokio.workspace = true

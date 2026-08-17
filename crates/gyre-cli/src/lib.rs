@@ -77,6 +77,22 @@ pub fn flag(args: &[String], name: &str) -> Option<String> {
     args.windows(2).find(|w| w[0] == name).map(|w| w[1].clone())
 }
 
+/// Read and parse a typed `--flag value`, or fall back to `default` when the flag is absent.
+///
+/// A flag that is *present but unparseable* is a configuration error, not a silent fallback —
+/// a daemon started with `--capacity abc` should refuse to run, not quietly serve at the
+/// default and leave the operator wondering.
+pub fn flag_or<T>(args: &[String], name: &str, default: T) -> Result<T, String>
+where
+    T: std::str::FromStr,
+    T::Err: std::fmt::Display,
+{
+    match flag(args, name) {
+        None => Ok(default),
+        Some(value) => value.parse().map_err(|e| format!("{name} {value:?}: {e}")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -121,5 +137,23 @@ mod tests {
     fn a_malformed_relay_arg_is_an_error_not_a_panic() {
         let args = vec!["--relay".to_string(), "no-equals-sign".to_string()];
         assert!(parse_relays(&args).is_err());
+    }
+
+    #[test]
+    fn flag_or_parses_uses_default_and_rejects_garbage() {
+        let args: Vec<String> = ["--capacity", "512"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        // present and valid
+        assert_eq!(flag_or::<usize>(&args, "--capacity", 1024).unwrap(), 512);
+        // absent -> default
+        assert_eq!(flag_or::<usize>(&args, "--missing", 1024).unwrap(), 1024);
+        // present but garbage -> error, not a silent default
+        let bad: Vec<String> = ["--capacity", "abc"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        assert!(flag_or::<usize>(&bad, "--capacity", 1024).is_err());
     }
 }

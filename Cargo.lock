@@ -761,6 +761,7 @@ version = "0.0.1"
 dependencies = [
  "gyre-common",
  "gyre-net",
+ "gyre-shield",
  "gyre-sphinx",
  "sha2 0.11.0",
  "tokio",
