@@ -1,6 +1,6 @@
 # Gyre — DoS / DDoS defense plan
 
-![status: partial](https://img.shields.io/badge/status-partial%20%C2%B7%20demo--only-orange.svg)
+![status: L7 gate deployable](https://img.shields.io/badge/L7%20gate-deployable%20daemon-brightgreen.svg)
 ![layer: L7 admission](https://img.shields.io/badge/layer-L7%20admission-informational.svg)
 ![volumetric: out of scope](https://img.shields.io/badge/volumetric%20L3%2FL4-out%20of%20scope%20(D22)-red.svg)
 
@@ -45,18 +45,19 @@ never be blurred stated first.
 > server verifies in one hash. That genuinely defeats L7 connection floods, slowloris on the
 > guarded handshake, issue-endpoint and reflection abuse, and replay. What it does **not** do,
 > and cannot by physics, is absorb a volumetric L3/L4 flood — that lives behind an anycast
-> scrubber and kernel SYN cookies, which are a **prerequisite**, not an add-on. And, said
-> plainly: today all of these L7 defenses are reachable only through the `gyre-shield` demo
-> binary — the shipped `gyre-relay` is still ungated — so productionizing a guarded daemon is
-> the top remaining item. Gyre **complements** a scrubber and makes it un-bypassable; it never
-> replaces one.
+> scrubber and kernel SYN cookies, which are a **prerequisite**, not an add-on. These L7
+> defenses now run as a real daemon (`gyre-rendezvous`), not just a demo. Gyre **complements**
+> a scrubber and makes it un-bypassable; it never replaces one.
 
 > [!IMPORTANT]
-> **The maturity caveat is load-bearing.** Every "BUILT" defense below is real, wired, and
-> tested — but only inside `gyre-shield`'s demo/test harness. The deployed `gyre-relay` runs
-> the *ungated* Sphinx `RelayServer`. "Built and tested" is not "deployed." Productionizing
-> the guarded relay ([roadmap #1](#prioritized-build-roadmap)) is what turns this plan from
-> true-in-principle into true-in-the-field.
+> **Maturity, stated precisely.** The guarded **rendezvous** relay — the L7 admission path all
+> of §2–§3 rests on — now ships as a deployable daemon, **`gyre-rendezvous`**, with
+> `gyre-origin` and `gyre-reach` as its origin and client. Run `./scripts/rendezvous.sh` to
+> see the gate refuse a flood across separate OS processes (observed: a legitimate client
+> admitted, 40/40 no-proof connections refused). This is no longer demo-only.
+> What remains ungated is a *different* component: the Sphinx **mix** relay (`gyre-relay`),
+> which carries the outbound anonymity path, not this inbound DoS one. Gating it is an
+> anonymity-path matter, out of scope here.
 
 ---
 
@@ -228,7 +229,7 @@ completed this session.
 | # | Item | Effort | Why it matters |
 |---|---|---|---|
 | 0 | Contract anycast scrubbing + `net.ipv4.tcp_syncookies=1` | ops, ~0 code | The only volumetric answer. A prerequisite; Gyre's origin-hiding makes it un-bypassable |
-| 1 | **Productionize the guarded relay as the deployable daemon** | small–moderate | Every BUILT defense is demo-only until this ships; the shipped relay is ungated |
+| ✅ | **Productionize the guarded relay as a deployable daemon** | done | `gyre-rendezvous` + `gyre-origin` + `gyre-reach`; `./scripts/rendezvous.sh` refuses a flood across real processes |
 | ✅ | In-flight handshake cap (Semaphore) | done | Bounds the *count* of concurrent handshakes, not just each one's duration |
 | ✅ | Slowloris handshake timeout | done | Bounds each handshake's *duration* |
 | ✅ | Cookie length cap | done | Removes the `capacity × 1 MiB` parked-map amplification |
@@ -265,7 +266,8 @@ minus the memory-hard puzzle minus deployment — both now cheap-to-close items 
 ---
 
 <sub>Every code claim here is grounded in `crates/gyre-shield` and `crates/gyre-net`; run
-`cargo test -p gyre-shield` and `cargo run -p gyre-shield` to reproduce. External figures:
+`cargo test -p gyre-shield`, `cargo run -p gyre-shield`, and `./scripts/rendezvous.sh` (the
+guarded relay refusing a flood across real processes) to reproduce. External figures:
 [memcached amplification](https://www.cloudflare.com/learning/ddos/memcached-ddos-attack/),
 [Tor onion-service PoW / Equi-X](https://spec.torproject.org/hspow-spec/),
 [`equix`](https://crates.io/crates/equix).</sub>

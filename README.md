@@ -193,6 +193,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 # Mixing visibly reorders packets between them — the mechanism, not a model.
 ./scripts/testnet.sh 8 mix
 
+# The inbound DoS shield as a deployable daemon: a guarded rendezvous relay,
+# an origin that hides behind it, and a client — separate processes. A client
+# that solves the admission puzzle gets through; a flood that skips it is
+# refused. See docs/DOS.md for the full layer-by-layer plan.
+./scripts/rendezvous.sh 50
+
 # End-to-end simulation: the REAL protocol code under an OPTIMAL correlation
 # attacker. This supersedes the GATE numbers — see docs/SIMULATION.md.
 cargo run --release -p gyre-sim
