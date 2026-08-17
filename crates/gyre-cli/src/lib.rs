@@ -18,9 +18,12 @@
 
 use std::net::SocketAddr;
 
+use gyre_endpoint::Ratchet;
+use gyre_net::{read_frame_obfuscated, write_frame_obfuscated};
 use gyre_obfs::{Identity, Obfuscator, Polymorphic, TlsMimic};
 use gyre_sphinx::{Relay, ADDRESS_LEN};
 use sha2::{Digest, Sha256};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 /// Salt for testnet key derivation. Published on purpose: these keys are not secret.
 const TESTNET_SALT: &[u8] = b"gyre-testnet-relay-key/INSECURE-SIMULATION-ONLY";
@@ -117,6 +120,79 @@ impl Obfuscator for StegoTransport {
     }
     fn name(&self) -> &'static str {
         "stego-lsb"
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Forward-secret, compartmentalized sessions — the Persistence dimension, wired.
+// ---------------------------------------------------------------------------
+
+/// Derive a 32-byte sub-key by labelling a key.
+fn subkey(key: &[u8; 32], label: &[u8]) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(key);
+    hasher.update(label);
+    hasher.finalize().into()
+}
+
+/// A **forward-secret, per-context** session between a client and an origin, layered over the
+/// obfuscated framing. It wires `gyre-endpoint`'s ratchet and compartmentalized personas into
+/// real traffic: each message is keyed by a fresh ratchet key (so a captured key reveals only
+/// that one message), and the whole session is derived from a per-`context` persona (so a
+/// client's activity in one context is cryptographically unlinkable from another).
+///
+/// Both ends derive identical ratchets from the shared cookie and context; `client_side`
+/// only selects which direction is outgoing.
+///
+/// > **Honest ceilings (per `gyre-endpoint`).** Isolation *contains* a compromise; it cannot
+/// > make an untrusted endpoint trusted — a live keylogger reads plaintext regardless. Forward
+/// > secrecy protects *past* messages after a key is captured, not an *actively* compromised
+/// > endpoint. This is data-minimization and cross-context unlinkability, not endpoint
+/// > invincibility.
+pub struct Session {
+    send: Ratchet,
+    recv: Ratchet,
+}
+
+impl Session {
+    /// A session for `context`, keyed from the shared `cookie`.
+    pub fn new(cookie: &[u8], context: &str, client_side: bool) -> Self {
+        // A compartmentalized per-context persona: two contexts yield unlinkable keys.
+        let master: [u8; 32] = Sha256::digest(cookie).into();
+        let persona = gyre_endpoint::Identity::new(master).persona(context);
+        let key = persona.key();
+        let c2o = Ratchet::new(subkey(&key, b"gyre-session/client-to-origin"));
+        let o2c = Ratchet::new(subkey(&key, b"gyre-session/origin-to-client"));
+        if client_side {
+            Self {
+                send: c2o,
+                recv: o2c,
+            }
+        } else {
+            Self {
+                send: o2c,
+                recv: c2o,
+            }
+        }
+    }
+
+    /// Send one message under the next forward-secret key.
+    pub async fn send<W: AsyncWrite + Unpin>(
+        &mut self,
+        w: &mut W,
+        payload: &[u8],
+    ) -> Result<(), gyre_net::Error> {
+        let key = self.send.next_message_key();
+        write_frame_obfuscated(w, &Polymorphic::new(key), payload).await
+    }
+
+    /// Receive one message under the next forward-secret key. `Ok(None)` on clean EOF.
+    pub async fn recv<R: AsyncRead + Unpin>(
+        &mut self,
+        r: &mut R,
+    ) -> Result<Option<Vec<u8>>, gyre_net::Error> {
+        let key = self.recv.next_message_key();
+        read_frame_obfuscated(r, &Polymorphic::new(key)).await
     }
 }
 

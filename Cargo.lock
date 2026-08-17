@@ -760,6 +760,7 @@ name = "gyre-cli"
 version = "0.0.1"
 dependencies = [
  "gyre-common",
+ "gyre-endpoint",
  "gyre-net",
  "gyre-obfs",
  "gyre-pir",

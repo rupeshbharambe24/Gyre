@@ -17,7 +17,7 @@
 use std::net::SocketAddr;
 use std::process::ExitCode;
 
-use gyre_cli::{flag, obfuscator};
+use gyre_cli::{flag, obfuscator, Session};
 use gyre_net::{read_frame_obfuscated, write_frame_obfuscated};
 use gyre_shield::rendezvous::dial_admitted;
 
@@ -46,8 +46,18 @@ async fn main() -> ExitCode {
         }
     };
 
+    // With --forward-secret, use a compartmentalized, forward-secret session for the payload
+    // instead of a flat transport key. Must match the client's --forward-secret and --context.
+    let forward_secret = args.iter().any(|a| a == "--forward-secret");
+    let context = flag(&args, "--context").unwrap_or_else(|| "default".to_string());
+
+    let mode = if forward_secret {
+        format!("forward-secret session, context {context:?}")
+    } else {
+        format!("transport {obfs_name}")
+    };
     println!(
-        "gyre-origin: no inbound address; reaching clients via rendezvous {rzv} under cookie {cookie:?} (transport {obfs_name})"
+        "gyre-origin: no inbound address; reaching clients via rendezvous {rzv} under cookie {cookie:?} ({mode})"
     );
 
     // Serve until killed: park, answer one request, re-park. Each park re-solves the
@@ -61,15 +71,26 @@ async fn main() -> ExitCode {
             }
         };
 
-        // Wait for a client to be spliced through and send a request. The payload is
-        // de-obfuscated with the same transport the client used.
-        match read_frame_obfuscated(&mut stream, obfs.as_ref()).await {
+        // A fresh session per park (so keys never repeat across clients).
+        let mut session = forward_secret.then(|| Session::new(cookie.as_bytes(), &context, false));
+
+        let request = if let Some(s) = session.as_mut() {
+            s.recv(&mut stream).await
+        } else {
+            read_frame_obfuscated(&mut stream, obfs.as_ref()).await
+        };
+
+        match request {
             Ok(Some(request)) => {
                 let mut response = reply_prefix.clone().into_bytes();
                 response.extend_from_slice(b": ");
                 response.extend_from_slice(&request);
-                if let Err(e) = write_frame_obfuscated(&mut stream, obfs.as_ref(), &response).await
-                {
+                let sent = if let Some(s) = session.as_mut() {
+                    s.send(&mut stream, &response).await
+                } else {
+                    write_frame_obfuscated(&mut stream, obfs.as_ref(), &response).await
+                };
+                if let Err(e) = sent {
                     eprintln!("gyre-origin: reply failed: {e}");
                 }
                 println!(

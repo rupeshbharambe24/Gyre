@@ -18,7 +18,7 @@ use std::net::SocketAddr;
 use std::process::ExitCode;
 use std::time::Duration;
 
-use gyre_cli::{flag, flag_or, obfuscator};
+use gyre_cli::{flag, flag_or, obfuscator, Session};
 use gyre_net::{read_frame, read_frame_obfuscated, write_frame, write_frame_obfuscated};
 use gyre_shield::rendezvous::dial_admitted;
 use tokio::net::TcpStream;
@@ -70,6 +70,38 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+
+    // With --forward-secret, the payload runs over a compartmentalized, forward-secret session
+    // (a fresh key per message, derived from a per-context persona) instead of one flat
+    // transport key. The origin must match --forward-secret and --context.
+    if args.iter().any(|a| a == "--forward-secret") {
+        let context = flag(&args, "--context").unwrap_or_else(|| "default".to_string());
+        let mut session = Session::new(cookie.as_bytes(), &context, true);
+        if let Err(e) = session.send(&mut stream, message.as_bytes()).await {
+            eprintln!("gyre-reach: send failed: {e}");
+            return ExitCode::FAILURE;
+        }
+        return match session.recv(&mut stream).await {
+            Ok(Some(reply)) => {
+                println!(
+                    "gyre-reach: ADMITTED · forward-secret session, context {context:?} -> reply {:?}",
+                    String::from_utf8_lossy(&reply)
+                );
+                ExitCode::SUCCESS
+            }
+            Ok(None) => {
+                eprintln!(
+                    "gyre-reach: origin closed without replying (context/transport mismatch?)"
+                );
+                ExitCode::FAILURE
+            }
+            Err(e) => {
+                eprintln!("gyre-reach: read failed: {e}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
     // The application payload is reshaped by the transport before it hits the wire; the relay
     // splices these opaque bytes without seeing the disguise or the plaintext.
     if let Err(e) = write_frame_obfuscated(&mut stream, obfs.as_ref(), message.as_bytes()).await {
