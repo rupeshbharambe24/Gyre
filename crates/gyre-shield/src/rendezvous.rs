@@ -349,6 +349,15 @@ async fn admit(
     // Issuing is still stateless (the effort controller is O(1) state, not per-challenge).
     let now = start.elapsed();
     let parked = waiting.lock().expect("map not poisoned").len();
+
+    // If the relay is already full, refuse *before* making the peer solve a puzzle it could
+    // never redeem into a slot — solving only to be told `AtCapacity` wastes the honest
+    // client's CPU (a 20-bit solve at full occupancy) and the relay's time. The authoritative
+    // check at park time still guards the issue→park race.
+    if parked >= config.capacity {
+        return Err(Error::AtCapacity);
+    }
+
     let occupancy_load = load_of(parked, config.capacity);
     let rate_load = match effort {
         Some(e) => {
@@ -906,8 +915,9 @@ mod tests {
 
     #[tokio::test]
     async fn a_guarded_relay_never_parks_beyond_capacity() {
-        // Capacity 2: a third distinct-cookie origin that solves its puzzle must still be
-        // refused a slot, so a flood cannot grow the map without bound.
+        // Capacity 2: the first two distinct-cookie origins park; a third is refused a slot,
+        // so a flood cannot grow the map without bound. The over-capacity dial is refused
+        // *before* solving (the early check), which is what keeps this fast and non-flaky.
         let config = RelayConfig {
             capacity: 2,
             ..RelayConfig::default()
@@ -917,12 +927,17 @@ mod tests {
         let rp_addr = rp_listener.local_addr().unwrap();
         tokio::spawn(relay.clone().serve(rp_listener));
 
-        // Three origins park on three different cookies. Each solves the (low-load) puzzle.
+        // Keep the origin streams alive so they stay parked (dropping the client end would let
+        // the reaper/close free the slot). The third dial is expected to be refused, so its
+        // result is tolerated rather than unwrapped.
+        let mut parked_streams = Vec::new();
         for i in 0..3u8 {
             let cookie = vec![b'c', i];
-            let _ = dial_admitted(rp_addr, &cookie).await.unwrap();
+            if let Ok(stream) = dial_admitted(rp_addr, &cookie).await {
+                parked_streams.push(stream);
+            }
             // small gap so the server processes the park before the next dial
-            tokio::time::sleep(Duration::from_millis(40)).await;
+            tokio::time::sleep(Duration::from_millis(60)).await;
         }
         tokio::time::sleep(Duration::from_millis(60)).await;
 
@@ -930,6 +945,10 @@ mod tests {
             relay.parked() <= 2,
             "parked = {} must never exceed the capacity of 2",
             relay.parked()
+        );
+        assert!(
+            relay.parked() >= 1,
+            "at least the first origin must have parked"
         );
     }
 }
