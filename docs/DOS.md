@@ -141,10 +141,11 @@ switch difficulty from exponential leading-zero-bits to Tor's linear effort enco
 > licensing sign-off is real. Even memory-hard PoW only denies *hardware* amplification — it
 > does not stop a large enough botnet of ordinary CPUs, and nothing at L7 touches L3/L4.
 
-**Also needed:** per-source/per-identity rate limiting (Tor prop-305 analogue, keyed on the
-capability token not raw IP), and a rate-aware AIMD/EWMA effort controller (today the load
-signal is instantaneous parking occupancy, so a flood that never successfully parks does not
-raise difficulty).
+The rate-aware **AIMD effort controller is now built** (`gyre-shield::effort`): difficulty is
+priced by `max(parking occupancy, admission-attempt rate)`, so a flood that never successfully
+parks still raises it — the occupancy-only signal used to leave it at the floor. **Still
+needed:** per-source/per-identity rate limiting (Tor prop-305 analogue, keyed on the capability
+token, not raw IP).
 
 **A genuine boundary, not a bug:** the relay splices **opaque bytes** and never parses
 requests, so expensive-query abuse *inside* an admitted session is the origin's job (per-request
@@ -237,7 +238,7 @@ completed this session.
 | 3 | Per-source rate limiting | moderate | Deprioritized: blunt per-IP is defeated by spoofing/NAT; F14 delivers the correctly token-keyed version |
 | ✅ | Fix **F14** — bind token issuance to a spent admission | done | One solved puzzle → ≤1 token; `Error::Unauthorized` otherwise; test confirmed to discriminate |
 | 5 | Splice idle/duration timeout | minor | Admitted pairs hold a task + two sockets indefinitely |
-| 6 | Rate-aware AIMD/EWMA difficulty controller (prop-327) | moderate | Occupancy-only load signal misses a flood that never parks |
+| ✅ | Rate-aware AIMD difficulty controller (prop-327) | done | `gyre-shield::effort`; difficulty = max(occupancy, attempt-rate); test confirmed to discriminate |
 | 7 | Memory-hard PoW via pure-Rust `equix`/`hashx` + linear effort | ~days–1 wk + LGPL sign-off | SHA-256 lets a GPU beat honest mobile clients — the asymmetry runs backwards |
 | 8 | Multi-relay pool + authenticated cookies | ~1–2 wks each | Dilutes a relay flood ~linearly by *k*; closes the bearer-cookie splice race |
 
