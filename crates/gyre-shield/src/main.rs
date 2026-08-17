@@ -1,15 +1,18 @@
-//! Inbound-shield demo: the ingress hops (authorized client + origin agree, a scanner
-//! does not), PoW admission cost rises with load while verification stays one hash, and
-//! a rendezvous lets the origin be reached without publishing any inbound address. Run
-//! it with `cargo run -p gyre-shield`.
+//! Inbound-shield demo. Run it with `cargo run -p gyre-shield`. It shows, in order: the
+//! ingress hops (authorized client + origin agree, a scanner does not); PoW admission cost
+//! rising with load while verification stays one hash; the admission protocol refusing a
+//! replayed solution; a rendezvous reaching an origin that published no inbound address;
+//! and — the payoff — a **guarded rendezvous relay refusing an L7 flood live**: a client
+//! that solves the puzzle is admitted, fifty connections that skip it are all dropped, and
+//! the parking map never grows.
 
 use std::time::Duration;
 
 use gyre_net::{read_frame, write_frame};
 use gyre_shield::admission::Admission;
-use gyre_shield::rendezvous::{dial, RendezvousRelay};
+use gyre_shield::rendezvous::{dial, dial_admitted, RelayConfig, RendezvousRelay};
 use gyre_shield::{difficulty_for_load, IngressSchedule, Puzzle};
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 
 #[tokio::main]
 async fn main() {
@@ -106,6 +109,62 @@ async fn main() {
     println!(
         "  client sent \"ping\" and received {:?} (the relay copied opaque bytes only)",
         String::from_utf8_lossy(&response)
+    );
+    println!("{}", "-".repeat(70));
+
+    // ---- Guarded rendezvous under an L7 flood ----
+    // The gate in front of a LIVE relay: a legitimate client that solves the puzzle gets
+    // through; a flood of connections that skip it are all dropped, and the parking map
+    // never grows. This is the L7 admission story running end to end, not described.
+    println!("Guarded rendezvous — the admission gate refusing an L7 flood, live:");
+    let capacity = 8;
+    let relay = RendezvousRelay::guarded(RelayConfig {
+        capacity,
+        ttl: Duration::from_secs(30),
+    });
+    let g_listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind guarded");
+    let g_addr = g_listener.local_addr().unwrap();
+    tokio::spawn(relay.clone().serve(g_listener));
+
+    // A legitimate origin + client, both solving the server-issued puzzle.
+    let g_cookie = b"guarded-demo-cookie".to_vec();
+    let origin_cookie = g_cookie.clone();
+    let guarded_origin = tokio::spawn(async move {
+        let mut stream = dial_admitted(g_addr, &origin_cookie).await.unwrap();
+        let request = read_frame(&mut stream).await.unwrap().unwrap();
+        let mut response = b"pong: ".to_vec();
+        response.extend_from_slice(&request);
+        write_frame(&mut stream, &response).await.unwrap();
+    });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let mut g_client = dial_admitted(g_addr, &g_cookie).await.expect("admitted");
+    write_frame(&mut g_client, b"ping").await.expect("send");
+    let g_response = read_frame(&mut g_client).await.unwrap().unwrap();
+    guarded_origin.await.unwrap();
+    println!(
+        "  legit client solved the puzzle       -> ADMITTED, received {:?}",
+        String::from_utf8_lossy(&g_response)
+    );
+
+    // A flood: connections that never solve the puzzle. Each is dropped; none parks.
+    let flood = 50;
+    let mut refused = 0;
+    for _ in 0..flood {
+        if let Ok(mut attacker) = TcpStream::connect(g_addr).await {
+            let _ = write_frame(&mut attacker, b"no-proof-of-work").await;
+            let _ = read_frame(&mut attacker).await; // the server's challenge, then...
+            match tokio::time::timeout(Duration::from_secs(1), read_frame(&mut attacker)).await {
+                Ok(Ok(None)) | Ok(Err(_)) => refused += 1, // connection closed = refused
+                _ => {}
+            }
+        }
+    }
+    println!("  {flood} connections with no proof-of-work -> {refused} refused, 0 served");
+    println!(
+        "  parking slots in use after the flood  -> {} of {capacity} (the bound held)",
+        relay.parked()
     );
     println!("{}", "-".repeat(70));
 

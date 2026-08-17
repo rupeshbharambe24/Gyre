@@ -51,6 +51,9 @@ type HmacSha256 = Hmac<Sha256>;
 /// The authenticated bytes of a challenge, minus the tag: `id ‖ expiry ‖ difficulty`.
 const CHALLENGE_BODY_LEN: usize = 32 + 8 + 4;
 
+/// Serialized length of a [`Challenge`] on the wire: body plus a 32-byte tag.
+pub const CHALLENGE_LEN: usize = CHALLENGE_BODY_LEN + 32;
+
 /// A server-issued admission challenge. Self-authenticating: it carries an HMAC over its own
 /// fields, so the issuing server can verify it later without having stored it.
 ///
@@ -76,9 +79,10 @@ impl Challenge {
         self.difficulty_bits
     }
 
-    /// Serialize for transport: `id ‖ expiry ‖ difficulty ‖ tag`, big-endian, 76 bytes.
-    pub fn to_bytes(&self) -> [u8; CHALLENGE_BODY_LEN + 32] {
-        let mut out = [0u8; CHALLENGE_BODY_LEN + 32];
+    /// Serialize for transport: `id ‖ expiry ‖ difficulty ‖ tag`, big-endian,
+    /// [`CHALLENGE_LEN`] bytes.
+    pub fn to_bytes(&self) -> [u8; CHALLENGE_LEN] {
+        let mut out = [0u8; CHALLENGE_LEN];
         out[..32].copy_from_slice(&self.id);
         out[32..40].copy_from_slice(&self.expiry_millis.to_be_bytes());
         out[40..44].copy_from_slice(&self.difficulty_bits.to_be_bytes());
@@ -88,7 +92,7 @@ impl Challenge {
 
     /// Parse a challenge from the wire. Does **not** authenticate it — that is
     /// [`Admission::redeem`]'s job, which is the only party holding the server key.
-    pub fn from_bytes(bytes: &[u8; CHALLENGE_BODY_LEN + 32]) -> Self {
+    pub fn from_bytes(bytes: &[u8; CHALLENGE_LEN]) -> Self {
         let mut id = [0u8; 32];
         id.copy_from_slice(&bytes[..32]);
         let mut e = [0u8; 8];
