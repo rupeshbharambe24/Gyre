@@ -121,6 +121,7 @@ async fn main() {
     let relay = RendezvousRelay::guarded(RelayConfig {
         capacity,
         ttl: Duration::from_secs(30),
+        handshake_timeout: Duration::from_secs(10),
     });
     let g_listener = TcpListener::bind("127.0.0.1:0")
         .await

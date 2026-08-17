@@ -65,6 +65,9 @@ pub enum Error {
     /// The peer's admission response was too short to contain a challenge and a nonce.
     #[error("malformed admission response")]
     MalformedAdmission,
+    /// The peer did not complete the admission handshake within the deadline (slowloris).
+    #[error("admission handshake timed out")]
+    HandshakeTimeout,
     /// The relay is already holding `capacity` parked connections.
     #[error("relay at capacity")]
     AtCapacity,
@@ -81,6 +84,11 @@ pub struct RelayConfig {
     pub capacity: usize,
     /// How long an issued admission challenge stays valid.
     pub ttl: Duration,
+    /// How long the relay will wait for a connection to complete the admission handshake
+    /// before dropping it. This is the **slowloris** bound: without it, a peer that opens a
+    /// connection and then never sends its solution pins a task and a socket indefinitely.
+    /// It must comfortably exceed a legitimate client's worst-case solve-plus-round-trip.
+    pub handshake_timeout: Duration,
 }
 
 /// A rendezvous relay: splices two connections that present the same cookie.
@@ -93,6 +101,7 @@ pub struct RendezvousRelay {
     waiting: Arc<Mutex<HashMap<Cookie, TcpStream>>>,
     gate: Option<Arc<Mutex<Admission>>>,
     capacity: usize,
+    handshake_timeout: Duration,
     start: Instant,
 }
 
@@ -102,6 +111,7 @@ impl Default for RendezvousRelay {
             waiting: Arc::new(Mutex::new(HashMap::new())),
             gate: None,
             capacity: usize::MAX,
+            handshake_timeout: Duration::from_secs(10),
             start: Instant::now(),
         }
     }
@@ -121,6 +131,7 @@ impl RendezvousRelay {
             waiting: Arc::new(Mutex::new(HashMap::new())),
             gate: Some(Arc::new(Mutex::new(Admission::new(config.ttl)))),
             capacity: config.capacity,
+            handshake_timeout: config.handshake_timeout,
             start: Instant::now(),
         }
     }
@@ -141,9 +152,12 @@ impl RendezvousRelay {
             let waiting = self.waiting.clone();
             let gate = self.gate.clone();
             let capacity = self.capacity;
+            let handshake_timeout = self.handshake_timeout;
             let start = self.start;
             tokio::spawn(async move {
-                if let Err(e) = handle(waiting, gate, capacity, start, stream).await {
+                if let Err(e) =
+                    handle(waiting, gate, capacity, handshake_timeout, start, stream).await
+                {
                     eprintln!("[rendezvous] connection refused: {e}");
                 }
             });
@@ -156,6 +170,7 @@ impl Default for RelayConfig {
         Self {
             capacity: 1024,
             ttl: Duration::from_secs(30),
+            handshake_timeout: Duration::from_secs(10),
         }
     }
 }
@@ -214,12 +229,24 @@ async fn handle(
     waiting: Arc<Mutex<HashMap<Cookie, TcpStream>>>,
     gate: Option<Arc<Mutex<Admission>>>,
     capacity: usize,
+    handshake_timeout: Duration,
     start: Instant,
     mut stream: TcpStream,
 ) -> Result<()> {
     // Gate first (if configured), then the cookie logic is identical for both relays.
+    //
+    // The whole gated handshake is bounded by `handshake_timeout`. Without this deadline a
+    // peer that connects, receives the challenge, and then stalls would hold this task and
+    // socket forever — the classic slowloris. The bound covers the challenge write and the
+    // response read, so a stalled peer is dropped rather than accumulated.
     let cookie = match &gate {
-        Some(gate) => admit(gate, &waiting, capacity, start, &mut stream).await?,
+        Some(gate) => {
+            let handshake = admit(gate, &waiting, capacity, start, &mut stream);
+            match tokio::time::timeout(handshake_timeout, handshake).await {
+                Ok(result) => result?,
+                Err(_elapsed) => return Err(Error::HandshakeTimeout),
+            }
+        }
         None => read_frame(&mut stream).await?.ok_or(Error::NoCookie)?,
     };
 
@@ -405,12 +432,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_guarded_relay_drops_a_slowloris_that_never_finishes_the_handshake() {
+        // A slowloris: connect, take the challenge, then never send the solution. Without a
+        // handshake deadline this pins a task and socket forever. With one, the relay drops
+        // it and the connection closes shortly after the deadline.
+        let config = RelayConfig {
+            capacity: 8,
+            ttl: Duration::from_secs(30),
+            handshake_timeout: Duration::from_millis(300),
+        };
+        let rp_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let rp_addr = rp_listener.local_addr().unwrap();
+        tokio::spawn(RendezvousRelay::guarded(config).serve(rp_listener));
+
+        let mut slowloris = TcpStream::connect(rp_addr).await.unwrap();
+        let _challenge = read_frame(&mut slowloris).await.unwrap().unwrap();
+        // Deliberately send nothing further. The server must drop us after the deadline.
+        let after = tokio::time::timeout(Duration::from_secs(3), read_frame(&mut slowloris)).await;
+        assert!(
+            matches!(after, Ok(Ok(None)) | Ok(Err(_))),
+            "a peer that stalls the handshake must be dropped after the deadline, not held"
+        );
+    }
+
+    #[tokio::test]
     async fn a_guarded_relay_never_parks_beyond_capacity() {
         // Capacity 2: a third distinct-cookie origin that solves its puzzle must still be
         // refused a slot, so a flood cannot grow the map without bound.
         let config = RelayConfig {
             capacity: 2,
             ttl: Duration::from_secs(30),
+            handshake_timeout: Duration::from_secs(10),
         };
         let relay = RendezvousRelay::guarded(config);
         let rp_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
