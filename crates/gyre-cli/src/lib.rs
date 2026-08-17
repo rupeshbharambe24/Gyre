@@ -18,6 +18,7 @@
 
 use std::net::SocketAddr;
 
+use gyre_obfs::{Identity, Obfuscator, Polymorphic, TlsMimic};
 use gyre_sphinx::{Relay, ADDRESS_LEN};
 use sha2::{Digest, Sha256};
 
@@ -93,6 +94,26 @@ where
     }
 }
 
+/// Select a pluggable transport (obfuscator) by name, keyed from the shared `cookie` so both
+/// ends agree on the disguise without a separate key exchange.
+///
+/// Honest ceiling: this reshapes what the *payload* looks like on the wire — appearance only,
+/// with **zero** effect on anonymity. "Unblockable" is impossible; obfuscation buys "more
+/// expensive to block today", and uniform-random output is itself a DPI fingerprint.
+pub fn obfuscator(name: &str, cookie: &[u8]) -> Result<Box<dyn Obfuscator>, String> {
+    match name {
+        "identity" | "none" => Ok(Box::new(Identity)),
+        "polymorphic" | "poly" => {
+            let key: [u8; 32] = Sha256::digest(cookie).into();
+            Ok(Box::new(Polymorphic::new(key)))
+        }
+        "tls" | "tls-mimic" => Ok(Box::new(TlsMimic)),
+        other => Err(format!(
+            "unknown --obfs {other:?} (expected identity | polymorphic | tls)"
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,6 +158,22 @@ mod tests {
     fn a_malformed_relay_arg_is_an_error_not_a_panic() {
         let args = vec!["--relay".to_string(), "no-equals-sign".to_string()];
         assert!(parse_relays(&args).is_err());
+    }
+
+    #[test]
+    fn obfuscator_selects_by_name_and_rejects_unknown() {
+        let cookie = b"shared-cookie";
+        assert_eq!(obfuscator("identity", cookie).unwrap().name(), "identity");
+        assert!(obfuscator("polymorphic", cookie).is_ok());
+        assert!(obfuscator("tls", cookie).is_ok());
+        assert!(obfuscator("nope", cookie).is_err());
+
+        // Same cookie -> same Polymorphic keystream, so a round trip recovers the payload.
+        let a = obfuscator("polymorphic", cookie).unwrap();
+        let b = obfuscator("polymorphic", cookie).unwrap();
+        let wire = a.obfuscate(b"hello");
+        assert_ne!(wire, b"hello", "the disguise must transform the bytes");
+        assert_eq!(b.deobfuscate(&wire).unwrap(), b"hello");
     }
 
     #[test]

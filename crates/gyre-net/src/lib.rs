@@ -46,6 +46,9 @@ pub enum Error {
     /// A QUIC/TLS transport failure (handshake, certificate pinning, stream I/O).
     #[error("quic/tls: {0}")]
     Tls(String),
+    /// The wire bytes did not de-obfuscate — corrupt, truncated, or the wrong transport.
+    #[error("obfuscation: {0}")]
+    Obfuscation(#[from] gyre_obfs::Error),
 }
 
 /// Convenience alias for results from this crate.
@@ -81,6 +84,36 @@ pub async fn read_frame<R: AsyncRead + Unpin>(r: &mut R) -> Result<Option<Vec<u8
     let mut buf = vec![0u8; len];
     r.read_exact(&mut buf).await?;
     Ok(Some(buf))
+}
+
+/// Write one frame through an [`Obfuscator`](gyre_obfs::Obfuscator): the payload is reshaped
+/// into wire bytes (looking like random noise, TLS, or whatever the transport mimics) before
+/// it is length-prefixed and sent. The peer must use the *same* transport to read it back.
+///
+/// Honest ceiling: obfuscation buys "more expensive to block *today*", never "unblockable".
+/// The outer length prefix is still visible, so this changes what the *payload* looks like,
+/// not that a framed stream exists — a determined censor with traffic analysis is out of scope
+/// (decision on `gyre-obfs`: appearance only, zero effect on the anonymity trilemma).
+pub async fn write_frame_obfuscated<W: AsyncWrite + Unpin>(
+    w: &mut W,
+    obfs: &dyn gyre_obfs::Obfuscator,
+    payload: &[u8],
+) -> Result<()> {
+    let wire = obfs.obfuscate(payload);
+    write_frame(w, &wire).await
+}
+
+/// Read one obfuscated frame and recover the original payload with `obfs`. Returns
+/// `Ok(None)` on a clean end-of-stream; `Err(Obfuscation(..))` if the bytes do not
+/// de-obfuscate (corrupt, truncated, or the wrong transport).
+pub async fn read_frame_obfuscated<R: AsyncRead + Unpin>(
+    r: &mut R,
+    obfs: &dyn gyre_obfs::Obfuscator,
+) -> Result<Option<Vec<u8>>> {
+    match read_frame(r).await? {
+        Some(wire) => Ok(Some(obfs.deobfuscate(&wire)?)),
+        None => Ok(None),
+    }
 }
 
 // ---------------------------------------------------------------------------

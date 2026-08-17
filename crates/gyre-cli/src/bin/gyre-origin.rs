@@ -17,8 +17,8 @@
 use std::net::SocketAddr;
 use std::process::ExitCode;
 
-use gyre_cli::flag;
-use gyre_net::{read_frame, write_frame};
+use gyre_cli::{flag, obfuscator};
+use gyre_net::{read_frame_obfuscated, write_frame_obfuscated};
 use gyre_shield::rendezvous::dial_admitted;
 
 #[tokio::main]
@@ -36,8 +36,18 @@ async fn main() -> ExitCode {
     let cookie = flag(&args, "--cookie").unwrap_or_else(|| "gyre-service".to_string());
     let reply_prefix = flag(&args, "--reply").unwrap_or_else(|| "origin answers".to_string());
 
+    // The payload disguise, keyed from the cookie. Must match the client's --obfs.
+    let obfs_name = flag(&args, "--obfs").unwrap_or_else(|| "identity".to_string());
+    let obfs = match obfuscator(&obfs_name, cookie.as_bytes()) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("gyre-origin: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+
     println!(
-        "gyre-origin: no inbound address; reaching clients via rendezvous {rzv} under cookie {cookie:?}"
+        "gyre-origin: no inbound address; reaching clients via rendezvous {rzv} under cookie {cookie:?} (transport {obfs_name})"
     );
 
     // Serve until killed: park, answer one request, re-park. Each park re-solves the
@@ -51,13 +61,15 @@ async fn main() -> ExitCode {
             }
         };
 
-        // Wait for a client to be spliced through and send a request.
-        match read_frame(&mut stream).await {
+        // Wait for a client to be spliced through and send a request. The payload is
+        // de-obfuscated with the same transport the client used.
+        match read_frame_obfuscated(&mut stream, obfs.as_ref()).await {
             Ok(Some(request)) => {
                 let mut response = reply_prefix.clone().into_bytes();
                 response.extend_from_slice(b": ");
                 response.extend_from_slice(&request);
-                if let Err(e) = write_frame(&mut stream, &response).await {
+                if let Err(e) = write_frame_obfuscated(&mut stream, obfs.as_ref(), &response).await
+                {
                     eprintln!("gyre-origin: reply failed: {e}");
                 }
                 println!(

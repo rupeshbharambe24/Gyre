@@ -10,6 +10,7 @@ description = "S1: async transport, directory, and relay server that carry Gyre 
 
 [dependencies]
 gyre-sphinx = { path = "../gyre-sphinx" }
+gyre-obfs = { path = "../gyre-obfs" }
 tokio.workspace = true
 quinn.workspace = true
 rustls.workspace = true

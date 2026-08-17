@@ -39,7 +39,7 @@ sed 's/^/   [relay] /' "$LOGS/rzv.log"
 
 echo
 echo "2. starting the origin (dials OUT, parks, publishes no inbound address)"
-"$BIN/gyre-origin" --rendezvous "127.0.0.1:$PORT" --cookie "$COOKIE" --reply "origin" \
+"$BIN/gyre-origin" --rendezvous "127.0.0.1:$PORT" --cookie "$COOKIE" --reply "origin" --obfs tls \
   > "$LOGS/origin.log" 2>&1 &
 ORIGIN_PID=$!
 sleep 1
@@ -47,7 +47,7 @@ sed 's/^/   [origin] /' "$LOGS/origin.log"
 
 echo
 echo "3a. a legitimate client solves the puzzle and reaches the origin:"
-"$BIN/gyre-reach" --rendezvous "127.0.0.1:$PORT" --cookie "$COOKIE" --message "hello over real sockets" \
+"$BIN/gyre-reach" --rendezvous "127.0.0.1:$PORT" --cookie "$COOKIE" --message "hello over real sockets" --obfs tls \
   | sed 's/^/   /'
 
 echo

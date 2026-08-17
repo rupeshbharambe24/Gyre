@@ -13,5 +13,6 @@ gyre-common = { path = "../gyre-common" }
 gyre-sphinx = { path = "../gyre-sphinx" }
 gyre-net = { path = "../gyre-net" }
 gyre-shield = { path = "../gyre-shield" }
+gyre-obfs = { path = "../gyre-obfs" }
 sha2.workspace = true
 tokio.workspace = true

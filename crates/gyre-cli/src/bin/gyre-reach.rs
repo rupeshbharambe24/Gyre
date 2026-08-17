@@ -18,8 +18,8 @@ use std::net::SocketAddr;
 use std::process::ExitCode;
 use std::time::Duration;
 
-use gyre_cli::{flag, flag_or};
-use gyre_net::{read_frame, write_frame};
+use gyre_cli::{flag, flag_or, obfuscator};
+use gyre_net::{read_frame, read_frame_obfuscated, write_frame, write_frame_obfuscated};
 use gyre_shield::rendezvous::dial_admitted;
 use tokio::net::TcpStream;
 
@@ -51,6 +51,17 @@ async fn main() -> ExitCode {
     let cookie = flag(&args, "--cookie").unwrap_or_else(|| "gyre-service".to_string());
     let message = flag(&args, "--message").unwrap_or_else(|| "ping".to_string());
 
+    // The payload disguise (pluggable transport), keyed from the shared cookie. The origin
+    // must select the same --obfs. Default is the no-op baseline.
+    let obfs_name = flag(&args, "--obfs").unwrap_or_else(|| "identity".to_string());
+    let obfs = match obfuscator(&obfs_name, cookie.as_bytes()) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("gyre-reach: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+
     // Solve the puzzle and reach the origin.
     let mut stream = match dial_admitted(rzv, cookie.as_bytes()).await {
         Ok(s) => s,
@@ -59,14 +70,17 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    if let Err(e) = write_frame(&mut stream, message.as_bytes()).await {
+    // The application payload is reshaped by the transport before it hits the wire; the relay
+    // splices these opaque bytes without seeing the disguise or the plaintext.
+    if let Err(e) = write_frame_obfuscated(&mut stream, obfs.as_ref(), message.as_bytes()).await {
         eprintln!("gyre-reach: send failed: {e}");
         return ExitCode::FAILURE;
     }
-    match read_frame(&mut stream).await {
+    match read_frame_obfuscated(&mut stream, obfs.as_ref()).await {
         Ok(Some(reply)) => {
             println!(
-                "gyre-reach: ADMITTED (solved the puzzle) -> reply {:?}",
+                "gyre-reach: ADMITTED (solved the puzzle) · transport {:?} -> reply {:?}",
+                obfs.name(),
                 String::from_utf8_lossy(&reply)
             );
             ExitCode::SUCCESS
