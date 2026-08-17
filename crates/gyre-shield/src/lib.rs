@@ -27,6 +27,7 @@ use std::time::Duration;
 use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
 
+pub mod admission;
 pub mod rendezvous;
 pub mod token;
 

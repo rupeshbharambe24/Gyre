@@ -6,6 +6,7 @@
 use std::time::Duration;
 
 use gyre_net::{read_frame, write_frame};
+use gyre_shield::admission::Admission;
 use gyre_shield::rendezvous::{dial, RendezvousRelay};
 use gyre_shield::{difficulty_for_load, IngressSchedule, Puzzle};
 use tokio::net::TcpListener;
@@ -49,6 +50,29 @@ async fn main() {
             "  load={label} ({load:.1})  ->  difficulty {bits:>2} bits  ->  client solved in {:>8} hashes",
             solution.attempts
         );
+    }
+    println!("{}", "-".repeat(70));
+
+    // ---- Admission protocol: the puzzle turned into a real gate ----
+    // The raw puzzle above is a cost function. This is the anti-replay admission protocol
+    // that turns it into a defence: the SERVER issues a fresh, expiring, single-use
+    // challenge, so a solved challenge cannot be replayed and a client cannot pre-pick one.
+    println!("Admission protocol — one honest client, then the same solution replayed:");
+    let now = Duration::from_secs(1_000);
+    let mut gate = Admission::new(Duration::from_secs(30));
+    let challenge = gate.issue(now, 1.0); // under flood: a hard challenge
+    let solution = challenge.puzzle().solve();
+    println!(
+        "  server issued a {}-bit challenge (stateless: cost 1 HMAC, 0 stored bytes)",
+        challenge.difficulty_bits()
+    );
+    match gate.redeem(&challenge, &solution, now) {
+        Ok(()) => println!("  first redemption      -> ADMITTED (valid, fresh, unspent)"),
+        Err(e) => println!("  first redemption      -> DENIED: {e}"),
+    }
+    match gate.redeem(&challenge, &solution, now) {
+        Ok(()) => println!("  replayed redemption   -> ADMITTED  (BUG — replay should fail)"),
+        Err(e) => println!("  replayed redemption   -> DENIED: {e}  (this is the whole point)"),
     }
     println!("{}", "-".repeat(70));
 
