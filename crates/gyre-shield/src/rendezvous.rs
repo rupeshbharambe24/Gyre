@@ -46,6 +46,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::admission::{Admission, Challenge, Denied, CHALLENGE_LEN};
+use crate::effort::EffortController;
 use crate::token::{Issuer, Token, OUTPUT_LEN, SEED_LEN};
 use crate::Solution;
 
@@ -129,6 +130,11 @@ pub struct RelayConfig {
     /// hold the map — and the load signal it drives — full indefinitely. Must exceed a
     /// legitimate peer's realistic arrival latency.
     pub parked_ttl: Duration,
+    /// The window over which the effort controller measures the admission-attempt *rate*.
+    pub effort_window: Duration,
+    /// Admission attempts per `effort_window` at or below which the relay is calm. Above it,
+    /// the effort controller raises difficulty even for a flood that never parks.
+    pub effort_target_per_window: u32,
 }
 
 /// A rendezvous relay: splices two connections that present the same cookie.
@@ -145,6 +151,9 @@ pub struct RendezvousRelay {
     /// Verifies capability tokens for the skip-PoW fast path. `None` means tokens are not
     /// accepted and every client must solve the puzzle.
     verifier: Option<Arc<Mutex<Issuer>>>,
+    /// Rate-aware effort controller: raises difficulty for a flood that never parks. `None` on
+    /// an unguarded relay.
+    effort: Option<Arc<Mutex<EffortController>>>,
     config: RelayConfig,
     start: Instant,
 }
@@ -156,6 +165,7 @@ impl Default for RendezvousRelay {
             gate: None,
             inflight: None,
             verifier: None,
+            effort: None,
             config: RelayConfig::unbounded(),
             start: Instant::now(),
         }
@@ -175,11 +185,21 @@ impl RendezvousRelay {
     /// count (`max_inflight`); and cookies are length-capped. This is the configuration that
     /// makes the relay a real L7 gate.
     pub fn guarded(config: RelayConfig) -> Self {
+        Self::guarded_inner(config, None)
+    }
+
+    /// Shared construction for the two guarded variants, so a new bound cannot be added to one
+    /// and forgotten on the other.
+    fn guarded_inner(config: RelayConfig, verifier: Option<Arc<Mutex<Issuer>>>) -> Self {
         Self {
             waiting: Arc::new(Mutex::new(HashMap::new())),
             gate: Some(Arc::new(Mutex::new(Admission::new(config.ttl)))),
             inflight: Some(Arc::new(Semaphore::new(config.max_inflight))),
-            verifier: None,
+            verifier,
+            effort: Some(Arc::new(Mutex::new(EffortController::new(
+                config.effort_window,
+                config.effort_target_per_window,
+            )))),
             config,
             start: Instant::now(),
         }
@@ -194,13 +214,18 @@ impl RendezvousRelay {
     /// The `issuer` is shared (redemption mutates its single-use spent set), so one operator
     /// runs both the token issuer and this relay.
     pub fn guarded_with_tokens(config: RelayConfig, issuer: Arc<Mutex<Issuer>>) -> Self {
-        Self {
-            waiting: Arc::new(Mutex::new(HashMap::new())),
-            gate: Some(Arc::new(Mutex::new(Admission::new(config.ttl)))),
-            inflight: Some(Arc::new(Semaphore::new(config.max_inflight))),
-            verifier: Some(issuer),
-            config,
-            start: Instant::now(),
+        Self::guarded_inner(config, Some(issuer))
+    }
+
+    /// The effort controller's current suggested load in `[0, 1]`, or `0.0` on an unguarded
+    /// relay. Diagnostic — lets an operator watch the rate-driven pressure rise and fall.
+    pub fn effort_load(&self) -> f64 {
+        match &self.effort {
+            Some(e) => e
+                .lock()
+                .expect("effort controller not poisoned")
+                .load(self.start.elapsed()),
+            None => 0.0,
         }
     }
 
@@ -254,14 +279,9 @@ impl RendezvousRelay {
                 None => None,
             };
 
-            let waiting = self.waiting.clone();
-            let gate = self.gate.clone();
-            let verifier = self.verifier.clone();
-            let config = self.config;
-            let start = self.start;
+            let relay = self.clone();
             tokio::spawn(async move {
-                if let Err(e) = handle(waiting, gate, verifier, permit, config, start, stream).await
-                {
+                if let Err(e) = handle(relay, permit, stream).await {
                     eprintln!("[rendezvous] connection refused: {e}");
                 }
             });
@@ -279,6 +299,8 @@ impl RelayConfig {
             max_cookie_len: usize::MAX,
             max_inflight: usize::MAX,
             parked_ttl: Duration::from_secs(3600),
+            effort_window: Duration::from_secs(1),
+            effort_target_per_window: u32::MAX,
         }
     }
 }
@@ -292,6 +314,8 @@ impl Default for RelayConfig {
             max_cookie_len: 128,
             max_inflight: 256,
             parked_ttl: Duration::from_secs(60),
+            effort_window: Duration::from_secs(1),
+            effort_target_per_window: 200,
         }
     }
 }
@@ -313,16 +337,28 @@ fn load_of(parked: usize, capacity: usize) -> f64 {
 async fn admit(
     gate: &Mutex<Admission>,
     verifier: Option<&Mutex<Issuer>>,
+    effort: Option<&Mutex<EffortController>>,
     waiting: &Mutex<HashMap<Cookie, Parked>>,
     config: RelayConfig,
     start: Instant,
     stream: &mut TcpStream,
 ) -> Result<Cookie> {
-    // Price the challenge by current load. Issuing is stateless, so this costs one HMAC
-    // even under a flood of connections that never finish.
-    let parked = waiting.lock().expect("map not poisoned").len();
-    let load = load_of(parked, config.capacity);
+    // Price the challenge by the *stronger* of two load signals, so either can raise it:
+    //  - parking occupancy, which reacts to a flood that fills the map, and
+    //  - the admission-attempt rate, which reacts to a flood that never parks.
+    // Issuing is still stateless (the effort controller is O(1) state, not per-challenge).
     let now = start.elapsed();
+    let parked = waiting.lock().expect("map not poisoned").len();
+    let occupancy_load = load_of(parked, config.capacity);
+    let rate_load = match effort {
+        Some(e) => {
+            let mut e = e.lock().expect("effort controller not poisoned");
+            e.record_attempt(now);
+            e.load(now)
+        }
+        None => 0.0,
+    };
+    let load = occupancy_load.max(rate_load);
     let challenge = gate.lock().expect("gate not poisoned").issue(now, load);
     write_frame(stream, &challenge.to_bytes()).await?;
 
@@ -388,13 +424,11 @@ async fn admit(
     }
 }
 
+/// Handle one accepted connection. Takes the whole relay (its fields are all `Arc`/`Copy`, so
+/// a clone is cheap) rather than a long argument list.
 async fn handle(
-    waiting: Arc<Mutex<HashMap<Cookie, Parked>>>,
-    gate: Option<Arc<Mutex<Admission>>>,
-    verifier: Option<Arc<Mutex<Issuer>>>,
+    relay: RendezvousRelay,
     permit: Option<OwnedSemaphorePermit>,
-    config: RelayConfig,
-    start: Instant,
     mut stream: TcpStream,
 ) -> Result<()> {
     // Gate first (if configured), then the cookie logic is identical for both relays.
@@ -403,17 +437,18 @@ async fn handle(
     // peer that connects, receives the challenge, and then stalls would hold this task and
     // socket forever — the classic slowloris. The bound covers the challenge write and the
     // response read, so a stalled peer is dropped rather than accumulated.
-    let cookie_result = match &gate {
+    let cookie_result = match &relay.gate {
         Some(gate) => {
             let handshake = admit(
                 gate,
-                verifier.as_deref(),
-                &waiting,
-                config,
-                start,
+                relay.verifier.as_deref(),
+                relay.effort.as_deref(),
+                &relay.waiting,
+                relay.config,
+                relay.start,
                 &mut stream,
             );
-            match tokio::time::timeout(config.handshake_timeout, handshake).await {
+            match tokio::time::timeout(relay.config.handshake_timeout, handshake).await {
                 Ok(result) => result,
                 Err(_elapsed) => Err(Error::HandshakeTimeout),
             }
@@ -430,7 +465,8 @@ async fn handle(
     let cookie = cookie_result?;
 
     // Is a peer already parked on this cookie?
-    let peer = waiting
+    let peer = relay
+        .waiting
         .lock()
         .expect("rendezvous map not poisoned")
         .remove(&cookie);
@@ -439,8 +475,8 @@ async fn handle(
             // First to arrive: park for the peer to pick up — but never past capacity, so a
             // flood cannot grow the map without bound even if it solves every puzzle. The
             // park time is recorded so the reaper can evict it if no peer ever arrives.
-            let mut map = waiting.lock().expect("rendezvous map not poisoned");
-            if map.len() >= config.capacity {
+            let mut map = relay.waiting.lock().expect("rendezvous map not poisoned");
+            if map.len() >= relay.config.capacity {
                 return Err(Error::AtCapacity);
             }
             map.insert(cookie, (stream, Instant::now()));
@@ -822,6 +858,49 @@ mod tests {
             relay.parked(),
             0,
             "a parked stream unmet past parked_ttl must be reaped, freeing the slot"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_flood_of_attempts_that_never_park_raises_the_difficulty() {
+        // Every probe connects, reads the challenge, and drops — so it makes an admission
+        // *attempt* but never parks and never occupies a slot. With an occupancy-only signal
+        // the difficulty would stay at the floor; the rate-aware effort controller raises it.
+        let config = RelayConfig {
+            effort_window: Duration::from_millis(50),
+            effort_target_per_window: 2,
+            ..RelayConfig::default()
+        };
+        let rp_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let rp_addr = rp_listener.local_addr().unwrap();
+        let relay = RendezvousRelay::guarded(config);
+        tokio::spawn(relay.clone().serve(rp_listener));
+
+        // Read the difficulty the relay offers a fresh connection (which then drops).
+        async fn probe_difficulty(addr: std::net::SocketAddr) -> u32 {
+            let mut s = TcpStream::connect(addr).await.unwrap();
+            let bytes = read_frame(&mut s).await.unwrap().unwrap();
+            let arr: [u8; CHALLENGE_LEN] = bytes.as_slice().try_into().unwrap();
+            Challenge::from_bytes(&arr).difficulty_bits()
+            // drop `s` -> never responds, never parks
+        }
+
+        let baseline = probe_difficulty(rp_addr).await;
+
+        // Flood across several windows, each far above the target of 2 attempts/window.
+        for _ in 0..6 {
+            for _ in 0..10 {
+                let _ = probe_difficulty(rp_addr).await;
+            }
+            tokio::time::sleep(Duration::from_millis(60)).await; // cross a window boundary
+        }
+
+        let under_flood = probe_difficulty(rp_addr).await;
+        assert!(
+            under_flood > baseline,
+            "a flood of attempts that never park must raise the difficulty via the rate signal \
+             (under flood {under_flood} bits vs baseline {baseline}); effort load = {:.2}",
+            relay.effort_load()
         );
     }
 

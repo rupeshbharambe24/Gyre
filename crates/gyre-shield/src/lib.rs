@@ -28,6 +28,7 @@ use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
 
 pub mod admission;
+pub mod effort;
 pub mod rendezvous;
 pub mod token;
 

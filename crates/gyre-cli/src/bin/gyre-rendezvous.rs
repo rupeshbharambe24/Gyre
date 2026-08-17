@@ -83,7 +83,12 @@ async fn main() -> ExitCode {
             let mut ticker = tokio::time::interval(Duration::from_secs(stats_secs));
             loop {
                 ticker.tick().await;
-                println!("[stats] parked {} / {}", observer.parked(), config.capacity);
+                println!(
+                    "[stats] parked {} / {} · effort load {:.2}",
+                    observer.parked(),
+                    config.capacity,
+                    observer.effort_load()
+                );
             }
         });
     }
@@ -114,5 +119,7 @@ fn build_config(args: &[String]) -> Result<RelayConfig, String> {
             "--parked-ttl-secs",
             d.parked_ttl.as_secs(),
         )?),
+        effort_window: d.effort_window,
+        effort_target_per_window: flag_or(args, "--effort-target", d.effort_target_per_window)?,
     })
 }
