@@ -762,6 +762,7 @@ dependencies = [
  "gyre-common",
  "gyre-net",
  "gyre-obfs",
+ "gyre-pir",
  "gyre-shield",
  "gyre-sphinx",
  "gyre-stego",

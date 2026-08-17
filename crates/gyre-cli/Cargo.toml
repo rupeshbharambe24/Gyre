@@ -15,5 +15,6 @@ gyre-net = { path = "../gyre-net" }
 gyre-shield = { path = "../gyre-shield" }
 gyre-obfs = { path = "../gyre-obfs" }
 gyre-stego = { path = "../gyre-stego" }
+gyre-pir = { path = "../gyre-pir" }
 sha2.workspace = true
 tokio.workspace = true

@@ -120,6 +120,76 @@ impl Obfuscator for StegoTransport {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Private directory retrieval (PIR) — the Access-pattern dimension, wired.
+// ---------------------------------------------------------------------------
+
+/// A demo directory record for index `i`. **Deterministic and demo-only**, so two server
+/// processes hold identical records with no distribution step — the same simulation-only
+/// convenience as the testnet relay keys. A real deployment replicates the *signed consensus*
+/// records, not these.
+pub fn demo_record(i: usize) -> Vec<u8> {
+    let mut hasher = Sha256::new();
+    hasher.update(b"gyre-pir-demo-record/v1");
+    hasher.update((i as u64).to_be_bytes());
+    hasher.finalize().to_vec()
+}
+
+/// Serve 2-server IT-PIR answers forever: read a query mask (one byte per record, non-zero =
+/// selected), reply with the XOR of the selected records. A single server sees only a
+/// uniformly random mask, so it never learns which record the client wanted.
+pub async fn serve_pir(
+    listener: tokio::net::TcpListener,
+    dir: std::sync::Arc<gyre_pir::Directory>,
+) -> std::io::Result<()> {
+    loop {
+        let (mut stream, _peer) = listener.accept().await?;
+        let dir = dir.clone();
+        tokio::spawn(async move {
+            if let Ok(Some(mask)) = gyre_net::read_frame(&mut stream).await {
+                let query: Vec<bool> = mask.iter().map(|&b| b != 0).collect();
+                let answer = dir.answer(&query);
+                let _ = gyre_net::write_frame(&mut stream, &answer).await;
+            }
+        });
+    }
+}
+
+/// Privately fetch record `target` from an `n`-record directory replicated on the two servers
+/// `dir_a` and `dir_b`, without either server learning `target`.
+///
+/// > **Honest ceiling.** The privacy is information-theoretic **only if the two servers do not
+/// > collude** — and Sybil infrastructure is in the threat model, which is exactly an attack
+/// > on that assumption. It is also **off by default** in practice: every client downloading
+/// > the *identical* signed consensus already leaks nothing and is cheaper. Reserve PIR for
+/// > the one lookup whose target genuinely leaks (a rendezvous descriptor).
+pub async fn pir_lookup(
+    dir_a: SocketAddr,
+    dir_b: SocketAddr,
+    n: usize,
+    target: usize,
+) -> Result<Vec<u8>, String> {
+    let (query_a, query_b) = gyre_pir::build_queries(n, target);
+    let answer_a = pir_query_one(dir_a, &query_a).await?;
+    let answer_b = pir_query_one(dir_b, &query_b).await?;
+    Ok(gyre_pir::recover(&answer_a, &answer_b))
+}
+
+/// Send one query mask to one server and read its answer.
+async fn pir_query_one(server: SocketAddr, query: &[bool]) -> Result<Vec<u8>, String> {
+    let mask: Vec<u8> = query.iter().map(|&b| u8::from(b)).collect();
+    let mut stream = tokio::net::TcpStream::connect(server)
+        .await
+        .map_err(|e| format!("connect {server}: {e}"))?;
+    gyre_net::write_frame(&mut stream, &mask)
+        .await
+        .map_err(|e| format!("send query to {server}: {e}"))?;
+    gyre_net::read_frame(&mut stream)
+        .await
+        .map_err(|e| format!("read answer from {server}: {e}"))?
+        .ok_or_else(|| format!("{server} closed without answering"))
+}
+
 /// Select a pluggable transport (obfuscator) by name, keyed from the shared `cookie` so both
 /// ends agree on the disguise without a separate key exchange.
 ///
