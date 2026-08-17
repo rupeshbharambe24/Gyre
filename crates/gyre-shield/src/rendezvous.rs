@@ -43,6 +43,7 @@ use std::time::{Duration, Instant};
 use gyre_net::{read_frame, write_frame};
 use tokio::io::copy_bidirectional;
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::admission::{Admission, Challenge, Denied, CHALLENGE_LEN};
 use crate::Solution;
@@ -68,9 +69,15 @@ pub enum Error {
     /// The peer did not complete the admission handshake within the deadline (slowloris).
     #[error("admission handshake timed out")]
     HandshakeTimeout,
+    /// The peer presented a cookie longer than the configured maximum.
+    #[error("cookie exceeds the maximum length")]
+    CookieTooLong,
     /// The relay is already holding `capacity` parked connections.
     #[error("relay at capacity")]
     AtCapacity,
+    /// The relay is already processing `max_inflight` admission handshakes.
+    #[error("too many in-flight handshakes")]
+    TooManyInflight,
 }
 
 /// Convenience alias for results from this module.
@@ -89,6 +96,15 @@ pub struct RelayConfig {
     /// connection and then never sends its solution pins a task and a socket indefinitely.
     /// It must comfortably exceed a legitimate client's worst-case solve-plus-round-trip.
     pub handshake_timeout: Duration,
+    /// The largest cookie the relay will accept. The cookie is otherwise bounded only by the
+    /// 1 MiB frame limit, which would let a full parking map cost `capacity × 1 MiB`. A tight
+    /// cap (cookies are short identifiers) removes that memory-amplification vector.
+    pub max_cookie_len: usize,
+    /// The maximum number of admission handshakes in progress at once. `handshake_timeout`
+    /// bounds each handshake's *duration*; this bounds their *count*, so a flood of
+    /// connections that each stall for the full timeout cannot pin an unbounded number of
+    /// tasks and sockets. Excess connections are dropped immediately at accept.
+    pub max_inflight: usize,
 }
 
 /// A rendezvous relay: splices two connections that present the same cookie.
@@ -100,8 +116,9 @@ pub struct RelayConfig {
 pub struct RendezvousRelay {
     waiting: Arc<Mutex<HashMap<Cookie, TcpStream>>>,
     gate: Option<Arc<Mutex<Admission>>>,
-    capacity: usize,
-    handshake_timeout: Duration,
+    /// Bounds the number of admission handshakes in progress. `None` on an unguarded relay.
+    inflight: Option<Arc<Semaphore>>,
+    config: RelayConfig,
     start: Instant,
 }
 
@@ -110,28 +127,31 @@ impl Default for RendezvousRelay {
         Self {
             waiting: Arc::new(Mutex::new(HashMap::new())),
             gate: None,
-            capacity: usize::MAX,
-            handshake_timeout: Duration::from_secs(10),
+            inflight: None,
+            config: RelayConfig::unbounded(),
             start: Instant::now(),
         }
     }
 }
 
 impl RendezvousRelay {
-    /// An **unguarded** relay: any connection may park or splice. Origin-hiding only.
+    /// An **unguarded** relay: any connection may park or splice. Origin-hiding only, with
+    /// no admission gate and no bounds — the plain meeting point.
     pub fn new() -> Self {
         Self::default()
     }
 
     /// An **admission-gated** relay. Every connection must solve a load-scaled, single-use,
-    /// server-issued puzzle before it can park or splice, and the parking map is bounded to
-    /// `config.capacity`. This is the configuration that makes the relay a real L7 gate.
+    /// server-issued puzzle before it can park or splice; the parking map is bounded to
+    /// `config.capacity`; handshakes are bounded in both duration (`handshake_timeout`) and
+    /// count (`max_inflight`); and cookies are length-capped. This is the configuration that
+    /// makes the relay a real L7 gate.
     pub fn guarded(config: RelayConfig) -> Self {
         Self {
             waiting: Arc::new(Mutex::new(HashMap::new())),
             gate: Some(Arc::new(Mutex::new(Admission::new(config.ttl)))),
-            capacity: config.capacity,
-            handshake_timeout: config.handshake_timeout,
+            inflight: Some(Arc::new(Semaphore::new(config.max_inflight))),
+            config,
             start: Instant::now(),
         }
     }
@@ -149,18 +169,47 @@ impl RendezvousRelay {
     pub async fn serve(self, listener: TcpListener) -> Result<()> {
         loop {
             let (stream, _peer) = listener.accept().await?;
+
+            // Bound concurrent handshakes: take a permit before spawning, and drop the
+            // connection immediately if the gate is already saturated. The permit is held
+            // only for the handshake window (dropped in `handle` before park/splice), so
+            // long-lived spliced sessions do not consume handshake slots.
+            let permit = match &self.inflight {
+                Some(sem) => match sem.clone().try_acquire_owned() {
+                    Ok(p) => Some(p),
+                    Err(_) => {
+                        eprintln!(
+                            "[rendezvous] connection refused: {}",
+                            Error::TooManyInflight
+                        );
+                        continue;
+                    }
+                },
+                None => None,
+            };
+
             let waiting = self.waiting.clone();
             let gate = self.gate.clone();
-            let capacity = self.capacity;
-            let handshake_timeout = self.handshake_timeout;
+            let config = self.config;
             let start = self.start;
             tokio::spawn(async move {
-                if let Err(e) =
-                    handle(waiting, gate, capacity, handshake_timeout, start, stream).await
-                {
+                if let Err(e) = handle(waiting, gate, permit, config, start, stream).await {
                     eprintln!("[rendezvous] connection refused: {e}");
                 }
             });
+        }
+    }
+}
+
+impl RelayConfig {
+    /// The unguarded configuration: no admission bounds at all. Used by the plain relay.
+    fn unbounded() -> Self {
+        Self {
+            capacity: usize::MAX,
+            ttl: Duration::from_secs(30),
+            handshake_timeout: Duration::from_secs(10),
+            max_cookie_len: usize::MAX,
+            max_inflight: usize::MAX,
         }
     }
 }
@@ -171,6 +220,8 @@ impl Default for RelayConfig {
             capacity: 1024,
             ttl: Duration::from_secs(30),
             handshake_timeout: Duration::from_secs(10),
+            max_cookie_len: 128,
+            max_inflight: 256,
         }
     }
 }
@@ -188,14 +239,14 @@ fn load_of(parked: usize, capacity: usize) -> f64 {
 async fn admit(
     gate: &Mutex<Admission>,
     waiting: &Mutex<HashMap<Cookie, TcpStream>>,
-    capacity: usize,
+    config: RelayConfig,
     start: Instant,
     stream: &mut TcpStream,
 ) -> Result<Cookie> {
     // Price the challenge by current load. Issuing is stateless, so this costs one HMAC
     // even under a flood of connections that never finish.
     let parked = waiting.lock().expect("map not poisoned").len();
-    let load = load_of(parked, capacity);
+    let load = load_of(parked, config.capacity);
     let now = start.elapsed();
     let challenge = gate.lock().expect("gate not poisoned").issue(now, load);
     write_frame(stream, &challenge.to_bytes()).await?;
@@ -204,6 +255,11 @@ async fn admit(
     let resp = read_frame(stream).await?.ok_or(Error::NoCookie)?;
     if resp.len() < CHALLENGE_LEN + 8 {
         return Err(Error::MalformedAdmission);
+    }
+    // Cap the cookie before allocating it: otherwise the parked map costs up to
+    // `capacity × MAX_FRAME` (≈ 1 GiB), a memory-amplification vector a valid solver can hit.
+    if resp.len() - (CHALLENGE_LEN + 8) > config.max_cookie_len {
+        return Err(Error::CookieTooLong);
     }
     let mut challenge_bytes = [0u8; CHALLENGE_LEN];
     challenge_bytes.copy_from_slice(&resp[..CHALLENGE_LEN]);
@@ -228,8 +284,8 @@ async fn admit(
 async fn handle(
     waiting: Arc<Mutex<HashMap<Cookie, TcpStream>>>,
     gate: Option<Arc<Mutex<Admission>>>,
-    capacity: usize,
-    handshake_timeout: Duration,
+    permit: Option<OwnedSemaphorePermit>,
+    config: RelayConfig,
     start: Instant,
     mut stream: TcpStream,
 ) -> Result<()> {
@@ -239,16 +295,24 @@ async fn handle(
     // peer that connects, receives the challenge, and then stalls would hold this task and
     // socket forever — the classic slowloris. The bound covers the challenge write and the
     // response read, so a stalled peer is dropped rather than accumulated.
-    let cookie = match &gate {
+    let cookie_result = match &gate {
         Some(gate) => {
-            let handshake = admit(gate, &waiting, capacity, start, &mut stream);
-            match tokio::time::timeout(handshake_timeout, handshake).await {
-                Ok(result) => result?,
-                Err(_elapsed) => return Err(Error::HandshakeTimeout),
+            let handshake = admit(gate, &waiting, config, start, &mut stream);
+            match tokio::time::timeout(config.handshake_timeout, handshake).await {
+                Ok(result) => result,
+                Err(_elapsed) => Err(Error::HandshakeTimeout),
             }
         }
-        None => read_frame(&mut stream).await?.ok_or(Error::NoCookie)?,
+        None => match read_frame(&mut stream).await {
+            Ok(Some(cookie)) => Ok(cookie),
+            Ok(None) => Err(Error::NoCookie),
+            Err(e) => Err(e.into()),
+        },
     };
+    // The handshake is over: release the in-flight permit now, before the (unbounded-in-time)
+    // park/splice phase, so an established session never holds a handshake slot.
+    drop(permit);
+    let cookie = cookie_result?;
 
     // Is a peer already parked on this cookie?
     let peer = waiting
@@ -260,7 +324,7 @@ async fn handle(
             // First to arrive: park for the peer to pick up — but never past capacity, so a
             // flood cannot grow the map without bound even if it solves every puzzle.
             let mut map = waiting.lock().expect("rendezvous map not poisoned");
-            if map.len() >= capacity {
+            if map.len() >= config.capacity {
                 return Err(Error::AtCapacity);
             }
             map.insert(cookie, stream);
@@ -438,8 +502,8 @@ mod tests {
         // it and the connection closes shortly after the deadline.
         let config = RelayConfig {
             capacity: 8,
-            ttl: Duration::from_secs(30),
             handshake_timeout: Duration::from_millis(300),
+            ..RelayConfig::default()
         };
         let rp_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let rp_addr = rp_listener.local_addr().unwrap();
@@ -456,13 +520,76 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_guarded_relay_refuses_an_oversized_cookie() {
+        // A solver that presents a huge cookie would otherwise cost up to capacity × 1 MiB of
+        // parked memory. The cap refuses it even though the proof-of-work is valid.
+        let config = RelayConfig {
+            max_cookie_len: 32,
+            ..RelayConfig::default()
+        };
+        let rp_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let rp_addr = rp_listener.local_addr().unwrap();
+        tokio::spawn(RendezvousRelay::guarded(config).serve(rp_listener));
+
+        // Solve the challenge honestly, then attach an over-long cookie.
+        let mut peer = TcpStream::connect(rp_addr).await.unwrap();
+        let arr: [u8; CHALLENGE_LEN] = read_frame(&mut peer)
+            .await
+            .unwrap()
+            .unwrap()
+            .try_into()
+            .unwrap();
+        let challenge = Challenge::from_bytes(&arr);
+        let solution = challenge.puzzle().solve();
+        let mut resp = arr.to_vec();
+        resp.extend_from_slice(&solution.nonce.to_be_bytes());
+        resp.extend_from_slice(&vec![b'x'; 4096]); // way over the 32-byte cap
+        write_frame(&mut peer, &resp).await.unwrap();
+
+        let after = tokio::time::timeout(Duration::from_secs(2), read_frame(&mut peer)).await;
+        assert!(
+            matches!(after, Ok(Ok(None)) | Ok(Err(_))),
+            "an over-long cookie must be refused even with a valid solution"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_guarded_relay_bounds_concurrent_handshakes() {
+        // max_inflight = 1: one slow handshake holds the only permit, so a second connection
+        // is dropped at accept before it ever receives a challenge — bounding the COUNT of
+        // in-flight handshakes, not just each one's duration.
+        let config = RelayConfig {
+            max_inflight: 1,
+            handshake_timeout: Duration::from_secs(5),
+            ..RelayConfig::default()
+        };
+        let rp_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let rp_addr = rp_listener.local_addr().unwrap();
+        tokio::spawn(RendezvousRelay::guarded(config).serve(rp_listener));
+
+        // First connection takes the permit and stalls (never answers the challenge).
+        let mut hog = TcpStream::connect(rp_addr).await.unwrap();
+        let _challenge = read_frame(&mut hog).await.unwrap().unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Second connection: the permit is gone, so it is dropped at accept. It must NOT
+        // receive a challenge, and must close quickly — well within the 5s handshake window.
+        let mut blocked = TcpStream::connect(rp_addr).await.unwrap();
+        let got = tokio::time::timeout(Duration::from_secs(2), read_frame(&mut blocked)).await;
+        assert!(
+            matches!(got, Ok(Ok(None)) | Ok(Err(_))),
+            "with the in-flight permit held, a second handshake must be dropped at accept, \
+             not served a challenge"
+        );
+    }
+
+    #[tokio::test]
     async fn a_guarded_relay_never_parks_beyond_capacity() {
         // Capacity 2: a third distinct-cookie origin that solves its puzzle must still be
         // refused a slot, so a flood cannot grow the map without bound.
         let config = RelayConfig {
             capacity: 2,
-            ttl: Duration::from_secs(30),
-            handshake_timeout: Duration::from_secs(10),
+            ..RelayConfig::default()
         };
         let relay = RendezvousRelay::guarded(config);
         let rp_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
