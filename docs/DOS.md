@@ -166,11 +166,11 @@ PoW, quotas, a WAF), not the relay's. Gyre prices *admission*, the same scope as
   so flooding one leaks nothing and costs the attacker only a commodity meeting point.
 - **BUILT (closed set) — MTD ingress hopping:** the ingress is `HMAC(key, window)`, so even the
   relay address can't be pre-aimed by a party without the key.
-- **NEEDED — multi-relay pool + client failover:** park the origin on *k* relays under distinct
-  per-relay cookies; the client fails over to a survivor. Flooding one drops it from the pool;
-  denying the service requires flooding all *k*, dividing the attacker's per-target volume by
-  *k*. Directory primitives exist (`gyre-directory` signed `RelayDescriptor`s); the origin
-  supervisor and client failover dialer do not (~1–2 weeks, no new crypto).
+- **BUILT — multi-relay pool + client failover:** the origin parks on *k* relays under
+  distinct per-relay rendezvous IDs; the client fails over to a survivor (`gyre-origin` /
+  `gyre-reach` with repeated `--rendezvous`). Flooding one drops it from the pool; denying the
+  service requires flooding all *k*, dividing the attacker's per-target volume by *k*. Honest
+  limit: dilution is **linear** — each relay still must survive its 1/k share (D22 per relay).
 - **NEEDED — authenticated cookies:** today the cookie is an unauthenticated bearer secret, so
   a party that learns it can race the client for the parked peer. Fix with an end-to-end
   handshake that keeps the relay oblivious.
@@ -241,7 +241,7 @@ completed this session.
 | ✅ | Rate-aware AIMD difficulty controller (prop-327) | done | `gyre-shield::effort`; difficulty = max(occupancy, attempt-rate); test confirmed to discriminate |
 | 7 | Memory-hard PoW via pure-Rust `equix`/`hashx` + linear effort | ~days–1 wk + LGPL sign-off | SHA-256 lets a GPU beat honest mobile clients — the asymmetry runs backwards |
 | ✅ | Authenticated cookies | done | Relay matches on `HMAC(cookie)`; mutual challenge-response closes the hijack race (`--auth`) |
-| 8 | Multi-relay pool | ~1–2 wks | Dilutes a relay-targeted flood ~linearly by *k* with client failover |
+| ✅ | Multi-relay pool | done | Origin parks on k relays, client fails over; dilutes a relay flood ~linearly by *k* (`--rendezvous` × k) |
 
 ---
 
