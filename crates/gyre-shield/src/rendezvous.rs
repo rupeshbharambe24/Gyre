@@ -46,10 +46,15 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::admission::{Admission, Challenge, Denied, CHALLENGE_LEN};
+use crate::token::{Issuer, Token, OUTPUT_LEN, SEED_LEN};
 use crate::Solution;
 
 /// A rendezvous cookie: the shared identifier two parties use to find each other.
 pub type Cookie = Vec<u8>;
+
+/// Admission-response modes: the first byte of a client's response selects how it authorizes.
+const MODE_POW: u8 = 0x01;
+const MODE_TOKEN: u8 = 0x02;
 
 /// A parked stream together with the instant it was parked, so the reaper can evict a stream
 /// that has waited longer than `parked_ttl` without a peer.
@@ -82,6 +87,15 @@ pub enum Error {
     /// The relay is already processing `max_inflight` admission handshakes.
     #[error("too many in-flight handshakes")]
     TooManyInflight,
+    /// The peer's admission response began with an unrecognised mode byte.
+    #[error("unknown admission mode")]
+    UnknownAdmissionMode,
+    /// The peer presented a capability token but this relay was not given a verifier.
+    #[error("this relay does not accept capability tokens")]
+    TokensNotAccepted,
+    /// The capability token was invalid or already spent.
+    #[error("capability token rejected (invalid or already spent)")]
+    TokenRejected,
 }
 
 /// Convenience alias for results from this module.
@@ -128,6 +142,9 @@ pub struct RendezvousRelay {
     gate: Option<Arc<Mutex<Admission>>>,
     /// Bounds the number of admission handshakes in progress. `None` on an unguarded relay.
     inflight: Option<Arc<Semaphore>>,
+    /// Verifies capability tokens for the skip-PoW fast path. `None` means tokens are not
+    /// accepted and every client must solve the puzzle.
+    verifier: Option<Arc<Mutex<Issuer>>>,
     config: RelayConfig,
     start: Instant,
 }
@@ -138,6 +155,7 @@ impl Default for RendezvousRelay {
             waiting: Arc::new(Mutex::new(HashMap::new())),
             gate: None,
             inflight: None,
+            verifier: None,
             config: RelayConfig::unbounded(),
             start: Instant::now(),
         }
@@ -161,6 +179,26 @@ impl RendezvousRelay {
             waiting: Arc::new(Mutex::new(HashMap::new())),
             gate: Some(Arc::new(Mutex::new(Admission::new(config.ttl)))),
             inflight: Some(Arc::new(Semaphore::new(config.max_inflight))),
+            verifier: None,
+            config,
+            start: Instant::now(),
+        }
+    }
+
+    /// A guarded relay that **also accepts capability tokens** as a skip-PoW fast path. A
+    /// pre-authorized client that holds a valid, unspent token (earned from `issuer`) redeems
+    /// it in place of solving the puzzle — the Privacy-Pass model. Everyone else still pays
+    /// the PoW. This is what makes the *Authorization* dimension do real work: the token now
+    /// gates admission rather than being minted and discarded.
+    ///
+    /// The `issuer` is shared (redemption mutates its single-use spent set), so one operator
+    /// runs both the token issuer and this relay.
+    pub fn guarded_with_tokens(config: RelayConfig, issuer: Arc<Mutex<Issuer>>) -> Self {
+        Self {
+            waiting: Arc::new(Mutex::new(HashMap::new())),
+            gate: Some(Arc::new(Mutex::new(Admission::new(config.ttl)))),
+            inflight: Some(Arc::new(Semaphore::new(config.max_inflight))),
+            verifier: Some(issuer),
             config,
             start: Instant::now(),
         }
@@ -218,10 +256,12 @@ impl RendezvousRelay {
 
             let waiting = self.waiting.clone();
             let gate = self.gate.clone();
+            let verifier = self.verifier.clone();
             let config = self.config;
             let start = self.start;
             tokio::spawn(async move {
-                if let Err(e) = handle(waiting, gate, permit, config, start, stream).await {
+                if let Err(e) = handle(waiting, gate, verifier, permit, config, start, stream).await
+                {
                     eprintln!("[rendezvous] connection refused: {e}");
                 }
             });
@@ -266,8 +306,13 @@ fn load_of(parked: usize, capacity: usize) -> f64 {
 
 /// Run the admission handshake as the server. Returns the cookie carried in the peer's
 /// authenticated response, or an error that denies the connection.
+///
+/// The relay always offers a PoW challenge first; the peer's response begins with a mode byte
+/// choosing how it authorizes — [`MODE_POW`] (solve the puzzle) or [`MODE_TOKEN`] (redeem a
+/// capability token, if this relay accepts them).
 async fn admit(
     gate: &Mutex<Admission>,
+    verifier: Option<&Mutex<Issuer>>,
     waiting: &Mutex<HashMap<Cookie, Parked>>,
     config: RelayConfig,
     start: Instant,
@@ -281,39 +326,72 @@ async fn admit(
     let challenge = gate.lock().expect("gate not poisoned").issue(now, load);
     write_frame(stream, &challenge.to_bytes()).await?;
 
-    // The peer returns: challenge ‖ nonce ‖ cookie.
     let resp = read_frame(stream).await?.ok_or(Error::NoCookie)?;
-    if resp.len() < CHALLENGE_LEN + 8 {
-        return Err(Error::MalformedAdmission);
-    }
-    // Cap the cookie before allocating it: otherwise the parked map costs up to
-    // `capacity × MAX_FRAME` (≈ 1 GiB), a memory-amplification vector a valid solver can hit.
-    if resp.len() - (CHALLENGE_LEN + 8) > config.max_cookie_len {
-        return Err(Error::CookieTooLong);
-    }
-    let mut challenge_bytes = [0u8; CHALLENGE_LEN];
-    challenge_bytes.copy_from_slice(&resp[..CHALLENGE_LEN]);
-    let returned = Challenge::from_bytes(&challenge_bytes);
-    let mut nonce_bytes = [0u8; 8];
-    nonce_bytes.copy_from_slice(&resp[CHALLENGE_LEN..CHALLENGE_LEN + 8]);
-    let solution = Solution {
-        nonce: u64::from_be_bytes(nonce_bytes),
-        attempts: 0,
-    };
-    let cookie = resp[CHALLENGE_LEN + 8..].to_vec();
+    let (&mode, body) = resp.split_first().ok_or(Error::MalformedAdmission)?;
+    match mode {
+        MODE_POW => {
+            // body = challenge ‖ nonce ‖ cookie.
+            if body.len() < CHALLENGE_LEN + 8 {
+                return Err(Error::MalformedAdmission);
+            }
+            // Cap the cookie before allocating it: otherwise the parked map costs up to
+            // `capacity × MAX_FRAME`, a memory-amplification vector a valid solver can hit.
+            if body.len() - (CHALLENGE_LEN + 8) > config.max_cookie_len {
+                return Err(Error::CookieTooLong);
+            }
+            let mut challenge_bytes = [0u8; CHALLENGE_LEN];
+            challenge_bytes.copy_from_slice(&body[..CHALLENGE_LEN]);
+            let returned = Challenge::from_bytes(&challenge_bytes);
+            let mut nonce_bytes = [0u8; 8];
+            nonce_bytes.copy_from_slice(&body[CHALLENGE_LEN..CHALLENGE_LEN + 8]);
+            let solution = Solution {
+                nonce: u64::from_be_bytes(nonce_bytes),
+                attempts: 0,
+            };
+            let cookie = body[CHALLENGE_LEN + 8..].to_vec();
 
-    // Redeem against the *server's own* challenge — this is where a forged, downgraded,
-    // expired, unsolved, or replayed admission is refused. `now` is re-read so a puzzle that
-    // took real time to solve is still judged against the same clock.
-    gate.lock()
-        .expect("gate not poisoned")
-        .redeem(&returned, &solution, start.elapsed())?;
-    Ok(cookie)
+            // Redeem against the *server's own* challenge — a forged, downgraded, expired,
+            // unsolved, or replayed admission is refused here.
+            gate.lock().expect("gate not poisoned").redeem(
+                &returned,
+                &solution,
+                start.elapsed(),
+            )?;
+            Ok(cookie)
+        }
+        MODE_TOKEN => {
+            // body = token seed ‖ token output ‖ cookie. The fast path for a pre-authorized
+            // client: redeem a valid, unspent capability token in place of solving the puzzle.
+            let verifier = verifier.ok_or(Error::TokensNotAccepted)?;
+            const TOKEN_LEN: usize = SEED_LEN + OUTPUT_LEN;
+            if body.len() < TOKEN_LEN {
+                return Err(Error::MalformedAdmission);
+            }
+            if body.len() - TOKEN_LEN > config.max_cookie_len {
+                return Err(Error::CookieTooLong);
+            }
+            let mut seed = [0u8; SEED_LEN];
+            seed.copy_from_slice(&body[..SEED_LEN]);
+            let mut output = [0u8; OUTPUT_LEN];
+            output.copy_from_slice(&body[SEED_LEN..TOKEN_LEN]);
+            let token = Token { seed, output };
+            let cookie = body[TOKEN_LEN..].to_vec();
+
+            // `redeem` is valid-**and**-unspent-once, so a token authorizes exactly one
+            // admission — a stolen or replayed token is refused.
+            if !verifier.lock().expect("issuer not poisoned").redeem(&token) {
+                return Err(Error::TokenRejected);
+            }
+            Ok(cookie)
+        }
+        _ => Err(Error::UnknownAdmissionMode),
+    }
 }
 
 async fn handle(
     waiting: Arc<Mutex<HashMap<Cookie, Parked>>>,
     gate: Option<Arc<Mutex<Admission>>>,
+    verifier: Option<Arc<Mutex<Issuer>>>,
     permit: Option<OwnedSemaphorePermit>,
     config: RelayConfig,
     start: Instant,
@@ -327,7 +405,14 @@ async fn handle(
     // response read, so a stalled peer is dropped rather than accumulated.
     let cookie_result = match &gate {
         Some(gate) => {
-            let handshake = admit(gate, &waiting, config, start, &mut stream);
+            let handshake = admit(
+                gate,
+                verifier.as_deref(),
+                &waiting,
+                config,
+                start,
+                &mut stream,
+            );
             match tokio::time::timeout(config.handshake_timeout, handshake).await {
                 Ok(result) => result,
                 Err(_elapsed) => Err(Error::HandshakeTimeout),
@@ -411,10 +496,31 @@ pub async fn dial_admitted(rp: SocketAddr, cookie: &[u8]) -> Result<TcpStream> {
         .await
         .expect("solve task panicked");
 
-    // Respond: challenge ‖ nonce ‖ cookie.
-    let mut resp = Vec::with_capacity(CHALLENGE_LEN + 8 + cookie.len());
+    // Respond: MODE_POW ‖ challenge ‖ nonce ‖ cookie.
+    let mut resp = Vec::with_capacity(1 + CHALLENGE_LEN + 8 + cookie.len());
+    resp.push(MODE_POW);
     resp.extend_from_slice(&arr);
     resp.extend_from_slice(&solution.nonce.to_be_bytes());
+    resp.extend_from_slice(cookie);
+    write_frame(&mut stream, &resp).await?;
+    Ok(stream)
+}
+
+/// Dial a **token-accepting** guarded relay and present a capability `token` in place of
+/// solving the puzzle — the skip-PoW fast path for a pre-authorized client. The relay still
+/// sends a challenge first (which is ignored) and redeems the token; a valid, unspent token
+/// authorizes exactly one admission.
+pub async fn dial_with_token(rp: SocketAddr, cookie: &[u8], token: &Token) -> Result<TcpStream> {
+    let mut stream = TcpStream::connect(rp).await?;
+
+    // Drain the server's challenge frame; a token client does not solve it.
+    let _challenge = read_frame(&mut stream).await?.ok_or(Error::NoCookie)?;
+
+    // Respond: MODE_TOKEN ‖ seed ‖ output ‖ cookie.
+    let mut resp = Vec::with_capacity(1 + SEED_LEN + OUTPUT_LEN + cookie.len());
+    resp.push(MODE_TOKEN);
+    resp.extend_from_slice(&token.seed);
+    resp.extend_from_slice(&token.output);
     resp.extend_from_slice(cookie);
     write_frame(&mut stream, &resp).await?;
     Ok(stream)
@@ -521,7 +627,8 @@ mod tests {
         let mut challenge_bytes = read_frame(&mut attacker).await.unwrap().unwrap();
         challenge_bytes[0] ^= 0xFF; // corrupt the id → the server's tag will not match
 
-        let mut resp = challenge_bytes;
+        let mut resp = vec![super::MODE_POW];
+        resp.extend_from_slice(&challenge_bytes);
         resp.extend_from_slice(&0u64.to_be_bytes());
         resp.extend_from_slice(b"cookie");
         write_frame(&mut attacker, &resp).await.unwrap();
@@ -582,7 +689,8 @@ mod tests {
             .unwrap();
         let challenge = Challenge::from_bytes(&arr);
         let solution = challenge.puzzle().solve();
-        let mut resp = arr.to_vec();
+        let mut resp = vec![super::MODE_POW];
+        resp.extend_from_slice(&arr);
         resp.extend_from_slice(&solution.nonce.to_be_bytes());
         resp.extend_from_slice(&vec![b'x'; 4096]); // way over the 32-byte cap
         write_frame(&mut peer, &resp).await.unwrap();
@@ -622,6 +730,68 @@ mod tests {
             "with the in-flight permit held, a second handshake must be dropped at accept, \
              not served a challenge"
         );
+    }
+
+    #[tokio::test]
+    async fn a_token_relay_admits_a_valid_token_and_refuses_a_replay() {
+        use crate::token::{blind, unblind, Issuer};
+
+        // The operator runs the issuer and a token-accepting relay off the same issuer.
+        let issuer = Arc::new(Mutex::new(Issuer::new()));
+
+        // A client earns a token: solve an issuance puzzle, mint, unblind. (F14.)
+        let token = {
+            let mut iss = issuer.lock().unwrap();
+            let published = iss.public_key();
+            let now = Duration::from_secs(0);
+            let (state, blinded) = blind();
+            let challenge = iss.issuance_challenge(now);
+            let solution = challenge.puzzle().solve();
+            let issued = iss.issue(&challenge, &solution, blinded, now).unwrap();
+            unblind(state, issued, published).unwrap()
+        };
+
+        let relay = RendezvousRelay::guarded_with_tokens(RelayConfig::default(), issuer);
+        let rp_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let rp_addr = rp_listener.local_addr().unwrap();
+        tokio::spawn(relay.serve(rp_listener));
+
+        // An origin parks (via the ordinary PoW path); the token-bearing client reaches it.
+        let cookie = b"token-cookie".to_vec();
+        let origin_cookie = cookie.clone();
+        let origin = tokio::spawn(async move {
+            let mut s = dial_admitted(rp_addr, &origin_cookie).await.unwrap();
+            let req = read_frame(&mut s).await.unwrap().unwrap();
+            let mut r = b"pong: ".to_vec();
+            r.extend_from_slice(&req);
+            write_frame(&mut s, &r).await.unwrap();
+        });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let mut client = dial_with_token(rp_addr, &cookie, &token).await.unwrap();
+        write_frame(&mut client, b"ping").await.unwrap();
+        let reply = read_frame(&mut client).await.unwrap().unwrap();
+        assert_eq!(
+            reply, b"pong: ping",
+            "a valid token admits without solving the puzzle"
+        );
+        origin.await.unwrap();
+
+        // The SAME token is single-use: a replay is refused (the relay never splices it).
+        let replay = tokio::time::timeout(
+            Duration::from_secs(2),
+            dial_with_token(rp_addr, &cookie, &token),
+        )
+        .await;
+        if let Ok(Ok(mut s)) = replay {
+            // The connection may open, but the relay must not admit it — no reply comes back.
+            let _ = write_frame(&mut s, b"ping-again").await;
+            let got = tokio::time::timeout(Duration::from_secs(1), read_frame(&mut s)).await;
+            assert!(
+                matches!(got, Ok(Ok(None)) | Ok(Err(_))),
+                "a replayed (already-spent) token must be refused, not admitted"
+            );
+        }
     }
 
     #[tokio::test]
