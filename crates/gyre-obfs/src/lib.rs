@@ -104,6 +104,13 @@ fn random_bytes<const N: usize>() -> [u8; N] {
     buf
 }
 
+/// HMAC-SHA256 authentication tag over `data`, keyed by the transport key.
+fn auth_tag(key: &[u8; 32], data: &[u8]) -> [u8; 32] {
+    let mut m = HmacSha256::new_from_slice(key).expect("HMAC accepts any key length");
+    m.update(data);
+    m.finalize().into_bytes().into()
+}
+
 impl Obfuscator for Polymorphic {
     fn obfuscate(&self, inner: &[u8]) -> Vec<u8> {
         let nonce = random_bytes::<16>();
@@ -120,18 +127,31 @@ impl Obfuscator for Polymorphic {
             *b ^= k;
         }
 
-        let mut wire = Vec::with_capacity(16 + frame.len());
+        // Encrypt-then-MAC: authenticate the on-wire bytes (nonce ‖ ciphertext) so a tampered
+        // frame or a wrong key is rejected deterministically, not left to a probabilistic
+        // length-field check. This gives the channel integrity, not just confidentiality.
+        let mut wire = Vec::with_capacity(16 + frame.len() + 32);
         wire.extend_from_slice(&nonce);
         wire.extend_from_slice(&frame);
+        let tag = auth_tag(&self.key, &wire);
+        wire.extend_from_slice(&tag);
         wire
     }
 
     fn deobfuscate(&self, wire: &[u8]) -> Result<Vec<u8>> {
-        if wire.len() < 16 + 4 {
+        if wire.len() < 16 + 4 + 32 {
             return Err(Error::Malformed);
         }
-        let nonce: [u8; 16] = wire[0..16].try_into().unwrap();
-        let xored = &wire[16..];
+        // Verify the tag over (nonce ‖ ciphertext) in constant time BEFORE trusting any field.
+        let (body, tag) = wire.split_at(wire.len() - 32);
+        let mut m = HmacSha256::new_from_slice(&self.key).expect("HMAC accepts any key length");
+        m.update(body);
+        if m.verify_slice(tag).is_err() {
+            return Err(Error::Malformed);
+        }
+
+        let nonce: [u8; 16] = body[0..16].try_into().unwrap();
+        let xored = &body[16..];
         let ks = keystream(&self.key, &nonce, xored.len());
         let frame: Vec<u8> = xored.iter().zip(&ks).map(|(b, k)| b ^ k).collect();
 

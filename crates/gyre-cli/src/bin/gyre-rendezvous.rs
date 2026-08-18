@@ -121,5 +121,10 @@ fn build_config(args: &[String]) -> Result<RelayConfig, String> {
         )?),
         effort_window: d.effort_window,
         effort_target_per_window: flag_or(args, "--effort-target", d.effort_target_per_window)?,
+        splice_timeout: std::time::Duration::from_secs(flag_or(
+            args,
+            "--splice-timeout-secs",
+            d.splice_timeout.as_secs(),
+        )?),
     })
 }

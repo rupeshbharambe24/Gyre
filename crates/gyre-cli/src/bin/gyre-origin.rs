@@ -111,10 +111,19 @@ async fn serve_relay(rzv: SocketAddr, cfg: OriginConfig) {
     };
 
     loop {
-        let mut stream = match dial_admitted(rzv, &match_key).await {
-            Ok(s) => s,
-            Err(e) => {
+        // Bound the park attempt: a relay that accepts the connection but stalls (or is
+        // malicious) must not hang this task forever — the difficulty cap in `dial_admitted`
+        // stops an infinite solve, and this timeout stops a stalled handshake.
+        let dial = tokio::time::timeout(Duration::from_secs(20), dial_admitted(rzv, &match_key));
+        let mut stream = match dial.await {
+            Ok(Ok(s)) => s,
+            Ok(Err(e)) => {
                 eprintln!("gyre-origin [{rzv}]: park failed: {e}; retrying");
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                continue;
+            }
+            Err(_) => {
+                eprintln!("gyre-origin [{rzv}]: park timed out; retrying");
                 tokio::time::sleep(Duration::from_millis(500)).await;
                 continue;
             }

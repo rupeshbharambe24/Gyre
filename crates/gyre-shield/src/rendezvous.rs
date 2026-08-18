@@ -60,6 +60,15 @@ pub type Cookie = Vec<u8>;
 const MODE_POW: u8 = 0x01;
 const MODE_TOKEN: u8 = 0x02;
 
+/// The largest puzzle difficulty a *client* will accept from a relay before refusing to solve.
+///
+/// An honest relay never asks for more than `difficulty_for_load`'s 20-bit ceiling; this leaves
+/// a little headroom. The cap is the client's protection against a **malicious relay** (now
+/// reachable in a pool) that hands out an absurd or unsolvable difficulty: SHA-256 tops out at
+/// 256 leading zero bits, so any value above that loops forever, and even ~40 bits is
+/// effectively forever. Without this a bad relay could pin a client CPU core with one frame.
+const MAX_ACCEPTED_DIFFICULTY: u32 = 24;
+
 /// A parked stream together with the instant it was parked, so the reaper can evict a stream
 /// that has waited longer than `parked_ttl` without a peer.
 type Parked = (TcpStream, Instant);
@@ -138,6 +147,13 @@ pub struct RelayConfig {
     /// Admission attempts per `effort_window` at or below which the relay is calm. Above it,
     /// the effort controller raises difficulty even for a flood that never parks.
     pub effort_target_per_window: u32,
+    /// The maximum lifetime of a spliced session. Once two peers are glued together the copy
+    /// is bounded by *neither* `capacity` nor `parked_ttl` (the map entry is gone), so without
+    /// this an attacker could pay the floor PoW twice, splice a pair to itself, send nothing,
+    /// and hold both sockets forever. This is a **total** cap, not an idle timer, so set it
+    /// above a legitimate session's expected duration. A concurrent-splice count cap would be
+    /// a further hardening.
+    pub splice_timeout: Duration,
 }
 
 /// A rendezvous relay: splices two connections that present the same cookie.
@@ -304,6 +320,7 @@ impl RelayConfig {
             parked_ttl: Duration::from_secs(3600),
             effort_window: Duration::from_secs(1),
             effort_target_per_window: u32::MAX,
+            splice_timeout: Duration::from_secs(86_400),
         }
     }
 }
@@ -319,6 +336,7 @@ impl Default for RelayConfig {
             parked_ttl: Duration::from_secs(60),
             effort_window: Duration::from_secs(1),
             effort_target_per_window: 200,
+            splice_timeout: Duration::from_secs(300),
         }
     }
 }
@@ -353,15 +371,16 @@ async fn admit(
     let now = start.elapsed();
     let parked = waiting.lock().expect("map not poisoned").len();
 
-    // If the relay is already full, refuse *before* making the peer solve a puzzle it could
-    // never redeem into a slot — solving only to be told `AtCapacity` wastes the honest
-    // client's CPU (a 20-bit solve at full occupancy) and the relay's time. The authoritative
-    // check at park time still guards the issue→park race.
-    if parked >= config.capacity {
-        return Err(Error::AtCapacity);
-    }
-
-    let occupancy_load = load_of(parked, config.capacity);
+    // NOTE: capacity is enforced only at *park* time (in `handle`), never here. `admit` runs
+    // before the cookie is known, so it cannot yet tell a *parker* (needs a slot) from a
+    // *splicer* (frees one). An earlier version refused here at `parked >= capacity`, which
+    // deadlocked the relay at the capacity boundary: every waiting client that had come to
+    // *pick up* a parked origin was turned away, so the map never drained. So do not gate here.
+    //
+    // Occupancy's contribution to difficulty is capped below the ceiling so that even a full
+    // relay stays quick to splice through; the AIMD rate controller supplies the top of the
+    // range for an actual flood, and the hard bound is the park-time capacity refusal.
+    let occupancy_load = load_of(parked, config.capacity).min(0.75);
     let rate_load = match effort {
         Some(e) => {
             let mut e = e.lock().expect("effort controller not poisoned");
@@ -495,9 +514,17 @@ async fn handle(
             Ok(())
         }
         Some((mut peer, _parked_at)) => {
-            // Second to arrive: glue the two together and copy opaque bytes both ways.
-            copy_bidirectional(&mut stream, &mut peer).await?;
-            Ok(())
+            // Second to arrive: glue the two together and copy opaque bytes both ways, but bound
+            // the splice's lifetime so an idle-but-open pair cannot be held forever (the map
+            // entry is gone, so no other bound covers this path).
+            let splice = copy_bidirectional(&mut stream, &mut peer);
+            match tokio::time::timeout(relay.config.splice_timeout, splice).await {
+                Ok(result) => {
+                    result?;
+                    Ok(())
+                }
+                Err(_elapsed) => Ok(()), // exceeded its lifetime — drop both halves
+            }
         }
     }
 }
@@ -537,6 +564,13 @@ pub async fn dial_admitted(rp: SocketAddr, cookie: &[u8]) -> Result<TcpStream> {
         .try_into()
         .map_err(|_| Error::MalformedAdmission)?;
     let challenge = Challenge::from_bytes(&arr);
+
+    // Refuse an absurd difficulty before committing CPU to it. A malicious relay could
+    // otherwise send an unsolvable difficulty (SHA-256 caps at 256 leading zero bits) and make
+    // `solve()` loop forever — pinning a client thread that outlives the caller's timeout.
+    if challenge.difficulty_bits() > MAX_ACCEPTED_DIFFICULTY {
+        return Err(Error::MalformedAdmission);
+    }
 
     // Solve it off the runtime.
     let puzzle = challenge.puzzle();
@@ -914,6 +948,63 @@ mod tests {
              (under flood {under_flood} bits vs baseline {baseline}); effort load = {:.2}",
             relay.effort_load()
         );
+    }
+
+    #[tokio::test]
+    async fn a_client_refuses_an_absurd_difficulty_from_a_malicious_relay() {
+        // A malicious relay (reachable in a pool) sends a challenge with an unsolvable
+        // difficulty. The client must refuse it quickly, not loop forever in solve().
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut s, _) = listener.accept().await.unwrap();
+            let mut bytes = [0u8; CHALLENGE_LEN];
+            bytes[40..44].copy_from_slice(&200u32.to_be_bytes()); // difficulty far above the cap
+            let _ = write_frame(&mut s, &bytes).await;
+            tokio::time::sleep(Duration::from_secs(5)).await; // hold the connection open
+        });
+
+        let res =
+            tokio::time::timeout(Duration::from_secs(2), dial_admitted(addr, b"cookie")).await;
+        assert!(
+            matches!(res, Ok(Err(Error::MalformedAdmission))),
+            "the client must refuse an absurd difficulty rather than solve forever, got {res:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_splicer_is_admitted_even_when_the_relay_is_at_capacity() {
+        // Regression for the early-capacity deadlock: at full occupancy a *second arrival* that
+        // picks up a parked origin (draining the map) must still be admitted, not refused.
+        let config = RelayConfig {
+            capacity: 1,
+            ..RelayConfig::default()
+        };
+        let rp_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let rp_addr = rp_listener.local_addr().unwrap();
+        tokio::spawn(RendezvousRelay::guarded(config).serve(rp_listener));
+
+        let cookie = b"same-cookie".to_vec();
+        let origin_cookie = cookie.clone();
+        let origin = tokio::spawn(async move {
+            let mut s = dial_admitted(rp_addr, &origin_cookie).await.unwrap();
+            let req = read_frame(&mut s).await.unwrap().unwrap();
+            let mut r = b"pong: ".to_vec();
+            r.extend_from_slice(&req);
+            write_frame(&mut s, &r).await.unwrap();
+        });
+        // Let the origin park — now parked == 1 == capacity.
+        tokio::time::sleep(Duration::from_millis(80)).await;
+
+        // The client shares the cookie, so it should SPLICE (drain), not be refused at capacity.
+        let mut client = dial_admitted(rp_addr, &cookie).await.unwrap();
+        write_frame(&mut client, b"ping").await.unwrap();
+        let reply = read_frame(&mut client).await.unwrap().unwrap();
+        assert_eq!(
+            reply, b"pong: ping",
+            "a splicer must be admitted even at full capacity"
+        );
+        origin.await.unwrap();
     }
 
     #[tokio::test]

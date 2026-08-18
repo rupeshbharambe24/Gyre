@@ -8,7 +8,8 @@
 //!
 //! This controller closes that gap by watching the *rate* of admission attempts and running a
 //! closed loop resembling TCP congestion control: while attempts arrive faster than a target
-//! rate the suggested effort **increases additively**, and while they are below target it
+//! rate the suggested effort **increases** (by a step scaled to the overshoot, so a heavy flood
+//! climbs in a single window and cannot be duty-cycled away), and while they are below target it
 //! **decays multiplicatively** back toward zero. So it is dormant at rest (honest clients pay
 //! the floor) and self-escalating under sustained load, then it drains when the flood stops.
 //!
@@ -18,6 +19,9 @@
 //! exactly testable.
 
 use std::time::Duration;
+
+/// The most the per-window increase may be scaled by the overshoot ratio.
+const OVERSHOOT_CAP: f64 = 4.0;
 
 /// Watches the admission-attempt rate and produces a load value in `[0, 1]`.
 #[derive(Debug, Clone)]
@@ -54,7 +58,15 @@ impl EffortController {
         let mut guard = 0u32;
         while now >= self.next_roll {
             if self.attempts_this_window > self.target_per_window {
-                self.load = (self.load + self.increase).min(1.0);
+                // Scale the increase by how far over target the window ran. A fixed additive
+                // step lets an attacker duty-cycle — one heavy burst window (+step) then one
+                // calm window (×decay) nets near the floor. Scaling by the overshoot ratio
+                // (capped) makes a real flood climb in a single window, so a following calm
+                // window's decay cannot hold the price down.
+                let overshoot =
+                    self.attempts_this_window as f64 / f64::from(self.target_per_window.max(1));
+                let step = self.increase * overshoot.min(OVERSHOOT_CAP);
+                self.load = (self.load + step).min(1.0);
             } else {
                 self.load *= self.decay;
                 if self.load < 1e-9 {
@@ -155,6 +167,28 @@ mod tests {
 
         // Long idle: all the way back to zero (and the idle short-circuit must hold).
         assert_eq!(c.load(Duration::from_secs(6 + 1000)), 0.0);
+    }
+
+    #[test]
+    fn duty_cycling_bursts_cannot_hold_the_load_near_the_floor() {
+        // An attacker alternates a heavy burst window with a calm window, betting the calm
+        // window's decay cancels the burst. With overshoot-scaled increase, the burst pins the
+        // load high and one calm window's ×decay cannot bring it back to the floor.
+        let mut c = EffortController::new(W, 50);
+        let mut lows = Vec::new();
+        for k in 0..8u64 {
+            let t = Duration::from_secs(k);
+            if k % 2 == 0 {
+                flood(&mut c, t, 2000); // heavy burst window (overshoot 40)
+            }
+            // odd windows: no attempts (the calm half of the duty cycle)
+            lows.push(c.load(Duration::from_secs(k + 1)));
+        }
+        // After warmup, even the *calm* windows stay well above the floor.
+        assert!(
+            lows[5] > 0.3 && lows[7] > 0.3,
+            "duty-cycled bursts must keep the price elevated, saw {lows:?}"
+        );
     }
 
     #[test]

@@ -110,6 +110,13 @@ pub fn flags(args: &[String], name: &str) -> Vec<String> {
 /// A per-relay rendezvous ID for a **pool**: distinct for each relay, so a colluding subset of
 /// relays cannot recognise that they are hosting the same service by a shared cookie. Both the
 /// client and the origin derive it from the shared cookie and the relay's address.
+///
+/// > **Limitation.** The ID is bound to the relay's *socket-address string* as both parties
+/// > write it. Client and origin must therefore name each relay identically (e.g. both
+/// > `1.2.3.4:9500`); if a relay is reached via different addresses (NAT, DNS, a load
+/// > balancer), the derived IDs diverge and matching silently fails. A production pool should
+/// > key this on a stable relay *identity* (a label or public key carried in a signed service
+/// > descriptor) rather than a routing artefact.
 pub fn rendezvous_id_for(cookie: &[u8], relay: &SocketAddr) -> Vec<u8> {
     mac(
         cookie,
@@ -186,20 +193,28 @@ fn subkey(key: &[u8; 32], label: &[u8]) -> [u8; 32] {
     hasher.finalize().into()
 }
 
-/// A **forward-secret, per-context** session between a client and an origin, layered over the
-/// obfuscated framing. It wires `gyre-endpoint`'s ratchet and compartmentalized personas into
-/// real traffic: each message is keyed by a fresh ratchet key (so a captured key reveals only
-/// that one message), and the whole session is derived from a per-`context` persona (so a
-/// client's activity in one context is cryptographically unlinkable from another).
+/// A **per-context** session between a client and an origin, layered over the obfuscated
+/// framing. It wires `gyre-endpoint`'s ratchet and compartmentalized personas into real
+/// traffic: *within a connection* each message advances the ratchet, and the session is derived
+/// from a per-`context` persona so a client's activity in one context is cryptographically
+/// unlinkable from another. Both ends derive identical ratchets; `client_side` only selects
+/// which direction is outgoing.
 ///
-/// Both ends derive identical ratchets from the shared cookie and context; `client_side`
-/// only selects which direction is outgoing.
+/// > **Freshness depends on how the seed is made — read this before relying on forward
+/// > secrecy.** [`Session::new`] derives the seed *deterministically* from the static cookie
+/// > and context, so the ratchets restart at the **same** key on every connection: the *i*-th
+/// > message of every connection reuses the same key. That means a captured key compromises the
+/// > *same-indexed* message of **all** connections, not just one — the within-connection
+/// > ratchet is forward-secret, but there is no *cross-connection* freshness on this path. For
+/// > that, build the session with [`Session::from_seed`] from a per-connection-fresh seed — as
+/// > [`authenticate`] does by mixing both parties' nonces in. In the CLI, that is the `--auth`
+/// > mode; plain `--forward-secret` has the deterministic seed and the reuse described here.
+/// > (The Polymorphic transport is authenticated, so the reuse is not a two-time-pad, but it is
+/// > still key reuse.)
 ///
 /// > **Honest ceilings (per `gyre-endpoint`).** Isolation *contains* a compromise; it cannot
-/// > make an untrusted endpoint trusted — a live keylogger reads plaintext regardless. Forward
-/// > secrecy protects *past* messages after a key is captured, not an *actively* compromised
-/// > endpoint. This is data-minimization and cross-context unlinkability, not endpoint
-/// > invincibility.
+/// > make an untrusted endpoint trusted — a live keylogger reads plaintext regardless. This is
+/// > data-minimization and cross-context unlinkability, not endpoint invincibility.
 pub struct Session {
     send: Ratchet,
     recv: Ratchet,
