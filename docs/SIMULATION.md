@@ -167,6 +167,43 @@ Cover traffic deliberately does **not** improve the accuracy column: counting de
 they were real senders is banned by standing anti-overclaim rule 3, so anonymity here is
 measured over real concurrent flows only.
 
+### 5 · Realistic heterogeneous traffic
+
+A synchronized crowd where every flow is identical is the *easiest* case to correlate, so
+the headline numbers above (uniform traffic) are conservative — attacker-favouring. The
+`Traffic::Mixed` model draws each flow from a realistic profile mix (≈55% short
+interactive/web bursts, 30% sparse messaging, 15% long bulk transfers). Every flow is still
+a modelled **independent sender** — this is measurement realism, not cover dressed up as
+senders. 150 flows, all relays watched:
+
+| mix / hop | traffic | optimal accuracy |
+|---:|:---|---:|
+| 50 ms | uniform | 0.515 ±0.055 |
+| 50 ms | **mixed** | **0.335 ±0.063** |
+| 150 ms | uniform | 0.078 ±0.024 |
+| 150 ms | **mixed** | **0.091 ±0.034** |
+
+Diversity is not a free anonymity win, but it is honest: at 50 ms/hop a realistic mix is
+*harder* to correlate than the artificially-synchronized block, because the uniform model
+handed the attacker perfectly aligned streams.
+
+### 6 · The crowd curve at real-world scale
+
+The whole thesis is that the crowd must be **large and real**. Published mixnet studies
+sweep 10²–10⁵ users; the harness now runs there (parallelised across cores — it was
+single-threaded before). A 20%-relay observer watching a heterogeneous crowd:
+
+| flows | coverage | linkable | optimal accuracy | deanon rate |
+|---:|---:|---:|---:|---:|
+| 150 | 0.028 | 4.2 | 0.750 | 0.0267 ±0.0189 |
+| 1 000 | 0.029 | 28.8 | 0.634 | 0.0183 ±0.0071 |
+| 3 000 | 0.030 | 88.8 | 0.393 | 0.0108 ±0.0031 |
+| 10 000 | 0.028 | 278.2 | 0.230 | 0.0060 ±0.0016 |
+
+As the real, independent population grows 150 → 10 000, the end-to-end deanonymisation rate
+falls **0.027 → 0.006**. This is the number the crowd actually moves — and section 4 shows
+the counterpart: synthetic *cover* moves it by nothing. Only more **real** senders help.
+
 ## What these results mean
 
 - **Mixing works, and it is the only thing that does** — but the useful settings start
@@ -187,8 +224,10 @@ Stated plainly, because they bound every number above:
   paths are correlated, bursty, and AS-dependent.
 - **The attacker is optimal *for this cost function*.** A model-mismatched attacker (say a
   learned one, as in DeepCorr / DeepCoFFEA) could do better on real traffic shapes.
-- **Flow behaviour is synthetic.** Fixed-length streams with exponential pacing, not real
-  application traffic.
+- **Flow behaviour is synthetic.** Even the `Traffic::Mixed` profiles are plausible
+  modelling choices, not distributions fitted to a real capture — the point is *diversity*
+  (so the crowd is not an artificially easy synchronized block), not fidelity to any one
+  application. Real application traffic would be the next fidelity step.
 - **No adaptive adversary.** Nobody drops, delays, or injects packets to create a
   watermark; this measures a *passive* observer only.
 
