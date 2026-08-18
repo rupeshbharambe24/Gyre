@@ -17,7 +17,7 @@ use gyre_shield::token::{
 fn authorized_issue(issuer: &mut Issuer, blinded: [u8; ELEMENT_LEN]) -> Issued {
     let now = std::time::Duration::from_secs(0);
     let challenge = issuer.issuance_challenge(now);
-    let solution = challenge.puzzle().solve();
+    let solution = challenge.solve().expect("SHA-256 supported");
     issuer
         .issue(&challenge, &solution, blinded, now)
         .expect("authorized issue")

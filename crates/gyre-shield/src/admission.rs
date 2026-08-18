@@ -1,11 +1,14 @@
-//! **A real admission protocol** on top of the [`Puzzle`](crate::Puzzle) primitive.
+//! **A real admission protocol** on top of a pluggable [`pow::PowAlgorithm`](crate::pow) puzzle.
 //!
-//! The raw puzzle is a *cost function*, not an admission control: [`Puzzle::new`] takes a
+//! A raw puzzle is a *cost function*, not an admission control: on its own it takes a
 //! caller-supplied challenge, so a client can pick its own, pre-compute a solution offline,
 //! and replay that one solution forever. Nothing about it is bound to a server, a time, or a
 //! single use. Wiring that directly in front of a service would produce a gate an attacker
 //! passes once and then bypasses permanently. This module fixes exactly that, and only that
-//! — it is honest about which DoS it addresses (see the ceiling note below).
+//! — it is honest about which DoS it addresses (see the ceiling note below). The puzzle
+//! *algorithm* is chosen via [`Admission::with_algorithm`] (SHA-256 by default, or the
+//! memory-hard Equi-X under the `equix` feature) and is bound into each challenge's tag, so it
+//! is as unforgeable as the difficulty.
 //!
 //! ## What a real gate needs, and how each is met here
 //!
@@ -44,12 +47,14 @@ use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 use subtle::ConstantTimeEq;
 
-use crate::{difficulty_for_load, Puzzle, Solution};
+use crate::pow::{self, TAG_SHA256};
+use crate::{difficulty_for_load, Solution};
 
 type HmacSha256 = Hmac<Sha256>;
 
-/// The authenticated bytes of a challenge, minus the tag: `id ‖ expiry ‖ difficulty`.
-const CHALLENGE_BODY_LEN: usize = 32 + 8 + 4;
+/// The authenticated bytes of a challenge, minus the tag: `id ‖ expiry ‖ difficulty ‖ algorithm`.
+/// The 1-byte algorithm tag is last so `id`/`expiry`/`difficulty` keep their original offsets.
+const CHALLENGE_BODY_LEN: usize = 32 + 8 + 4 + 1;
 
 /// Serialized length of a [`Challenge`] on the wire: body plus a 32-byte tag.
 pub const CHALLENGE_LEN: usize = CHALLENGE_BODY_LEN + 32;
@@ -65,13 +70,20 @@ pub struct Challenge {
     id: [u8; 32],
     expiry_millis: u64,
     difficulty_bits: u32,
+    /// Which [`pow::PowAlgorithm`] this challenge is for (bound into the tag, so a client
+    /// cannot swap a hard algorithm for a cheap one any more than it can downgrade difficulty).
+    algorithm: u8,
     tag: [u8; 32],
 }
 
 impl Challenge {
-    /// The puzzle a client must solve for this challenge.
-    pub fn puzzle(&self) -> Puzzle {
-        Puzzle::new(self.id, self.difficulty_bits)
+    /// Solve this challenge with its own algorithm — the work the client pays.
+    ///
+    /// Returns `None` if the challenge names an algorithm this build cannot solve (e.g. an
+    /// Equi-X challenge without the `equix` feature), so the client fails cleanly rather than
+    /// sending a proof the server will reject anyway.
+    pub fn solve(&self) -> Option<Solution> {
+        pow::solve_for(self.algorithm, &self.id, self.difficulty_bits).map(Solution::new)
     }
 
     /// The difficulty this challenge demands (bound into the tag, so it is not negotiable).
@@ -79,14 +91,17 @@ impl Challenge {
         self.difficulty_bits
     }
 
-    /// Serialize for transport: `id ‖ expiry ‖ difficulty ‖ tag`, big-endian,
+    /// The puzzle algorithm this challenge is for (a [`pow`] tag, bound into the [`tag`]).
+    pub fn algorithm(&self) -> u8 {
+        self.algorithm
+    }
+
+    /// Serialize for transport: `id ‖ expiry ‖ difficulty ‖ algorithm ‖ tag`, big-endian,
     /// [`CHALLENGE_LEN`] bytes.
     pub fn to_bytes(&self) -> [u8; CHALLENGE_LEN] {
         let mut out = [0u8; CHALLENGE_LEN];
-        out[..32].copy_from_slice(&self.id);
-        out[32..40].copy_from_slice(&self.expiry_millis.to_be_bytes());
-        out[40..44].copy_from_slice(&self.difficulty_bits.to_be_bytes());
-        out[44..].copy_from_slice(&self.tag);
+        out[..CHALLENGE_BODY_LEN].copy_from_slice(&self.body());
+        out[CHALLENGE_BODY_LEN..].copy_from_slice(&self.tag);
         out
     }
 
@@ -99,22 +114,25 @@ impl Challenge {
         e.copy_from_slice(&bytes[32..40]);
         let mut d = [0u8; 4];
         d.copy_from_slice(&bytes[40..44]);
+        let algorithm = bytes[44];
         let mut tag = [0u8; 32];
-        tag.copy_from_slice(&bytes[44..]);
+        tag.copy_from_slice(&bytes[CHALLENGE_BODY_LEN..]);
         Self {
             id,
             expiry_millis: u64::from_be_bytes(e),
             difficulty_bits: u32::from_be_bytes(d),
+            algorithm,
             tag,
         }
     }
 
-    /// The body the tag authenticates.
+    /// The body the tag authenticates: `id ‖ expiry ‖ difficulty ‖ algorithm`.
     fn body(&self) -> [u8; CHALLENGE_BODY_LEN] {
         let mut body = [0u8; CHALLENGE_BODY_LEN];
         body[..32].copy_from_slice(&self.id);
         body[32..40].copy_from_slice(&self.expiry_millis.to_be_bytes());
-        body[40..].copy_from_slice(&self.difficulty_bits.to_be_bytes());
+        body[40..44].copy_from_slice(&self.difficulty_bits.to_be_bytes());
+        body[44] = self.algorithm;
         body
     }
 }
@@ -145,21 +163,32 @@ pub enum Denied {
 pub struct Admission {
     server_key: [u8; 32],
     ttl: Duration,
+    /// The puzzle algorithm this gate issues challenges for (a [`pow`] tag).
+    algorithm: u8,
     /// Redeemed challenge id -> its expiry, so the set can be pruned as entries age out.
     spent: HashMap<[u8; 32], u64>,
 }
 
 impl Admission {
-    /// A fresh controller with a random server key and the given challenge lifetime.
+    /// A fresh controller with a random server key and the given challenge lifetime, issuing
+    /// the default **SHA-256** puzzle.
     ///
     /// `ttl` is the whole security-vs-usability dial: shorter means a smaller pre-compute
     /// window and a smaller spent set, but less tolerance for a slow client or clock skew.
     pub fn new(ttl: Duration) -> Self {
+        Self::with_algorithm(ttl, TAG_SHA256)
+    }
+
+    /// A controller that issues challenges for a specific puzzle algorithm — e.g.
+    /// [`pow::TAG_EQUIX`](crate::pow::TAG_EQUIX) for the memory-hard puzzle (which requires the
+    /// crate's `equix` feature, or every redemption fails closed as unsupported).
+    pub fn with_algorithm(ttl: Duration, algorithm: u8) -> Self {
         let mut server_key = [0u8; 32];
         getrandom::fill(&mut server_key).expect("OS RNG");
         Self {
             server_key,
             ttl,
+            algorithm,
             spent: HashMap::new(),
         }
     }
@@ -185,6 +214,7 @@ impl Admission {
             id,
             expiry_millis,
             difficulty_bits,
+            algorithm: self.algorithm,
             tag: [0u8; 32],
         };
         challenge.tag = self.tag(&challenge.body());
@@ -219,8 +249,15 @@ impl Admission {
             return Err(Denied::Expired);
         }
 
-        // 3. The actual proof of work.
-        if !challenge.puzzle().verify(solution.nonce) {
+        // 3. The actual proof of work, checked by the challenge's own (authenticated)
+        //    algorithm. An algorithm this build cannot verify — e.g. an Equi-X challenge on a
+        //    server without the `equix` feature — fails closed here rather than being admitted.
+        if !pow::verify_for(
+            challenge.algorithm,
+            &challenge.id,
+            &solution.proof,
+            challenge.difficulty_bits,
+        ) {
             return Err(Denied::BadSolution);
         }
 
@@ -247,7 +284,9 @@ mod tests {
     const TTL: Duration = Duration::from_secs(30);
 
     fn solved(challenge: &Challenge) -> Solution {
-        challenge.puzzle().solve()
+        challenge
+            .solve()
+            .expect("the default SHA-256 algorithm is always supported")
     }
 
     #[test]
@@ -283,6 +322,7 @@ mod tests {
             id: [7u8; 32],
             expiry_millis: (now + TTL).as_millis() as u64,
             difficulty_bits: 8,
+            algorithm: TAG_SHA256,
             tag: [0u8; 32],
         };
         let s = solved(&forged);
@@ -331,10 +371,7 @@ mod tests {
         let mut gate = Admission::new(TTL);
         let now = Duration::from_secs(100);
         let c = gate.issue(now, 1.0); // non-trivial difficulty
-        let wrong = Solution {
-            nonce: 0,
-            attempts: 1,
-        };
+        let wrong = Solution::new(0u64.to_be_bytes().to_vec());
         // nonce 0 is overwhelmingly unlikely to satisfy a flood-level puzzle
         assert_eq!(gate.redeem(&c, &wrong, now), Err(Denied::BadSolution));
     }
@@ -393,6 +430,47 @@ mod tests {
         assert_eq!(back.id, c.id);
         assert_eq!(back.expiry_millis, c.expiry_millis);
         assert_eq!(back.difficulty_bits, c.difficulty_bits);
+        assert_eq!(back.algorithm, c.algorithm);
         assert_eq!(back.tag, c.tag);
+    }
+
+    #[test]
+    fn the_algorithm_is_bound_into_the_tag_and_cannot_be_swapped() {
+        // The algorithm sits inside the authenticated body, exactly like difficulty. A client
+        // that rewrites it — to claim a puzzle it would rather solve, or one this server cannot
+        // verify — must fail authentication, not slip past.
+        let mut gate = Admission::new(TTL); // issues SHA-256
+        let now = Duration::from_secs(100);
+        let mut c = gate.issue(now, 0.0);
+        let s = solved(&c); // a valid SHA-256 proof for the real challenge
+        c.algorithm = pow::TAG_EQUIX; // tamper: claim a different algorithm
+        assert_eq!(
+            gate.redeem(&c, &s, now),
+            Err(Denied::Forged),
+            "swapping the algorithm must break the tag, like any other body edit"
+        );
+    }
+
+    #[cfg(feature = "equix")]
+    #[test]
+    fn an_equix_gate_issues_solves_and_admits_end_to_end() {
+        // The whole point of wiring: a gate configured for the memory-hard puzzle issues an
+        // Equi-X challenge, the client solves it with the challenge's own algorithm, and redeem
+        // admits it — proving Equi-X runs through the gate, not just as a standalone function.
+        let mut gate = Admission::with_algorithm(TTL, pow::TAG_EQUIX);
+        let now = Duration::from_secs(100);
+        let c = gate.issue(now, 0.0);
+        assert_eq!(c.algorithm(), pow::TAG_EQUIX);
+        let s = c.solve().expect("the equix feature is enabled");
+        assert_eq!(
+            gate.redeem(&c, &s, now),
+            Ok(()),
+            "a valid Equi-X solve is admitted"
+        );
+        assert_eq!(
+            gate.redeem(&c, &s, now),
+            Err(Denied::Replay),
+            "and it is single-use, like any admission"
+        );
     }
 }

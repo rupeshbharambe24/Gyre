@@ -4,8 +4,8 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion};
+use gyre_shield::pow::{PowAlgorithm, Sha256Pow};
 use gyre_shield::token::{blind, unblind, Issued, Issuer};
-use gyre_shield::Puzzle;
 
 /// Mint a token via the F14-authorized path (fetch challenge, solve it, present the solution).
 /// The puzzle solve is not part of what we measure — the client pays it — so callers do it in
@@ -13,7 +13,7 @@ use gyre_shield::Puzzle;
 fn mint(issuer: &mut Issuer, blinded: [u8; 32]) -> Issued {
     let now = std::time::Duration::from_secs(0);
     let challenge = issuer.issuance_challenge(now);
-    let solution = challenge.puzzle().solve();
+    let solution = challenge.solve().expect("SHA-256 supported");
     issuer
         .issue(&challenge, &solution, blinded, now)
         .expect("authorized issue")
@@ -35,7 +35,7 @@ fn voprf(c: &mut Criterion) {
                 let issuer = Issuer::new();
                 let now = std::time::Duration::from_secs(0);
                 let challenge = issuer.issuance_challenge(now);
-                let solution = challenge.puzzle().solve();
+                let solution = challenge.solve().expect("SHA-256 supported");
                 let (_state, blinded) = blind();
                 (issuer, challenge, solution, blinded, now)
             },
@@ -81,15 +81,13 @@ fn pow(c: &mut Criterion) {
 
     for bits in [8u32, 12, 16] {
         g.bench_with_input(BenchmarkId::new("solve", bits), &bits, |b, &bits| {
-            let puzzle = Puzzle::new(challenge, bits);
-            b.iter(|| black_box(puzzle.solve()))
+            b.iter(|| black_box(Sha256Pow.solve(black_box(&challenge), bits)))
         });
     }
 
-    let puzzle = Puzzle::new(challenge, 16);
-    let nonce = puzzle.solve().nonce;
+    let proof = Sha256Pow.solve(&challenge, 16);
     g.bench_function("verify", |b| {
-        b.iter(|| black_box(puzzle.verify(black_box(nonce))))
+        b.iter(|| black_box(Sha256Pow.verify(black_box(&challenge), black_box(&proof), 16)))
     });
 
     g.finish();

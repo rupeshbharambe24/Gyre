@@ -10,8 +10,9 @@ use std::time::Duration;
 
 use gyre_net::{read_frame, write_frame};
 use gyre_shield::admission::Admission;
+use gyre_shield::pow::{PowAlgorithm, Sha256Pow};
 use gyre_shield::rendezvous::{dial, dial_admitted, RelayConfig, RendezvousRelay};
-use gyre_shield::{difficulty_for_load, IngressSchedule, Puzzle};
+use gyre_shield::{difficulty_for_load, IngressSchedule};
 use tokio::net::{TcpListener, TcpStream};
 
 #[tokio::main]
@@ -48,10 +49,9 @@ async fn main() {
     println!("PoW admission — difficulty scales with load; the server verifies in 1 hash:");
     for (label, load) in [("idle ", 0.0f64), ("busy ", 0.5), ("flood", 1.0)] {
         let bits = difficulty_for_load(load);
-        let solution = Puzzle::new([0x42; 32], bits).solve();
+        let _proof = Sha256Pow.solve(&[0x42; 32], bits); // the client pays ~2^bits hashes
         println!(
-            "  load={label} ({load:.1})  ->  difficulty {bits:>2} bits  ->  client solved in {:>8} hashes",
-            solution.attempts
+            "  load={label} ({load:.1})  ->  difficulty {bits:>2} bits  ->  ~2^{bits} hashes to solve, 1 to verify"
         );
     }
     println!("{}", "-".repeat(70));
@@ -64,7 +64,9 @@ async fn main() {
     let now = Duration::from_secs(1_000);
     let mut gate = Admission::new(Duration::from_secs(30));
     let challenge = gate.issue(now, 1.0); // under flood: a hard challenge
-    let solution = challenge.puzzle().solve();
+    let solution = challenge
+        .solve()
+        .expect("the default SHA-256 algorithm is always supported");
     println!(
         "  server issued a {}-bit challenge (stateless: cost 1 HMAC, 0 stored bytes)",
         challenge.difficulty_bits()
@@ -199,7 +201,9 @@ async fn main() {
     // F14: minting a token requires a solved, single-use issuance challenge — no free oracle.
     let now = Duration::from_secs(0);
     let issuance_challenge = issuer.issuance_challenge(now);
-    let issuance_solution = issuance_challenge.puzzle().solve();
+    let issuance_solution = issuance_challenge
+        .solve()
+        .expect("the default SHA-256 algorithm is always supported");
     let issued = issuer
         .issue(&issuance_challenge, &issuance_solution, blinded, now)
         .expect("issue");
@@ -217,7 +221,9 @@ async fn main() {
     let mut rogue = gyre_shield::token::Issuer::new();
     let (state2, blinded2) = gyre_shield::token::blind();
     let rogue_challenge = rogue.issuance_challenge(now);
-    let rogue_solution = rogue_challenge.puzzle().solve();
+    let rogue_solution = rogue_challenge
+        .solve()
+        .expect("the default SHA-256 algorithm is always supported");
     let rogue_issued = rogue
         .issue(&rogue_challenge, &rogue_solution, blinded2, now)
         .expect("issue");

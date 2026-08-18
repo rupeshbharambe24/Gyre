@@ -79,6 +79,34 @@ impl PowAlgorithm for Sha256Pow {
 #[cfg(feature = "equix")]
 pub use equix_impl::EquixPow;
 
+/// Solve `challenge` at `difficulty_bits` with the algorithm named by `tag`.
+///
+/// Returns `None` for an unknown or unsupported tag — including an Equi-X challenge on a build
+/// without the `equix` feature. A client that cannot recognise the server's algorithm simply
+/// cannot proceed, rather than guessing.
+pub fn solve_for(tag: u8, challenge: &[u8; 32], difficulty_bits: u32) -> Option<Vec<u8>> {
+    match tag {
+        TAG_SHA256 => Some(Sha256Pow.solve(challenge, difficulty_bits)),
+        #[cfg(feature = "equix")]
+        TAG_EQUIX => Some(EquixPow.solve(challenge, difficulty_bits)),
+        _ => None,
+    }
+}
+
+/// Verify `proof` against `challenge` at `difficulty_bits` for the algorithm named by `tag`.
+///
+/// **Fails closed on an unknown or unsupported tag** — returns `false`. In particular, a server
+/// built without the `equix` feature cannot accept an Equi-X proof, so it refuses it rather than
+/// admitting an unverifiable one.
+pub fn verify_for(tag: u8, challenge: &[u8; 32], proof: &[u8], difficulty_bits: u32) -> bool {
+    match tag {
+        TAG_SHA256 => Sha256Pow.verify(challenge, proof, difficulty_bits),
+        #[cfg(feature = "equix")]
+        TAG_EQUIX => EquixPow.verify(challenge, proof, difficulty_bits),
+        _ => false,
+    }
+}
+
 #[cfg(feature = "equix")]
 mod equix_impl {
     use super::{leading_zero_bits, PowAlgorithm, Sha256, TAG_EQUIX};

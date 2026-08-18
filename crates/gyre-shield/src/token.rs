@@ -426,7 +426,9 @@ mod tests {
         let now = Duration::from_secs(0);
         let (state, blinded) = blind();
         let challenge = issuer.issuance_challenge(now);
-        let solution = challenge.puzzle().solve();
+        let solution = challenge
+            .solve()
+            .expect("SHA-256 algorithm is always supported");
         let public = issuer.public_key();
         let issued = issuer
             .issue(&challenge, &solution, blinded, now)
@@ -438,7 +440,9 @@ mod tests {
     fn authorized_issue(issuer: &mut Issuer, blinded: [u8; ELEMENT_LEN]) -> Issued {
         let now = Duration::from_secs(0);
         let challenge = issuer.issuance_challenge(now);
-        let solution = challenge.puzzle().solve();
+        let solution = challenge
+            .solve()
+            .expect("SHA-256 algorithm is always supported");
         issuer
             .issue(&challenge, &solution, blinded, now)
             .expect("authorized issue")
@@ -535,7 +539,9 @@ mod tests {
         let mut issuer = Issuer::new();
         let now = Duration::from_secs(0);
         let challenge = issuer.issuance_challenge(now);
-        let solution = challenge.puzzle().solve();
+        let solution = challenge
+            .solve()
+            .expect("SHA-256 algorithm is always supported");
         // The challenge is valid, so authorization passes; the blinded point is garbage, so
         // the VOPRF step rejects it — a malformed input is an error, never a panic.
         assert!(issuer
@@ -577,7 +583,9 @@ mod tests {
         let mut bytes = challenge.to_bytes();
         bytes[0] ^= 0xFF; // corrupt the challenge id -> the issuer's tag will not match
         let forged = Challenge::from_bytes(&bytes);
-        let forged_solution = forged.puzzle().solve();
+        let forged_solution = forged
+            .solve()
+            .expect("SHA-256 algorithm is always supported");
         let (_s, blinded) = blind();
         assert_eq!(
             issuer
@@ -588,7 +596,9 @@ mod tests {
         );
 
         // A genuine solved challenge mints one token...
-        let solution = challenge.puzzle().solve();
+        let solution = challenge
+            .solve()
+            .expect("SHA-256 algorithm is always supported");
         let (_s1, b1) = blind();
         assert!(
             issuer.issue(&challenge, &solution, b1, now).is_ok(),

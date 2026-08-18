@@ -69,6 +69,12 @@ const MODE_TOKEN: u8 = 0x02;
 /// effectively forever. Without this a bad relay could pin a client CPU core with one frame.
 const MAX_ACCEPTED_DIFFICULTY: u32 = 24;
 
+/// The largest proof a client may present on the wire. A SHA-256 proof is 8 bytes and an
+/// Equi-X proof is 24; this leaves generous room for a future algorithm while bounding the
+/// allocation the server makes before verifying — a large declared length is either malformed
+/// or a memory-amplification probe, so it is refused rather than allocated.
+const MAX_PROOF_LEN: usize = 64;
+
 /// A parked stream together with the instant it was parked, so the reaper can evict a stream
 /// that has waited longer than `parked_ttl` without a peer.
 type Parked = (TcpStream, Instant);
@@ -397,25 +403,30 @@ async fn admit(
     let (&mode, body) = resp.split_first().ok_or(Error::MalformedAdmission)?;
     match mode {
         MODE_POW => {
-            // body = challenge ‖ nonce ‖ cookie.
-            if body.len() < CHALLENGE_LEN + 8 {
+            // body = challenge ‖ proof_len(u16 BE) ‖ proof ‖ cookie.
+            if body.len() < CHALLENGE_LEN + 2 {
+                return Err(Error::MalformedAdmission);
+            }
+            let proof_len =
+                u16::from_be_bytes([body[CHALLENGE_LEN], body[CHALLENGE_LEN + 1]]) as usize;
+            // Bound the proof before slicing or allocating it.
+            if proof_len > MAX_PROOF_LEN {
+                return Err(Error::MalformedAdmission);
+            }
+            let cookie_start = CHALLENGE_LEN + 2 + proof_len;
+            if body.len() < cookie_start {
                 return Err(Error::MalformedAdmission);
             }
             // Cap the cookie before allocating it: otherwise the parked map costs up to
             // `capacity × MAX_FRAME`, a memory-amplification vector a valid solver can hit.
-            if body.len() - (CHALLENGE_LEN + 8) > config.max_cookie_len {
+            if body.len() - cookie_start > config.max_cookie_len {
                 return Err(Error::CookieTooLong);
             }
             let mut challenge_bytes = [0u8; CHALLENGE_LEN];
             challenge_bytes.copy_from_slice(&body[..CHALLENGE_LEN]);
             let returned = Challenge::from_bytes(&challenge_bytes);
-            let mut nonce_bytes = [0u8; 8];
-            nonce_bytes.copy_from_slice(&body[CHALLENGE_LEN..CHALLENGE_LEN + 8]);
-            let solution = Solution {
-                nonce: u64::from_be_bytes(nonce_bytes),
-                attempts: 0,
-            };
-            let cookie = body[CHALLENGE_LEN + 8..].to_vec();
+            let solution = Solution::new(body[CHALLENGE_LEN + 2..cookie_start].to_vec());
+            let cookie = body[cookie_start..].to_vec();
 
             // Redeem against the *server's own* challenge — a forged, downgraded, expired,
             // unsolved, or replayed admission is refused here.
@@ -572,17 +583,21 @@ pub async fn dial_admitted(rp: SocketAddr, cookie: &[u8]) -> Result<TcpStream> {
         return Err(Error::MalformedAdmission);
     }
 
-    // Solve it off the runtime.
-    let puzzle = challenge.puzzle();
-    let solution = tokio::task::spawn_blocking(move || puzzle.solve())
+    // Solve it off the runtime, using the challenge's own (authenticated) algorithm. `None`
+    // means this build cannot solve that algorithm (e.g. an Equi-X challenge without the
+    // `equix` feature) — fail cleanly rather than send a proof the server will reject.
+    let solution = tokio::task::spawn_blocking(move || challenge.solve())
         .await
-        .expect("solve task panicked");
+        .expect("solve task panicked")
+        .ok_or(Error::MalformedAdmission)?;
 
-    // Respond: MODE_POW ‖ challenge ‖ nonce ‖ cookie.
-    let mut resp = Vec::with_capacity(1 + CHALLENGE_LEN + 8 + cookie.len());
+    // Respond: MODE_POW ‖ challenge ‖ proof_len(u16 BE) ‖ proof ‖ cookie.
+    let proof_len = u16::try_from(solution.proof.len()).map_err(|_| Error::MalformedAdmission)?;
+    let mut resp = Vec::with_capacity(1 + CHALLENGE_LEN + 2 + solution.proof.len() + cookie.len());
     resp.push(MODE_POW);
     resp.extend_from_slice(&arr);
-    resp.extend_from_slice(&solution.nonce.to_be_bytes());
+    resp.extend_from_slice(&proof_len.to_be_bytes());
+    resp.extend_from_slice(&solution.proof);
     resp.extend_from_slice(cookie);
     write_frame(&mut stream, &resp).await?;
     Ok(stream)
@@ -750,6 +765,36 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_guarded_relay_refuses_an_oversized_proof() {
+        // A client that declares a huge proof length would force the server to slice/allocate
+        // it before verifying. The MAX_PROOF_LEN cap refuses the frame outright.
+        let rp_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let rp_addr = rp_listener.local_addr().unwrap();
+        tokio::spawn(RendezvousRelay::guarded(RelayConfig::default()).serve(rp_listener));
+
+        let mut peer = TcpStream::connect(rp_addr).await.unwrap();
+        let arr: [u8; CHALLENGE_LEN] = read_frame(&mut peer)
+            .await
+            .unwrap()
+            .unwrap()
+            .try_into()
+            .unwrap();
+        // Well-formed challenge, but a declared proof length past the cap. The server must
+        // reject on the declared length *alone*, before it slices or allocates any proof —
+        // so this frame need not even carry those bytes.
+        let mut resp = vec![super::MODE_POW];
+        resp.extend_from_slice(&arr);
+        resp.extend_from_slice(&(super::MAX_PROOF_LEN as u16 + 1).to_be_bytes());
+        write_frame(&mut peer, &resp).await.unwrap();
+
+        let after = tokio::time::timeout(Duration::from_secs(2), read_frame(&mut peer)).await;
+        assert!(
+            matches!(after, Ok(Ok(None)) | Ok(Err(_))),
+            "a proof longer than the cap must be refused, not allocated and parked"
+        );
+    }
+
+    #[tokio::test]
     async fn a_guarded_relay_refuses_an_oversized_cookie() {
         // A solver that presents a huge cookie would otherwise cost up to capacity × 1 MiB of
         // parked memory. The cap refuses it even though the proof-of-work is valid.
@@ -770,10 +815,13 @@ mod tests {
             .try_into()
             .unwrap();
         let challenge = Challenge::from_bytes(&arr);
-        let solution = challenge.puzzle().solve();
+        let solution = challenge
+            .solve()
+            .expect("SHA-256 algorithm is always supported");
         let mut resp = vec![super::MODE_POW];
         resp.extend_from_slice(&arr);
-        resp.extend_from_slice(&solution.nonce.to_be_bytes());
+        resp.extend_from_slice(&(solution.proof.len() as u16).to_be_bytes());
+        resp.extend_from_slice(&solution.proof);
         resp.extend_from_slice(&vec![b'x'; 4096]); // way over the 32-byte cap
         write_frame(&mut peer, &resp).await.unwrap();
 
@@ -828,7 +876,9 @@ mod tests {
             let now = Duration::from_secs(0);
             let (state, blinded) = blind();
             let challenge = iss.issuance_challenge(now);
-            let solution = challenge.puzzle().solve();
+            let solution = challenge
+                .solve()
+                .expect("SHA-256 algorithm is always supported");
             let issued = iss.issue(&challenge, &solution, blinded, now).unwrap();
             unblind(state, issued, published).unwrap()
         };

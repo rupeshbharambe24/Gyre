@@ -25,7 +25,7 @@
 use std::time::Duration;
 
 use hmac::{Hmac, KeyInit, Mac};
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 
 pub mod admission;
 pub mod effort;
@@ -104,52 +104,20 @@ pub fn leading_zero_bits(bytes: &[u8]) -> u32 {
     count
 }
 
-/// A client puzzle: find a nonce whose `SHA-256(challenge || nonce)` has at least
-/// `difficulty_bits` leading zero bits.
-pub struct Puzzle {
-    challenge: [u8; 32],
-    difficulty_bits: u32,
-}
-
-/// A solved puzzle: the winning `nonce` and how many `attempts` it took.
-#[derive(Clone, Copy, Debug)]
+/// A solved puzzle: the opaque `proof` bytes the client produced.
+///
+/// The proof's meaning is the [`pow::PowAlgorithm`](crate::pow::PowAlgorithm)'s business — an
+/// 8-byte nonce for SHA-256, a nonce-plus-solution for Equi-X — so the admission layer carries
+/// it as bytes and lets the challenge's algorithm tag decide how to check it.
+#[derive(Clone, Debug)]
 pub struct Solution {
-    pub nonce: u64,
-    pub attempts: u64,
+    pub proof: Vec<u8>,
 }
 
-impl Puzzle {
-    /// A puzzle for `challenge` at `difficulty_bits` leading-zero-bit difficulty.
-    pub fn new(challenge: [u8; 32], difficulty_bits: u32) -> Self {
-        Self {
-            challenge,
-            difficulty_bits,
-        }
-    }
-
-    fn meets(&self, nonce: u64) -> bool {
-        let mut hasher = Sha256::new();
-        hasher.update(self.challenge);
-        hasher.update(nonce.to_be_bytes());
-        leading_zero_bits(&hasher.finalize()) >= self.difficulty_bits
-    }
-
-    /// Brute-force a solution (what the client pays).
-    pub fn solve(&self) -> Solution {
-        let mut nonce = 0u64;
-        let mut attempts = 0u64;
-        loop {
-            attempts += 1;
-            if self.meets(nonce) {
-                return Solution { nonce, attempts };
-            }
-            nonce = nonce.wrapping_add(1);
-        }
-    }
-
-    /// Verify a client's nonce (one hash — what the server pays).
-    pub fn verify(&self, nonce: u64) -> bool {
-        self.meets(nonce)
+impl Solution {
+    /// Wrap raw proof bytes.
+    pub fn new(proof: Vec<u8>) -> Self {
+        Self { proof }
     }
 }
 
@@ -228,15 +196,17 @@ mod tests {
     }
 
     #[test]
-    fn pow_solution_verifies_and_verification_is_the_easy_side() {
-        let puzzle = Puzzle::new([7u8; 32], 16);
-        let solution = puzzle.solve();
+    fn pow_dispatch_round_trips_and_fails_closed_on_unknown_algorithms() {
+        use crate::pow::{solve_for, verify_for, TAG_SHA256};
+        let challenge = [7u8; 32];
+        let proof = solve_for(TAG_SHA256, &challenge, 16).expect("sha256 is always supported");
         assert!(
-            puzzle.verify(solution.nonce),
-            "the solved nonce must verify"
+            verify_for(TAG_SHA256, &challenge, &proof, 16),
+            "the solved proof must verify under its own algorithm"
         );
-        // Solving took real work; verifying took one hash.
-        assert!(solution.attempts > 1);
+        // An unknown algorithm tag cannot be solved and never verifies — fail closed.
+        assert!(solve_for(0xFE, &challenge, 16).is_none());
+        assert!(!verify_for(0xFE, &challenge, &proof, 16));
     }
 
     #[test]

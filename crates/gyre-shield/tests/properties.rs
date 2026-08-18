@@ -22,10 +22,11 @@ fn try_authorized_issue(
 ) -> Result<Issued, TokenError> {
     let now = std::time::Duration::from_secs(0);
     let challenge = issuer.issuance_challenge(now);
-    let solution = challenge.puzzle().solve();
+    let solution = challenge.solve().expect("SHA-256 supported");
     issuer.issue(&challenge, &solution, blinded, now)
 }
-use gyre_shield::{difficulty_for_load, leading_zero_bits, IngressSchedule, Puzzle, ADDR_LEN};
+use gyre_shield::pow::{PowAlgorithm, Sha256Pow};
+use gyre_shield::{difficulty_for_load, leading_zero_bits, IngressSchedule, ADDR_LEN};
 use proptest::prelude::*;
 
 /// Load values to test admission against. `proptest`'s `f64::ANY` only draws `NaN` about
@@ -53,10 +54,11 @@ proptest! {
         challenge in prop::array::uniform32(any::<u8>()),
         bits in 0u32..=10,
     ) {
-        let puzzle = Puzzle::new(challenge, bits);
-        let solution = puzzle.solve();
-        prop_assert!(puzzle.verify(solution.nonce), "solve must produce a verifiable nonce");
-        prop_assert!(solution.attempts >= 1);
+        let proof = Sha256Pow.solve(&challenge, bits);
+        prop_assert!(
+            Sha256Pow.verify(&challenge, &proof, bits),
+            "solve must produce a verifiable proof"
+        );
     }
 
     /// Difficulty rises monotonically with observed load and stays inside the designed
