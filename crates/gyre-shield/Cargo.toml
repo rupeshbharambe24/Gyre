@@ -12,6 +12,13 @@ description = "The inbound rotor: moving-target-defense ingress hopping and proo
 name = "gyre-shield"
 path = "src/main.rs"
 
+[features]
+# OPT-IN memory-hard admission puzzle (Equi-X, Tor proposal-327). OFF by default so the
+# crate stays pure MIT/Apache: the `equix`/`hashx` crates are LGPL-3.0-only, and pulling
+# them in is a licence choice for whoever builds with this feature. The default build ships
+# the SHA-256 puzzle and never touches LGPL code. See `pow.rs`.
+equix = ["dep:equix"]
+
 [dependencies]
 gyre-net = { path = "../gyre-net" }
 gyre-directory = { path = "../gyre-directory" }
@@ -24,6 +31,8 @@ zeroize.workspace = true
 subtle.workspace = true
 tokio.workspace = true
 thiserror.workspace = true
+# LGPL-3.0-only — gated behind the optional `equix` feature above, never in a default build.
+equix = { version = "0.7", optional = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
