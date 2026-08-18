@@ -244,7 +244,7 @@ completed this session.
 | ✅ | Fix **F14** — bind token issuance to a spent admission | done | One solved puzzle → ≤1 token; `Error::Unauthorized` otherwise; test confirmed to discriminate |
 | 5 | Splice idle/duration timeout | minor | Admitted pairs hold a task + two sockets indefinitely |
 | ✅ | Rate-aware AIMD difficulty controller (prop-327) | done | `gyre-shield::effort`; difficulty = max(occupancy, attempt-rate); test confirmed to discriminate |
-| ✅ | Memory-hard PoW via pure-Rust `equix`/`hashx` | done (opt-in) | `gyre-shield::pow`: pluggable `PowAlgorithm` trait, `EquixPow` behind `--features equix` (LGPL isolated); SHA-256 stays the MIT default. Both round-trip under test. Live-gate selection still to wire |
+| ✅ | Memory-hard PoW via pure-Rust `equix`/`hashx` | done (opt-in), wired | `gyre-shield::pow`: pluggable `PowAlgorithm` trait, `EquixPow` behind `--features equix` (LGPL isolated); SHA-256 stays the MIT default. Threaded through the live gate — a relay built with `guarded_with_algorithm(…, EQUIX)` issues, solves, and admits Equi-X over real sockets; algorithm bound into the challenge tag, fail-closed on unsupported. Adversarially reviewed (0 findings). Remaining: a daemon `--pow equix` flag |
 | ✅ | Authenticated cookies | done | Relay matches on `HMAC(cookie)`; mutual challenge-response closes the hijack race (`--auth`) |
 | ✅ | Multi-relay pool | done | Origin parks on k relays, client fails over; dilutes a relay flood ~linearly by *k* (`--rendezvous` × k) |
 | ✅ | Splice lifetime timeout | done | `RelayConfig.splice_timeout` bounds a spliced pair's total lifetime; a stuck splice can't hold a slot forever (`--splice-timeout-secs`) |
@@ -266,9 +266,10 @@ CDN origin can't be." Complement, not replacement.
 **vs. Tor onion services.** This is the fair comparison — Gyre is a re-implementation of the
 same model (rendezvous, no origin address, PoW admission = prop-327, per-source edge limiting =
 prop-305). Gyre now has **Equi-X memory-hard PoW implemented** too (`gyre-shield::pow`, behind an
-opt-in feature) — the remaining gap is that Tor runs it *in production* as the live default,
-whereas Gyre's default gate still issues SHA-256 and wiring Equi-X as the live selectable
-algorithm is the next step; Tor also has a *deployed* gated service (Gyre's gate is demo-only). Gyre is **at parity or better** on the
+opt-in feature) **and wired through the live gate** — a relay can be built for Equi-X and admits
+Equi-X-solving clients over real sockets. The remaining gap is that Tor runs it *in production* as
+the live default, whereas Gyre's default gate issues SHA-256 (Equi-X is opt-in) and only a demo/test
+relay selects it so far; Tor also has a *deployed* gated service. Gyre is **at parity or better** on the
 stateless-issue / SYN-cookie property, the TTL-bounded spent set, and the VOPRF capability-token
 construction — clean and tested, and F14 is now fixed. Bluntly: Gyre is prop-327 / onion-services
 minus the memory-hard puzzle minus deployment — both now cheap-to-close items (#1 and #7).
