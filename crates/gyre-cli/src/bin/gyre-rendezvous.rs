@@ -49,6 +49,13 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let (algorithm, algo_name) = match resolve_algorithm(&args) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("gyre-rendezvous: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
 
     let listener = match TcpListener::bind(&listen).await {
         Ok(l) => l,
@@ -63,7 +70,7 @@ async fn main() -> ExitCode {
         .unwrap_or(listen);
     println!("gyre-rendezvous guarded relay listening on {bound}");
     println!(
-        "  admission gate: PoW per connection · capacity {} · max-inflight {} · \
+        "  admission gate: {algo_name} PoW per connection · capacity {} · max-inflight {} · \
          handshake-timeout {:?} · challenge-ttl {:?} · max-cookie {} B",
         config.capacity,
         config.max_inflight,
@@ -73,7 +80,7 @@ async fn main() -> ExitCode {
     );
     println!("  ceilings: no volumetric L3/L4 defence (put a scrubber in front, D22); cookie is a bearer secret");
 
-    let relay = RendezvousRelay::guarded(config);
+    let relay = RendezvousRelay::guarded_with_algorithm(config, algorithm);
 
     // Optional operator heartbeat: report how many connections are currently parked, so a
     // deployment can watch the capacity bound hold under load without attaching a debugger.
@@ -99,6 +106,32 @@ async fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
     ExitCode::SUCCESS
+}
+
+/// Resolve the admission puzzle algorithm from `--pow` (default `sha256`).
+///
+/// Selecting `equix` (the memory-hard puzzle) requires this binary to have been built with
+/// `--features equix`. Otherwise the gate would issue Equi-X challenges that nothing in this
+/// build can solve or verify — every admission would fail closed, refusing honest clients too —
+/// so we refuse loudly at startup instead of serving a gate that admits no one.
+fn resolve_algorithm(args: &[String]) -> Result<(u8, &'static str), String> {
+    match flag(args, "--pow").as_deref().unwrap_or("sha256") {
+        "sha256" => Ok((gyre_shield::pow::TAG_SHA256, "SHA-256")),
+        "equix" => {
+            #[cfg(feature = "equix")]
+            let resolved = Ok((gyre_shield::pow::TAG_EQUIX, "Equi-X (memory-hard)"));
+            #[cfg(not(feature = "equix"))]
+            let resolved = Err(
+                "--pow equix requires building with `--features equix` (memory-hard puzzle; \
+                 pulls in the LGPL-3.0 equix/hashx crates)"
+                    .to_string(),
+            );
+            resolved
+        }
+        other => Err(format!(
+            "unknown --pow value '{other}' (expected 'sha256' or 'equix')"
+        )),
+    }
 }
 
 /// Assemble the relay config from flags, defaulting to [`RelayConfig::default`]'s bounds.

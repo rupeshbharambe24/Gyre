@@ -8,6 +8,12 @@ repository.workspace = true
 authors.workspace = true
 description = "Standalone relay and client binaries — real processes on real sockets, for network simulation and deployment."
 
+[features]
+# Forward the memory-hard Equi-X admission puzzle through to gyre-shield. OFF by default so
+# the binaries stay pure MIT/Apache; enabling it pulls in the LGPL-3.0 `equix`/`hashx` crates
+# (a licence choice for whoever builds with it) and lets `gyre-rendezvous --pow equix` run.
+equix = ["gyre-shield/equix"]
+
 [dependencies]
 gyre-common = { path = "../gyre-common" }
 gyre-sphinx = { path = "../gyre-sphinx" }
