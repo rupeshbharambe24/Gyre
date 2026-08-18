@@ -130,17 +130,21 @@ connection-exhaustion bounds from §2.
 **The honest weakness — SHA-256 is not memory-hard.** A GPU/ASIC out-computes an honest mobile
 CPU, so under flood the attacker clears the 20-bit puzzle cheaply while real clients suffer —
 the asymmetry runs *backwards* against your own users. The fix mirrors **Tor proposal 327**:
-migrate the puzzle to a memory-hard function with cheap asymmetric verify (**Equi-X**), and
-switch difficulty from exponential leading-zero-bits to Tor's linear effort encoding.
+a memory-hard function with cheap asymmetric verify (**Equi-X**).
 
-> **Effort, corrected during review:** this is *not* a hash swap, but it is cheaper than first
-> feared — Tor's Arti project now ships pure-Rust [`equix`](https://crates.io/crates/equix) and
-> [`hashx`](https://crates.io/crates/hashx) crates, so the pure-Rust posture (**D11**) is
-> preserved. The work is: define a `trait Puzzle`, provide an `equix` impl behind a feature
-> flag, switch to linear-effort encoding, and bench that the botnet-GPU : laptop-CPU cost ratio
-> stays near 1:1. Days to ~1 week. The surviving caveat: `equix`/`hashx` are **LGPL-3.0**, so a
-> licensing sign-off is real. Even memory-hard PoW only denies *hardware* amplification — it
-> does not stop a large enough botnet of ordinary CPUs, and nothing at L7 touches L3/L4.
+> **Now implemented, opt-in (`gyre-shield::pow`).** The puzzle is behind a `PowAlgorithm` trait
+> with two implementations: `Sha256Pow` (the pure-MIT default) and `EquixPow`, built on Tor's
+> pure-Rust [`equix`](https://crates.io/crates/equix)/[`hashx`](https://crates.io/crates/hashx)
+> crates. Equi-X is a *fixed-cost* memory-hard function, so tunable difficulty is layered on
+> exactly as Tor does it — keep solving with a fresh nonce until a solution's hash clears an
+> effort target — which keeps the solve→verify asymmetry (verify is one cheap Equi-X check plus
+> a hash). Because `equix`/`hashx` are **LGPL-3.0**, it ships behind an opt-in `--features equix`:
+> the default build is untouched pure-MIT and never links LGPL; a build that wants memory-hard
+> admission enables the feature and accepts LGPL for that build. Both algorithms round-trip under
+> test. **Still open:** wiring `EquixPow` as the live rendezvous gate's *selectable* algorithm
+> (the default gate still issues SHA-256). And even memory-hard PoW only denies *hardware*
+> amplification — it does not stop a large enough botnet of ordinary CPUs, and nothing at L7
+> touches L3/L4.
 
 The rate-aware **AIMD effort controller is now built** (`gyre-shield::effort`): difficulty is
 priced by `max(parking occupancy, admission-attempt rate)`, so a flood that never successfully
@@ -240,7 +244,7 @@ completed this session.
 | ✅ | Fix **F14** — bind token issuance to a spent admission | done | One solved puzzle → ≤1 token; `Error::Unauthorized` otherwise; test confirmed to discriminate |
 | 5 | Splice idle/duration timeout | minor | Admitted pairs hold a task + two sockets indefinitely |
 | ✅ | Rate-aware AIMD difficulty controller (prop-327) | done | `gyre-shield::effort`; difficulty = max(occupancy, attempt-rate); test confirmed to discriminate |
-| 7 | Memory-hard PoW via pure-Rust `equix`/`hashx` + linear effort | ~days–1 wk + LGPL sign-off | SHA-256 lets a GPU beat honest mobile clients — the asymmetry runs backwards |
+| ✅ | Memory-hard PoW via pure-Rust `equix`/`hashx` | done (opt-in) | `gyre-shield::pow`: pluggable `PowAlgorithm` trait, `EquixPow` behind `--features equix` (LGPL isolated); SHA-256 stays the MIT default. Both round-trip under test. Live-gate selection still to wire |
 | ✅ | Authenticated cookies | done | Relay matches on `HMAC(cookie)`; mutual challenge-response closes the hijack race (`--auth`) |
 | ✅ | Multi-relay pool | done | Origin parks on k relays, client fails over; dilutes a relay flood ~linearly by *k* (`--rendezvous` × k) |
 | ✅ | Splice lifetime timeout | done | `RelayConfig.splice_timeout` bounds a spliced pair's total lifetime; a stuck splice can't hold a slot forever (`--splice-timeout-secs`) |
@@ -261,9 +265,10 @@ CDN origin can't be." Complement, not replacement.
 
 **vs. Tor onion services.** This is the fair comparison — Gyre is a re-implementation of the
 same model (rendezvous, no origin address, PoW admission = prop-327, per-source edge limiting =
-prop-305). Gyre currently **loses to Tor** on two things: Tor ships **Equi-X memory-hard PoW in
-production** (Gyre is on SHA-256, so the asymmetry runs backwards), and Tor has a *deployed*
-gated service (Gyre's gate is demo-only). Gyre is **at parity or better** on the
+prop-305). Gyre now has **Equi-X memory-hard PoW implemented** too (`gyre-shield::pow`, behind an
+opt-in feature) — the remaining gap is that Tor runs it *in production* as the live default,
+whereas Gyre's default gate still issues SHA-256 and wiring Equi-X as the live selectable
+algorithm is the next step; Tor also has a *deployed* gated service (Gyre's gate is demo-only). Gyre is **at parity or better** on the
 stateless-issue / SYN-cookie property, the TTL-bounded spent set, and the VOPRF capability-token
 construction — clean and tested, and F14 is now fixed. Bluntly: Gyre is prop-327 / onion-services
 minus the memory-hard puzzle minus deployment — both now cheap-to-close items (#1 and #7).
