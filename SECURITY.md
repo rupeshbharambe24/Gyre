@@ -21,7 +21,8 @@ honest** rather than reassuring. Read the caution below before anything else.
 >   **integration around it** — key provenance, single-use, rotation — is Gyre's own
 >   code and has had no cryptographic review. It replaced a
 >   hand-rolled version whose unlinkability was found to be **entirely broken**; see
->   [`docs/AUDIT.md`](docs/AUDIT.md).
+>   [`docs/AUDIT.md`](docs/AUDIT.md). **Cryptographers: [`docs/REVIEW-ASK.md`](docs/REVIEW-ASK.md)**
+>   is a short on-ramp — one focused question and where to reply. Review is actively wanted.
 > - If your safety, freedom, or a production system depends on the outcome, use a
 >   mature, audited tool (Tor, a reviewed mixnet, a real DDoS provider) instead.
 >   Gyre is a research fabric for studying how these mechanisms compose, not

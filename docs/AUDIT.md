@@ -8,6 +8,11 @@
 What an external reviewer needs to assess the cryptography in Gyre — which, as of the
 `voprf` port, is **a much smaller surface than it used to be.**
 
+> [!TIP]
+> **Reviewing this for the first time? Start with [`REVIEW-ASK.md`](REVIEW-ASK.md)** — a
+> ~30-minute on-ramp with one focused question, the ~250 crypto-sensitive lines to read, and
+> two commands to reproduce. This document is the full reference behind that ask.
+
 > [!WARNING]
 > **Correction (2026-08-07): no crate in this stack is audited at the version we use.**
 > Earlier revisions of this document called `voprf` "the audited library" and treated
