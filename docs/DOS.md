@@ -105,13 +105,14 @@ guarded path.
 | Spent set bounded by TTL, not traffic | **BUILT** | `admission.rs` prunes on `redeem`; test `the_spent_set_is_bounded_by_ttl_not_by_traffic` |
 | Per-frame allocation bound (`MAX_FRAME` = 1 MiB) | **BUILT** | `gyre-net` `read_frame` rejects before allocating |
 | Parked-stream **TTL reaper** (evict idle parks by age) | **BUILT** | `RelayConfig.parked_ttl`; background sweep at half-TTL; test `a_guarded_relay_reaps_a_parked_stream_that_is_never_met` |
-| Splice idle/duration timeout | **NEEDED** | `copy_bidirectional` has no idle cap; lower priority (pair already paid PoW) |
+| Splice lifetime timeout | ✅ done | `RelayConfig.splice_timeout` caps a spliced pair's total lifetime (`--splice-timeout-secs`); a stuck splice can't hold the slot forever |
 | Kernel SYN cookies (half-open flood) | **NEVER** (host) | below `accept()`; OS config |
 | Volumetric SYN / link saturation | **NEVER** (D22) | scrubber territory |
 
 > Closed so far: the slowloris **duration** bound, the in-flight **count** bound, the cookie
-> length cap, and the **parked-TTL reaper**. What remains here is the lower-priority splice
-> idle timeout (the pair already paid PoW).
+> length cap, the **parked-TTL reaper**, and the **splice lifetime timeout**. What remains at
+> this layer is host/scrubber territory (kernel SYN cookies, volumetric floods) — outside a
+> userland relay's reach by construction.
 
 ---
 
@@ -242,6 +243,8 @@ completed this session.
 | 7 | Memory-hard PoW via pure-Rust `equix`/`hashx` + linear effort | ~days–1 wk + LGPL sign-off | SHA-256 lets a GPU beat honest mobile clients — the asymmetry runs backwards |
 | ✅ | Authenticated cookies | done | Relay matches on `HMAC(cookie)`; mutual challenge-response closes the hijack race (`--auth`) |
 | ✅ | Multi-relay pool | done | Origin parks on k relays, client fails over; dilutes a relay flood ~linearly by *k* (`--rendezvous` × k) |
+| ✅ | Splice lifetime timeout | done | `RelayConfig.splice_timeout` bounds a spliced pair's total lifetime; a stuck splice can't hold a slot forever (`--splice-timeout-secs`) |
+| ✅ | Client difficulty cap | done | A client refuses an absurd difficulty from a malicious relay (≤24 bits) instead of spinning forever; origin park dial is time-bounded with backoff |
 
 ---
 
