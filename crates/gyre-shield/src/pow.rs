@@ -174,7 +174,10 @@ mod tests {
         let alg = Sha256Pow;
         let challenge = [7u8; 32];
         let proof = alg.solve(&challenge, 12);
-        assert!(alg.verify(&challenge, &proof, 12), "a fresh solve must verify");
+        assert!(
+            alg.verify(&challenge, &proof, 12),
+            "a fresh solve must verify"
+        );
         assert_eq!(alg.tag(), TAG_SHA256);
     }
 
@@ -184,7 +187,10 @@ mod tests {
         let challenge = [7u8; 32];
         let proof = alg.solve(&challenge, 10);
         // A different challenge must not accept this proof.
-        assert!(!alg.verify(&[8u8; 32], &proof, 10), "wrong challenge must fail");
+        assert!(
+            !alg.verify(&[8u8; 32], &proof, 10),
+            "wrong challenge must fail"
+        );
         // A wrong-length proof must fail, not panic.
         assert!(!alg.verify(&challenge, b"short", 10));
         // The same proof at a much higher difficulty is astronomically unlikely to clear it.
