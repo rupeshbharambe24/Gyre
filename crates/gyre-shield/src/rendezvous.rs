@@ -50,6 +50,7 @@ use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::admission::{Admission, Challenge, Denied, CHALLENGE_LEN};
 use crate::effort::EffortController;
+use crate::pow::TAG_SHA256;
 use crate::token::{Issuer, Token, OUTPUT_LEN, SEED_LEN};
 use crate::Solution;
 
@@ -210,15 +211,30 @@ impl RendezvousRelay {
     /// count (`max_inflight`); and cookies are length-capped. This is the configuration that
     /// makes the relay a real L7 gate.
     pub fn guarded(config: RelayConfig) -> Self {
-        Self::guarded_inner(config, None)
+        Self::guarded_inner(config, TAG_SHA256, None)
     }
 
-    /// Shared construction for the two guarded variants, so a new bound cannot be added to one
-    /// and forgotten on the other.
-    fn guarded_inner(config: RelayConfig, verifier: Option<Arc<Mutex<Issuer>>>) -> Self {
+    /// A guarded relay that prices admission with a **chosen puzzle algorithm** — e.g.
+    /// [`pow::TAG_EQUIX`](crate::pow::TAG_EQUIX) for the memory-hard puzzle. The algorithm is
+    /// bound into every challenge, and clients solve whatever the challenge names. If the build
+    /// cannot verify that algorithm (an Equi-X relay without the crate's `equix` feature), every
+    /// admission fails closed — so an operator selecting Equi-X must build with the feature.
+    pub fn guarded_with_algorithm(config: RelayConfig, algorithm: u8) -> Self {
+        Self::guarded_inner(config, algorithm, None)
+    }
+
+    /// Shared construction for the guarded variants, so a new bound cannot be added to one
+    /// and forgotten on the others.
+    fn guarded_inner(
+        config: RelayConfig,
+        algorithm: u8,
+        verifier: Option<Arc<Mutex<Issuer>>>,
+    ) -> Self {
         Self {
             waiting: Arc::new(Mutex::new(HashMap::new())),
-            gate: Some(Arc::new(Mutex::new(Admission::new(config.ttl)))),
+            gate: Some(Arc::new(Mutex::new(Admission::with_algorithm(
+                config.ttl, algorithm,
+            )))),
             inflight: Some(Arc::new(Semaphore::new(config.max_inflight))),
             verifier,
             effort: Some(Arc::new(Mutex::new(EffortController::new(
@@ -239,7 +255,7 @@ impl RendezvousRelay {
     /// The `issuer` is shared (redemption mutates its single-use spent set), so one operator
     /// runs both the token issuer and this relay.
     pub fn guarded_with_tokens(config: RelayConfig, issuer: Arc<Mutex<Issuer>>) -> Self {
-        Self::guarded_inner(config, Some(issuer))
+        Self::guarded_inner(config, TAG_SHA256, Some(issuer))
     }
 
     /// The effort controller's current suggested load in `[0, 1]`, or `0.0` on an unguarded
@@ -680,6 +696,42 @@ mod tests {
         assert_eq!(
             response, b"pong: ping",
             "an admitted client reaches the origin"
+        );
+        origin.await.unwrap();
+    }
+
+    #[cfg(feature = "equix")]
+    #[tokio::test]
+    async fn a_memory_hard_relay_admits_a_client_over_real_sockets() {
+        // The full live path with the memory-hard puzzle: a relay built for Equi-X issues
+        // Equi-X challenges, and the parking origin and the client both solve them over real
+        // sockets via `dial_admitted` — which dispatches on the challenge's own algorithm, so
+        // the same client code handles either puzzle with no special-casing.
+        let rp_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let rp_addr = rp_listener.local_addr().unwrap();
+        tokio::spawn(
+            RendezvousRelay::guarded_with_algorithm(RelayConfig::default(), crate::pow::TAG_EQUIX)
+                .serve(rp_listener),
+        );
+
+        let cookie = b"equix cookie".to_vec();
+        let origin_cookie = cookie.clone();
+        let origin = tokio::spawn(async move {
+            let mut stream = dial_admitted(rp_addr, &origin_cookie).await.unwrap();
+            let request = read_frame(&mut stream).await.unwrap().unwrap();
+            let mut response = b"pong: ".to_vec();
+            response.extend_from_slice(&request);
+            write_frame(&mut stream, &response).await.unwrap();
+        });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let mut client = dial_admitted(rp_addr, &cookie).await.unwrap();
+        write_frame(&mut client, b"ping").await.unwrap();
+        let response = read_frame(&mut client).await.unwrap().unwrap();
+        assert_eq!(
+            response, b"pong: ping",
+            "an Equi-X-admitted client reaches the origin over real sockets"
         );
         origin.await.unwrap();
     }
