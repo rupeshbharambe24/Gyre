@@ -4,7 +4,7 @@
 
 use std::time::Duration;
 
-use gyre_sim::sim::{repeat_outcomes, run, stats, Scenario};
+use gyre_sim::sim::{repeat_outcomes, run, stats, Scenario, Traffic};
 
 fn ms(n: u64) -> Duration {
     Duration::from_millis(n)
@@ -25,6 +25,7 @@ fn main() {
         link_jitter: ms(10),
         observed_relay_fraction: 1.0,
         cover_per_flow: 0,
+        traffic: Traffic::Uniform,
         seed: 1,
         mix_mean: ms(0),
     };
@@ -213,6 +214,92 @@ fn main() {
     println!(
         "  wire overhead             {:.1}x payload",
         o.overhead_ratio
+    );
+
+    // ---------------------------------------------------------------------------
+    println!("\n\n6 · REALISTIC, HETEROGENEOUS TRAFFIC (the synthetic crowd, for measurement)");
+    println!("{}", "-".repeat(78));
+    println!("A real crowd is not synchronized. Here each flow draws a profile — mostly short");
+    println!("interactive/web bursts, some sparse messaging, a few long bulk transfers — so");
+    println!("the modelled crowd is as diverse as a real population. Every flow is still an");
+    println!("INDEPENDENT sender; this is realism for measurement, not cover posing as senders.");
+    println!(
+        "\n{:>9}  {:>10}  {:>18}  {:>10}",
+        "mix/hop", "traffic", "optimal acc.", "chance"
+    );
+    for (delay, traffic) in [
+        (50u64, Traffic::Uniform),
+        (50, Traffic::Mixed),
+        (150, Traffic::Uniform),
+        (150, Traffic::Mixed),
+    ] {
+        let outcomes = repeat_outcomes(
+            &Scenario {
+                mix_mean: ms(delay),
+                traffic,
+                ..base
+            },
+            REPS,
+        );
+        let (opt, sd) = stats(&outcomes, |o| o.accuracy_optimal);
+        let (chance, _) = stats(&outcomes, |o| o.chance);
+        let label = match traffic {
+            Traffic::Uniform => "uniform",
+            Traffic::Mixed => "mixed",
+        };
+        println!(
+            "{:>7}ms  {:>10}  {:>11.3} ±{:.3}  {:>8.4}",
+            delay, label, opt, sd, chance
+        );
+    }
+    println!(
+        "\n  Diversity does not rescue a small crowd, and it is not a free anonymity win:\n\
+         \x20 the attacker still links what it can see both ends of. It matters because the\n\
+         \x20 uniform model is an ARTIFICIALLY EASY block to correlate; measuring on a\n\
+         \x20 realistic mix keeps us honest about what a real population would give."
+    );
+
+    // ---------------------------------------------------------------------------
+    println!("\n\n7 · SCALE — the crowd curve at real-world size (partial observer, mixed)");
+    println!("{}", "-".repeat(78));
+    println!("The whole point of the crowd is that it must be LARGE and REAL. Published mixnet");
+    println!("studies sweep 10^2-10^5 users; this testbed now runs there. A 20%-relay observer");
+    println!("watches a heterogeneous crowd; deanon rate = coverage x accuracy is the headline.");
+    // Fewer reps on the heavy rows: generation is O(flows x packets) of real Sphinx onions.
+    const SCALE_REPS: usize = 4;
+    println!(
+        "\n{:>9}  {:>10}  {:>10}  {:>14}  {:>16}",
+        "flows", "coverage", "linkable", "optimal acc.", "deanon rate"
+    );
+    for n in [150usize, 1000, 3000, 10000] {
+        let outcomes = repeat_outcomes(
+            &Scenario {
+                n_flows: n,
+                mix_mean: ms(50),
+                observed_relay_fraction: 0.2,
+                traffic: Traffic::Mixed,
+                ..base
+            },
+            SCALE_REPS,
+        );
+        let (cov, _) = stats(&outcomes, |o| o.coverage);
+        let (linkable, _) = stats(&outcomes, |o| o.correlatable as f64);
+        let (acc, _) = stats(&outcomes, |o| o.accuracy_optimal);
+        let (deanon, sd) = stats(&outcomes, |o| o.deanon_rate);
+        let acc_col = if linkable < 2.0 {
+            "     n/a".to_string()
+        } else {
+            format!("{acc:>8.3}")
+        };
+        println!(
+            "{:>9}  {:>10.3}  {:>10.1}  {:>14}  {:>11.4} ±{:.4}",
+            n, cov, linkable, acc_col, deanon, sd
+        );
+    }
+    println!(
+        "\n  This is the number the crowd actually moves: as the real, independent population\n\
+         \x20 grows, the end-to-end deanonymisation rate falls. No amount of synthetic cover\n\
+         \x20 substitutes for it — only more real senders do (sections 2 and 4 together)."
     );
 
     println!("\n{}", "=".repeat(78));

@@ -37,6 +37,52 @@ use crate::attack::{
 };
 use crate::engine::Engine;
 
+/// How the flows in a run are shaped on the wire.
+///
+/// This is the *measurement*-realism knob, and it is important to say what it is **not**:
+/// every flow here is a modelled **independent sender** (its own circuit, route, keys, and
+/// timing). Making the crowd heterogeneous makes the model closer to a real population; it
+/// never turns one operator's cover into many senders. Counting decoys as senders stays
+/// banned (anti-overclaim rule 3) — that is a different mechanism (`cover_per_flow`), which
+/// is overhead-only and excluded from the anonymity number.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Traffic {
+    /// Every flow is identical — `packets_per_flow` packets paced at `packet_interval`.
+    /// Deliberately uniform: a synchronized crowd is the *easiest* to correlate, so this is
+    /// the conservative (attacker-favouring) model the headline numbers use.
+    Uniform,
+    /// Each flow samples a realistic profile — mostly short interactive/web bursts, some
+    /// sparse messaging, a few long bulk transfers — so the simulated crowd is as
+    /// heterogeneous as a real one. Its `packets_per_flow`/`packet_interval` fields are
+    /// then per-flow draws, not the scenario constants. For testbed realism at scale.
+    Mixed,
+}
+
+/// Draw one flow's shape for [`Traffic::Mixed`]: `(packets, mean inter-packet gap)`.
+///
+/// A plausible client mix — 55% interactive, 30% messaging, 15% bulk. These are modelling
+/// choices for realism, not measured from a capture; the point is *diversity*, so the
+/// crowd is not an artificially easy synchronized block.
+fn sample_profile(rng: &mut Rng) -> (usize, Duration) {
+    let u = rng.uniform();
+    if u < 0.55 {
+        // Interactive / web browsing: short bursts, sub-100ms gaps.
+        let n = 3 + (rng.uniform() * 10.0) as usize; // 3..=12
+        (n, Duration::from_millis(20 + (rng.uniform() * 40.0) as u64)) // 20..60ms
+    } else if u < 0.85 {
+        // Messaging: a handful of packets, sparse.
+        let n = 1 + (rng.uniform() * 4.0) as usize; // 1..=4
+        (
+            n,
+            Duration::from_millis(200 + (rng.uniform() * 800.0) as u64),
+        ) // 200ms..1s
+    } else {
+        // Bulk / streaming: many packets, tightly paced.
+        let n = 20 + (rng.uniform() * 40.0) as usize; // 20..=59
+        (n, Duration::from_millis(5 + (rng.uniform() * 15.0) as u64)) // 5..20ms
+    }
+}
+
 /// One simulation scenario.
 #[derive(Clone, Copy, Debug)]
 pub struct Scenario {
@@ -65,6 +111,9 @@ pub struct Scenario {
     /// Loopix cover loops per real flow. Counted for *overhead* only — never folded into
     /// the anonymity number (standing anti-overclaim rule 3).
     pub cover_per_flow: usize,
+    /// Whether every flow is identical ([`Traffic::Uniform`]) or a realistic heterogeneous
+    /// mix ([`Traffic::Mixed`]). Uniform is the conservative default the headline uses.
+    pub traffic: Traffic,
     /// Seed for relay selection, start times, pacing, and observer placement.
     pub seed: u64,
 }
@@ -83,6 +132,7 @@ impl Default for Scenario {
             link_jitter: Duration::from_millis(10),
             observed_relay_fraction: 0.2,
             cover_per_flow: 0,
+            traffic: Traffic::Uniform,
             seed: 1,
         }
     }
@@ -208,6 +258,9 @@ pub fn run(scn: &Scenario) -> Outcome {
     let mut exit_observed = vec![false; n_flows];
     let mut latencies: Vec<f64> = Vec::with_capacity(n_flows * per_flow);
     let mut wire_bytes = 0usize;
+    // Total REAL payload packets sent. With a heterogeneous mix this is no longer
+    // `n_flows * per_flow`, so track it directly for an honest overhead ratio.
+    let mut real_packets = 0usize;
 
     // --- Create the flows: one circuit each, several packets over it -----------------
     for flow in 0..n_flows {
@@ -216,12 +269,19 @@ pub fn run(scn: &Scenario) -> Outcome {
         guard_observed[flow] = observed[route_idx[0]];
         exit_observed[flow] = observed[route_idx[hops - 1]];
 
+        // Uniform: every flow identical. Mixed: draw a realistic profile per flow.
+        let (flow_packets, flow_interval) = match scn.traffic {
+            Traffic::Uniform => (per_flow, scn.packet_interval),
+            Traffic::Mixed => sample_profile(&mut rng),
+        };
+        real_packets += flow_packets;
+
         let start = (rng.uniform() * ns(scn.window) as f64) as u64;
-        for k in 0..per_flow {
+        for k in 0..flow_packets {
             // Packets are paced with exponential gaps — a bursty, realistic stream rather
             // than a metronome an attacker could trivially fingerprint.
             let offset = (0..k)
-                .map(|_| (rng.exp(ns(scn.packet_interval) as f64)) as u64)
+                .map(|_| (rng.exp(ns(flow_interval) as f64)) as u64)
                 .sum::<u64>();
             // REAL Loopix delay schedule, sealed inside a REAL Sphinx onion.
             let delays = exponential_delays(hops, scn.mix_mean);
@@ -388,7 +448,7 @@ pub fn run(scn: &Scenario) -> Outcome {
         )
     };
 
-    let payload_bytes = n_flows * per_flow * PAYLOAD.len();
+    let payload_bytes = real_packets * PAYLOAD.len();
     Outcome {
         n_flows,
         correlatable: linkable.len(),
@@ -409,13 +469,46 @@ pub fn run(scn: &Scenario) -> Outcome {
 /// metric from them — rather than re-simulating per metric — is both far cheaper and the
 /// only way the reported columns describe the same set of runs.
 pub fn repeat_outcomes(scn: &Scenario, reps: usize) -> Vec<Outcome> {
-    (0..reps.max(1))
-        .map(|r| {
-            let mut s = *scn;
-            s.seed = scn.seed.wrapping_add(r as u64);
-            run(&s)
-        })
-        .collect()
+    let reps = reps.max(1);
+    let scn = *scn;
+    let run_one = move |r: usize| {
+        let mut s = scn;
+        s.seed = scn.seed.wrapping_add(r as u64);
+        run(&s)
+    };
+
+    // This is a Monte Carlo harness: each run draws its own randomness (the relay keys come
+    // from the OS CSPRNG, so individual runs are independent *samples*, not a reproducible
+    // constant — which is exactly why every figure is reported as a mean ± std over `reps`).
+    // The runs share no mutable state, so they parallelise cleanly: we stripe indices across
+    // threads and sort back by index. This does not change the distribution being sampled —
+    // it just stops leaving most cores idle on a multi-core box (the harness was
+    // single-threaded before). It is a wall-clock win, not a change to the statistics.
+    let n_threads = std::thread::available_parallelism()
+        .map_or(1, |n| n.get())
+        .clamp(1, reps);
+    if n_threads == 1 {
+        return (0..reps).map(run_one).collect();
+    }
+
+    let mut indexed: Vec<(usize, Outcome)> = std::thread::scope(|scope| {
+        let handles: Vec<_> = (0..n_threads)
+            .map(|t| {
+                scope.spawn(move || {
+                    (t..reps)
+                        .step_by(n_threads)
+                        .map(|r| (r, run_one(r)))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|h| h.join().expect("simulation thread panicked"))
+            .collect()
+    });
+    indexed.sort_by_key(|(r, _)| *r);
+    indexed.into_iter().map(|(_, o)| o).collect()
 }
 
 /// `(mean, standard deviation)` of one metric across a set of runs.
@@ -427,4 +520,42 @@ pub fn stats(outcomes: &[Outcome], metric: impl Fn(&Outcome) -> f64) -> (f64, f6
     let mean = values.iter().sum::<f64>() / values.len() as f64;
     let var = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / values.len() as f64;
     (mean, var.sqrt())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use gyre_adversary::Rng;
+
+    /// The mixed-traffic profile sampler must actually produce a *spread* of flow shapes —
+    /// short interactive bursts through long bulk transfers — not a disguised constant.
+    #[test]
+    fn sample_profile_covers_the_whole_realistic_range() {
+        let mut rng = Rng::new(42);
+        let mut min_pkts = usize::MAX;
+        let mut max_pkts = 0usize;
+        let mut distinct = std::collections::BTreeSet::new();
+        for _ in 0..2000 {
+            let (pkts, interval) = sample_profile(&mut rng);
+            assert!(pkts >= 1, "a flow must send at least one packet");
+            assert!(interval.as_millis() > 0, "the pacing gap must be positive");
+            min_pkts = min_pkts.min(pkts);
+            max_pkts = max_pkts.max(pkts);
+            distinct.insert(pkts);
+        }
+        // The three regimes together span roughly 1..=59 packets; require a genuine spread.
+        assert!(
+            min_pkts <= 4,
+            "must produce short flows, min was {min_pkts}"
+        );
+        assert!(
+            max_pkts >= 20,
+            "must produce long bulk flows, max was {max_pkts}"
+        );
+        assert!(
+            distinct.len() >= 10,
+            "profiles must be diverse, saw only {} distinct lengths",
+            distinct.len()
+        );
+    }
 }

@@ -10,7 +10,7 @@
 
 use std::time::Duration;
 
-use gyre_sim::sim::{run, Scenario};
+use gyre_sim::sim::{repeat_outcomes, run, Scenario, Traffic};
 
 fn ms(n: u64) -> Duration {
     Duration::from_millis(n)
@@ -31,6 +31,7 @@ fn small(mix_ms: u64) -> Scenario {
         link_jitter: ms(10),
         observed_relay_fraction: 1.0,
         cover_per_flow: 0,
+        traffic: Traffic::Uniform,
         seed: 7,
     }
 }
@@ -170,5 +171,64 @@ fn the_fixed_packet_size_shows_up_as_real_overhead() {
         out.overhead_ratio > 1.0,
         "fixed-size padding must cost something, got {}",
         out.overhead_ratio
+    );
+}
+
+/// A realistic mixed crowd must still deliver, still yield a valid anonymity number, and
+/// must actually differ from the synchronized uniform block — otherwise the knob is inert.
+#[test]
+fn mixed_traffic_is_a_valid_and_distinct_crowd() {
+    let uniform = run(&small(50));
+    let mixed = run(&Scenario {
+        traffic: Traffic::Mixed,
+        ..small(50)
+    });
+    assert!(
+        mixed.latency.mean_ms > 0.0,
+        "a mixed crowd must still deliver, got {:?}",
+        mixed.latency
+    );
+    assert!(
+        (0.0..=1.0).contains(&mixed.accuracy_optimal),
+        "accuracy must stay a probability, got {}",
+        mixed.accuracy_optimal
+    );
+    // Heterogeneous pacing/sizes change the observable timing, so the measured result must
+    // move — a mix that produced the identical number would mean the profiles never applied.
+    assert!(
+        (mixed.overhead_ratio - uniform.overhead_ratio).abs() > 1e-9
+            || (mixed.accuracy_optimal - uniform.accuracy_optimal).abs() > 1e-9,
+        "mixed traffic must measurably differ from uniform"
+    );
+}
+
+/// Parallelising the Monte Carlo runs must not change the *distribution* being sampled —
+/// only the wall-clock. The relay keys come from the OS CSPRNG, so individual runs are
+/// independent samples (not a reproducible constant); the guarantee is that the parallel
+/// path yields the right count of valid samples whose aggregate matches expectation.
+#[test]
+fn parallel_repeat_yields_valid_samples_with_the_expected_aggregate() {
+    let reps = 9; // not a multiple of the core count, to exercise the index striping
+    let outcomes = repeat_outcomes(&small(0), reps);
+    // No run may be dropped or duplicated by the threading.
+    assert_eq!(
+        outcomes.len(),
+        reps,
+        "parallel striping lost or duplicated runs"
+    );
+    for o in &outcomes {
+        assert_eq!(o.n_flows, 24);
+        assert!(
+            (0.0..=1.0).contains(&o.accuracy_optimal),
+            "every sampled accuracy must be a probability, got {}",
+            o.accuracy_optimal
+        );
+    }
+    // With no mixing, correlation is near-perfect, so the aggregate mean over the parallel
+    // samples must land high. If striping mis-seeded or corrupted runs, this drifts.
+    let mean = outcomes.iter().map(|o| o.accuracy_optimal).sum::<f64>() / reps as f64;
+    assert!(
+        mean > 0.85,
+        "the parallel FAST-lane aggregate must stay near-perfect, got {mean}"
     );
 }
