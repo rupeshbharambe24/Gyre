@@ -7,18 +7,19 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
 
 ![Status](https://img.shields.io/badge/status-experimental-orange.svg)
 ![Version](https://img.shields.io/badge/version-0.0.1-lightgrey.svg)
-![Release](https://img.shields.io/badge/release-none%20tagged-inactive.svg)
+![Release](https://img.shields.io/badge/release-v0.1.0-blue.svg)
 ![Audit](https://img.shields.io/badge/audit-unaudited-red.svg)
 ![MSRV](https://img.shields.io/badge/MSRV-1.85-blue.svg)
 ![Crates](https://img.shields.io/badge/crates-15-informational.svg)
-![Tests](https://img.shields.io/badge/tests-171%20green-success.svg)
+![Tests](https://img.shields.io/badge/tests-225%20green-success.svg)
 [![CI](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml/badge.svg)](https://github.com/rupeshbharambe24/Gyre/actions/workflows/ci.yml)
 
 > [!NOTE]
-> This is a **pre-1.0 research build**. No version has been **tagged or released**,
-> and nothing is **published to crates.io**. Under SemVer, `0.y.z` is initial
-> development: anything may change at any time, and the public API is not stable.
-> The current workspace version is `0.0.1`.
+> This is a **pre-1.0 research build**. **`v0.1.0` is the first tagged release** (2026-10-22);
+> nothing is **published to crates.io** yet. Under SemVer, `0.y.z` is initial development:
+> anything may change at any time, and the public API is not stable. The workspace crate
+> version is still `0.0.1` — the `v0.1.0` **git tag** marks the first citable, Shield-deployable,
+> pre-review snapshot, not an API-stability promise.
 
 > [!WARNING]
 > Gyre is **early-stage and UNAUDITED**. Do **not** rely on it for real
@@ -37,6 +38,30 @@ and this project aims to adhere to [Semantic Versioning](https://semver.org/spec
   - [Fixed](#fixed)
   - [Deferred](#deferred-not-a-keep-a-changelog-category)
 - [About versioning](#about-versioning)
+
+---
+
+## [0.1.0] — 2026-10-22
+
+**First tagged release.** A citable snapshot of the fabric after the inbound-shield /
+DoS roadmap reached completion. This marks the point where the **Shield is deployable**
+(see [`docs/DEPLOY.md`](docs/DEPLOY.md)); it is **not** an API-stability promise and the
+crypto remains **unaudited**.
+
+- **Inbound Shield — deployable.** Guarded rendezvous relay daemon (`gyre-rendezvous`) with
+  origin-hiding and a complete L7 DoS defense: server-issued single-use load-scaled PoW
+  admission, slowloris/in-flight/cookie/parked/splice bounds, AIMD rate-adaptive pricing,
+  authenticated cookies, multi-relay pool, one-token-per-puzzle (F14), client difficulty cap.
+- **Memory-hard puzzle.** Pluggable `PowAlgorithm` (`gyre-shield::pow`); **Equi-X** behind an
+  opt-in `equix` feature and operator-selectable via `gyre-rendezvous --pow equix`. Default
+  build stays pure-MIT (LGPL isolated to the opt-in feature). Adversarially reviewed, 0 findings.
+- **Outbound Mixer — built and measured, crowd-gated.** Ten of thirteen privacy dimensions
+  covered; anonymity numbers from `gyre-sim` (optimal attacker), which superseded the GATE and
+  corrected it ~4.5×. **Not safe to rely on for real anonymity until there is a crowd.**
+- **Honesty ceilings unchanged:** no volumetric L3/L4 defense (D22, physics); the crowd cannot
+  be manufactured; endpoint compromise deanonymises regardless.
+- **State:** 15 product crates, 225 tests (default) + 76 under the `equix` feature; CI green;
+  crypto-review package ready to send (`docs/REVIEW-ASK.md`, `docs/REVIEW-OUTREACH.md`).
 
 ---
 

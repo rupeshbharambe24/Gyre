@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Rust: 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange.svg)
 ![Crates: 15](https://img.shields.io/badge/crates-15-informational.svg)
-![Tests: 171 passing](https://img.shields.io/badge/tests-171%20passing-brightgreen.svg)
+![Tests: 225 passing](https://img.shields.io/badge/tests-225%20passing-brightgreen.svg)
 ![Status: experimental](https://img.shields.io/badge/status-experimental-red.svg)
 
 Gyre is a single relay fabric that spins two ways at once: an **outbound
@@ -200,6 +200,8 @@ cargo clippy --workspace --all-targets -- -D warnings
 # that solves the admission puzzle gets through; a flood that skips it is
 # refused. See docs/DOS.md for the full layer-by-layer plan.
 ./scripts/rendezvous.sh 50
+# To run this Shield LIVE on a reachable host (systemd, --pow equix, honest
+# ceilings, abuse posture), see docs/DEPLOY.md.
 
 # End-to-end simulation: the REAL protocol code under an OPTIMAL correlation
 # attacker. This supersedes the GATE numbers — see docs/SIMULATION.md.
@@ -422,6 +424,8 @@ bearing on anonymity properties.
 | [`docs/SIMULATION.md`](docs/SIMULATION.md) | **End-to-end results**: `gyre-sim` (optimal attacker) **and Shadow** (real binaries, real TCP) — supersedes the GATE numbers |
 | [`docs/AUDIT.md`](docs/AUDIT.md) | **Cryptographic audit package**: spec, security model, RFC deviations, self-review findings, test vectors |
 | [`docs/REVIEW-ASK.md`](docs/REVIEW-ASK.md) | **Ask a cryptographer to review it**: a ~30-min on-ramp + copy-pasteable requests for the free venues (Crypto SE, CFRG, OTF Security Lab) |
+| [`docs/REVIEW-OUTREACH.md`](docs/REVIEW-OUTREACH.md) | **Ready-to-send review messages**: each outreach post/email composed, in send order |
+| [`docs/DEPLOY.md`](docs/DEPLOY.md) | **Deploy the Shield live**: run the guarded relay on a reachable host (systemd, reachability, honest ceilings, abuse posture) |
 | [`docs/DOS.md`](docs/DOS.md) | **DoS/DDoS defense plan**: layer-by-layer, what's built vs needed, and the hard volumetric boundary (D22) |
 | [`BENCHMARKS.md`](BENCHMARKS.md) | Reproducible criterion microbenchmarks of the primitives (with honest caveats) |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to build, test, and propose changes |
