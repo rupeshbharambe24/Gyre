@@ -23,8 +23,26 @@ can host both — client anonymity *and* onion-service origin-hiding.
 
 ---
 
+## See it run
+
+The inbound Shield, live across real OS processes — a client that solves the admission puzzle
+reaches a hidden origin; a flood that skips it is refused:
+
+```bash
+cargo build --release -p gyre-cli
+./scripts/demo.sh        # 15-second narrated demo (POW=equix for the memory-hard gate)
+```
+
+![Gyre Shield demo](docs/assets/demo.gif)
+
+> Generate the GIF above with `vhs scripts/demo.tape` (or asciinema — see the tape header).
+> To run the Shield **live on a reachable host**, follow [`docs/DEPLOY.md`](docs/DEPLOY.md).
+
+---
+
 ## Contents
 
+- [See it run](#see-it-run)
 - [What it is (honestly)](#what-it-is-honestly)
 - [Overview: one fabric, two rotors](#overview-one-fabric-two-rotors)
 - [The two rotors](#the-two-rotors)
@@ -474,6 +492,13 @@ Gyre is **unaudited** and must not be trusted for real-world anonymity yet.
 If you find a vulnerability, please report it privately via GitHub's private
 vulnerability reporting (Security Advisories) — see [`SECURITY.md`](SECURITY.md).
 Do not open a public issue for a security report.
+
+## Acceptable use
+
+Gyre is for defensive origin-hiding, protecting systems you own, privacy, and
+authorized research — **not** for attacking systems you don't control, malware/C2,
+harassment, or illegal content. What a relay operator can and cannot see, the honest
+limits, and how to report abuse are in [`ABUSE.md`](ABUSE.md).
 
 ## License
 
