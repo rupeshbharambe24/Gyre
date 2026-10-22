@@ -51,7 +51,7 @@ and future-you can see what's outstanding.
 
 **Title:** `RFC 9497 POPRF: risks of binding attacker-influenced metadata (info) into the evaluation?`
 
-**Tags:** `oprf` `rfc` `unlinkability`
+**Tags:** `oprf` `unlinkability` `anonymity` (add `provable-security` if offered — do **not** create a new tag; use only ones the autocomplete suggests)
 
 **Body:**
 > I use a partially-oblivious PRF (RFC 9497) and bind public metadata (`info`) into the evaluation — in
