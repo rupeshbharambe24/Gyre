@@ -1,19 +1,18 @@
 # Assets
 
-`demo.gif` — the README demo — is **generated**, not checked in by default (keeps the repo light).
+`demo.gif` — the Shield demo shown in the README — is **checked in** (it's small, ~42 KB).
 
-Produce it from the repo root:
-
-```bash
-cargo build --release -p gyre-cli   # build once
-vhs scripts/demo.tape               # writes demo.gif here (needs https://github.com/charmbracelet/vhs)
-```
-
-Or with asciinema (no VHS):
+Three ways to regenerate it:
 
 ```bash
+# A) No terminal recorder needed — Python + ffmpeg (what produced the committed GIF):
+python3 scripts/make-demo-gif.py            # -> docs/assets/demo.gif
+
+# B) A real terminal recording with VHS (github.com/charmbracelet/vhs):
+cargo build --release -p gyre-cli
+vhs scripts/demo.tape
+
+# C) asciinema (no VHS):
 asciinema rec demo.cast -c "PAUSE=0.8 ./scripts/demo.sh"
-agg demo.cast docs/assets/demo.gif   # github.com/asciinema/agg
+agg demo.cast docs/assets/demo.gif          # github.com/asciinema/agg
 ```
-
-Then commit `docs/assets/demo.gif` so it renders in the README.
