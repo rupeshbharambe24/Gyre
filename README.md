@@ -25,8 +25,24 @@ can host both — client anonymity *and* onion-service origin-hiding.
 
 ## See it run
 
-The inbound Shield, live across real OS processes — a client that solves the admission puzzle
-reaches a hidden origin; a flood that skips it is refused:
+**One click — run Gyre live on your machine:** clone the repo and run the launcher for your OS. It
+builds Gyre, starts the guarded Shield relay + a hidden origin, and opens a **live dashboard** in your
+browser where you can watch admissions and refusals in real time.
+
+| OS | Double-click / run |
+|----|--------------------|
+| macOS | `run-gyre.command` |
+| Linux | `run-gyre.sh` |
+| Windows | `run-gyre.bat` |
+
+(Needs the Rust toolchain — the launcher tells you how if it's missing. This runs Gyre *locally*; to
+make it reachable from the internet, see [`docs/DEPLOY.md`](docs/DEPLOY.md).)
+
+The dashboard (`http://127.0.0.1:9600/`) shows the gate working: a client that solves the admission
+puzzle is **admitted**; a flood that skips it is **refused** — watch the counter spike with
+`gyre-reach --flood 200`.
+
+Prefer the terminal? The inbound Shield, live across real OS processes:
 
 ```bash
 cargo build --release -p gyre-cli

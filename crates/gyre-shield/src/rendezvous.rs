@@ -40,6 +40,7 @@
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -180,8 +181,35 @@ pub struct RendezvousRelay {
     /// Rate-aware effort controller: raises difficulty for a flood that never parks. `None` on
     /// an unguarded relay.
     effort: Option<Arc<Mutex<EffortController>>>,
+    /// Cumulative connections the relay handled successfully (origin parked or pair spliced).
+    /// Observability only — never a control signal.
+    admitted: Arc<AtomicU64>,
+    /// Cumulative connections refused or failed (unsolved PoW, slowloris, over-capacity, …).
+    refused: Arc<AtomicU64>,
     config: RelayConfig,
     start: Instant,
+}
+
+/// A point-in-time snapshot of a relay's observable state — what a status dashboard reads.
+/// Pure observability; reading it never changes the relay's behaviour.
+#[derive(Debug, Clone, Copy)]
+pub struct RelayStats {
+    /// Whether the admission gate is active (`false` for a plain origin-hiding relay).
+    pub guarded: bool,
+    /// Maximum simultaneously parked connections (the load-signal denominator).
+    pub capacity: usize,
+    /// Maximum concurrent admission handshakes.
+    pub max_inflight: usize,
+    /// Connections currently parked, waiting for a peer.
+    pub parked: usize,
+    /// Cumulative successful admissions (origin parks + spliced pairs).
+    pub admitted: u64,
+    /// Cumulative refusals/failures.
+    pub refused: u64,
+    /// Current rate-aware effort load in `[0, 1]`.
+    pub effort_load: f64,
+    /// Seconds since the relay started.
+    pub uptime_secs: u64,
 }
 
 impl Default for RendezvousRelay {
@@ -192,6 +220,8 @@ impl Default for RendezvousRelay {
             inflight: None,
             verifier: None,
             effort: None,
+            admitted: Arc::new(AtomicU64::new(0)),
+            refused: Arc::new(AtomicU64::new(0)),
             config: RelayConfig::unbounded(),
             start: Instant::now(),
         }
@@ -241,6 +271,8 @@ impl RendezvousRelay {
                 config.effort_window,
                 config.effort_target_per_window,
             )))),
+            admitted: Arc::new(AtomicU64::new(0)),
+            refused: Arc::new(AtomicU64::new(0)),
             config,
             start: Instant::now(),
         }
@@ -277,6 +309,21 @@ impl RendezvousRelay {
             .lock()
             .expect("rendezvous map not poisoned")
             .len()
+    }
+
+    /// A snapshot of the relay's observable state, for a status dashboard or heartbeat.
+    /// Observability only — reading it never affects admission.
+    pub fn stats(&self) -> RelayStats {
+        RelayStats {
+            guarded: self.gate.is_some(),
+            capacity: self.config.capacity,
+            max_inflight: self.config.max_inflight,
+            parked: self.parked(),
+            admitted: self.admitted.load(Ordering::Relaxed),
+            refused: self.refused.load(Ordering::Relaxed),
+            effort_load: self.effort_load(),
+            uptime_secs: self.start.elapsed().as_secs(),
+        }
     }
 
     /// Serve forever on `listener`, splicing matched pairs.
@@ -321,9 +368,17 @@ impl RendezvousRelay {
             };
 
             let relay = self.clone();
+            let admitted = relay.admitted.clone();
+            let refused = relay.refused.clone();
             tokio::spawn(async move {
-                if let Err(e) = handle(relay, permit, stream).await {
-                    eprintln!("[rendezvous] connection refused: {e}");
+                match handle(relay, permit, stream).await {
+                    Ok(()) => {
+                        admitted.fetch_add(1, Ordering::Relaxed);
+                    }
+                    Err(e) => {
+                        refused.fetch_add(1, Ordering::Relaxed);
+                        eprintln!("[rendezvous] connection refused: {e}");
+                    }
                 }
             });
         }

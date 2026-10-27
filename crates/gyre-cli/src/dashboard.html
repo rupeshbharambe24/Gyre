@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Gyre · Live Shield</title>
+<style>
+  :root{
+    --bg:#070b12; --panel:#0e1420; --line:#1d2740; --muted:#8aa0c6; --dim:#55637e;
+    --txt:#e8eefb; --gr:#36d399; --rd:#ff5c72; --am:#ffb454; --cy:#38bdf8; --vi:#a78bfa;
+    --grad:linear-gradient(90deg,var(--cy),var(--vi));
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#13203a 0,transparent 60%),var(--bg);
+    color:var(--txt);font:15px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased;min-height:100vh}
+  .wrap{max-width:980px;margin:0 auto;padding:28px 20px 60px}
+  header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+  h1{font-size:22px;margin:0;font-weight:800;letter-spacing:.3px}
+  h1 .g{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .live{display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:700;
+    color:var(--gr);border:1px solid var(--line);border-radius:999px;padding:4px 11px}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--gr);box-shadow:0 0 10px var(--gr);animation:p 1.6s infinite}
+  .live.off{color:var(--dim)} .live.off .dot{background:var(--dim);box-shadow:none;animation:none}
+  @keyframes p{0%,100%{opacity:1}50%{opacity:.35}}
+  .algo{margin-left:auto;font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:4px 10px}
+  .algo b{color:var(--cy)}
+  .sub{color:var(--dim);font-size:13px;margin:2px 0 22px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:620px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px 20px}
+  .k{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--dim);margin:0 0 8px}
+  .big{font-size:44px;font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+  .big.gr{color:var(--gr)} .big.rd{color:var(--rd)}
+  .cap{font-size:12px;color:var(--muted);margin-top:8px}
+  .bars{display:grid;gap:16px;margin-top:4px}
+  .bar{height:12px;border-radius:7px;background:#0a0f1a;border:1px solid var(--line);overflow:hidden}
+  .bar>span{display:block;height:100%;width:0;transition:width .5s ease}
+  .meta{display:flex;gap:26px;flex-wrap:wrap;color:var(--muted);font-size:13px;margin-top:18px}
+  .meta b{color:var(--txt);font-variant-numeric:tabular-nums}
+  .spark{display:flex;align-items:flex-end;gap:2px;height:44px;margin-top:10px}
+  .spark i{flex:1;background:var(--rd);opacity:.8;border-radius:2px 2px 0 0;min-height:2px}
+  footer{margin-top:26px;color:var(--dim);font-size:12.5px;line-height:1.6;border-top:1px solid var(--line);padding-top:16px}
+  code{color:var(--am);font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>GYRE · <span class="g">Live Shield</span></h1>
+    <span class="live off" id="live"><span class="dot"></span><span id="livetxt">connecting…</span></span>
+    <span class="algo">puzzle · <b id="algo">—</b></span>
+  </header>
+  <p class="sub">The inbound rotor, in real time — the admission gate pricing every connection. A client that
+    pays the proof-of-work is <b style="color:var(--gr)">admitted</b>; a flood that skips it is <b style="color:var(--rd)">refused</b>.</p>
+
+  <div class="grid">
+    <div class="card"><p class="k">Admitted</p><div class="big gr" id="admitted">0</div>
+      <p class="cap">connections served (origin parks + spliced pairs)</p></div>
+    <div class="card"><p class="k">Refused by the gate</p><div class="big rd" id="refused">0</div>
+      <p class="cap">no proof-of-work, slowloris, over-capacity…</p>
+      <div class="spark" id="spark"></div>
+      <p class="cap">refusals/sec — watch it spike under a flood</p></div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="bars">
+      <div><p class="k" style="margin-bottom:6px">Parked <span id="parkedlbl" style="color:var(--muted)"></span></p>
+        <div class="bar"><span id="parkbar" style="background:var(--grad)"></span></div></div>
+      <div><p class="k" style="margin-bottom:6px">Effort load <span id="effortlbl" style="color:var(--muted)"></span>
+        <span style="color:var(--dim)">· difficulty rises with it</span></p>
+        <div class="bar"><span id="effortbar" style="background:linear-gradient(90deg,var(--am),var(--rd))"></span></div></div>
+    </div>
+    <div class="meta">
+      <span>capacity <b id="capacity">—</b></span>
+      <span>max in-flight <b id="inflight">—</b></span>
+      <span>uptime <b id="uptime">—</b></span>
+      <span>mode <b id="mode">—</b></span>
+    </div>
+  </div>
+
+  <footer>
+    <b>What this is:</b> an L7 admission gate + origin-hiding. It removes the origin as a target and prices the
+    requests that arrive. <b>What it is not:</b> a volumetric L3/L4 DDoS defence — a saturated link is physics
+    (decision D22); put a scrubber in front. Numbers here are observability only and never change admission.
+    <br/>Generate a flood to watch the <b style="color:var(--rd)">Refused</b> counter climb:
+    <code>gyre-reach --rendezvous 127.0.0.1:9500 --flood 200</code>
+  </footer>
+</div>
+<script>
+  const $=id=>document.getElementById(id);
+  let lastRefused=null, hist=new Array(40).fill(0);
+  function fmtUptime(s){const h=(s/3600|0),m=(s%3600/60|0),x=s%60;return h?`${h}h ${m}m`:(m?`${m}m ${x}s`:`${x}s`);}
+  function drawSpark(){const el=$('spark');el.innerHTML='';const mx=Math.max(1,...hist);
+    hist.forEach(v=>{const i=document.createElement('i');i.style.height=(100*v/mx)+'%';i.style.opacity=v?0.85:0.15;el.appendChild(i);});}
+  async function tick(){
+    try{
+      const r=await fetch('/stats.json',{cache:'no-store'});const s=await r.json();
+      $('live').className='live';$('livetxt').textContent='LIVE';
+      $('algo').textContent=s.algorithm;
+      $('admitted').textContent=s.admitted.toLocaleString();
+      $('refused').textContent=s.refused.toLocaleString();
+      if(lastRefused!==null){hist.push(Math.max(0,s.refused-lastRefused));if(hist.length>40)hist.shift();drawSpark();}
+      lastRefused=s.refused;
+      const pct=s.capacity>0&&s.capacity<1e18?Math.min(100,100*s.parked/s.capacity):0;
+      $('parkbar').style.width=pct+'%';
+      $('parkedlbl').textContent=`${s.parked} / ${s.capacity>=1e18?'∞':s.capacity}`;
+      $('effortbar').style.width=(100*s.effort_load)+'%';
+      $('effortlbl').textContent=s.effort_load.toFixed(2);
+      $('capacity').textContent=s.capacity>=1e18?'∞':s.capacity;
+      $('inflight').textContent=s.max_inflight;
+      $('uptime').textContent=fmtUptime(s.uptime_secs);
+      $('mode').textContent=s.guarded?'guarded':'origin-hiding only';
+    }catch(e){$('live').className='live off';$('livetxt').textContent='offline';}
+  }
+  tick();setInterval(tick,1000);
+</script>
+</body>
+</html>

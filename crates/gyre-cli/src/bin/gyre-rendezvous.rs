@@ -82,6 +82,32 @@ async fn main() -> ExitCode {
 
     let relay = RendezvousRelay::guarded_with_algorithm(config, algorithm);
 
+    // Optional live web dashboard. `--dashboard` with no value defaults to 127.0.0.1:9600
+    // (loopback — it is observability, not a public endpoint, unless you point it elsewhere).
+    if args.iter().any(|a| a == "--dashboard") {
+        let dash_str = flag(&args, "--dashboard")
+            .filter(|v| !v.starts_with("--"))
+            .unwrap_or_else(|| "127.0.0.1:9600".to_string());
+        match dash_str.parse() {
+            Ok(dash_addr) => {
+                println!("  dashboard: live stats at http://{dash_str}/");
+                let dash_relay = relay.clone();
+                let name = algo_name.to_string();
+                tokio::spawn(async move {
+                    if let Err(e) =
+                        gyre_cli::dashboard::serve_dashboard(dash_relay, dash_addr, name).await
+                    {
+                        eprintln!("gyre-rendezvous: dashboard error: {e}");
+                    }
+                });
+            }
+            Err(e) => {
+                eprintln!("gyre-rendezvous: bad --dashboard address '{dash_str}': {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+    }
+
     // Optional operator heartbeat: report how many connections are currently parked, so a
     // deployment can watch the capacity bound hold under load without attaching a debugger.
     if stats_secs > 0 {

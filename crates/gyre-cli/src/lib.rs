@@ -16,6 +16,8 @@
 //! must generate secrets from the OS CSPRNG and publish only the *public* halves through
 //! the threshold-signed consensus (`gyre-directory::NetworkParams`).
 
+pub mod dashboard;
+
 use std::net::SocketAddr;
 
 use gyre_endpoint::Ratchet;
