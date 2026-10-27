@@ -17,3 +17,6 @@
 .idea/
 .vscode/
 *.swp
+
+# local docx/report build workspace (node_modules, figures, scripts)
+.report/
