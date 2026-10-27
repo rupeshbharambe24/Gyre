@@ -1,0 +1,1844 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GYRE — Layered Privacy & Defense Fabric</title>
+<style>
+:root{
+  --bg:#04060e; --bg2:#070b18; --panel:rgba(18,26,48,.55); --panel2:rgba(12,18,36,.7);
+  --line:rgba(120,150,220,.16); --line2:rgba(120,150,220,.28);
+  --ink:#e8ecf8; --mut:#93a0c4; --dim:#5f6d92;
+  --cy:#22d3ee; --vi:#a855f7; --mg:#f472b6; --gr:#34d399; --am:#fbbf24; --rd:#fb7185;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  --r:16px; --maxw:1180px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:
+    radial-gradient(1200px 800px at 82% -8%, rgba(168,85,247,.14), transparent 60%),
+    radial-gradient(1100px 700px at 8% 108%, rgba(34,211,238,.12), transparent 60%),
+    var(--bg);
+  color:var(--ink); font-family:var(--sans);
+  -webkit-font-smoothing:antialiased; line-height:1.6; overflow-x:hidden;
+}
+#bg-canvas{position:fixed; inset:0; z-index:0; opacity:.55; pointer-events:none}
+a{color:var(--cy); text-decoration:none}
+::selection{background:rgba(168,85,247,.35)}
+.mono{font-family:var(--mono)}
+
+/* progress */
+#progress{position:fixed; top:0; left:0; height:2px; z-index:60;
+  background:linear-gradient(90deg,var(--cy),var(--vi),var(--mg)); width:0%;
+  box-shadow:0 0 12px rgba(34,211,238,.7); transition:width .25s ease}
+
+/* layout */
+.shell{position:relative; z-index:2; display:grid; grid-template-columns:248px 1fr; min-height:100vh}
+nav.rail{position:sticky; top:0; height:100vh; padding:26px 16px; border-right:1px solid var(--line);
+  background:linear-gradient(180deg, rgba(7,11,24,.85), rgba(4,6,14,.7)); backdrop-filter:blur(14px);
+  display:flex; flex-direction:column; gap:4px; overflow-y:auto}
+.brand{display:flex; align-items:center; gap:11px; padding:6px 8px 20px}
+.brand .mark{width:34px; height:34px; border-radius:10px; position:relative; flex:0 0 auto;
+  background:conic-gradient(from 0deg,var(--cy),var(--vi),var(--mg),var(--cy));
+  animation:spin 8s linear infinite; box-shadow:0 0 22px rgba(120,120,255,.5)}
+.brand .mark::after{content:""; position:absolute; inset:6px; border-radius:6px; background:var(--bg2)}
+.brand .mark::before{content:""; position:absolute; inset:13px; border-radius:50%;
+  background:radial-gradient(circle,var(--cy),transparent 70%)}
+@keyframes spin{to{transform:rotate(360deg)}}
+.brand b{font-size:15px; letter-spacing:.22em; font-weight:800}
+.brand span{display:block; font-size:9.5px; letter-spacing:.34em; color:var(--dim); margin-top:2px}
+.navlink{display:flex; align-items:center; gap:11px; padding:9px 11px; border-radius:11px;
+  color:var(--mut); cursor:pointer; font-size:13.5px; border:1px solid transparent; transition:.18s; position:relative}
+.navlink .n{font-family:var(--mono); font-size:10.5px; color:var(--dim); min-width:20px}
+.navlink:hover{background:rgba(120,150,220,.07); color:var(--ink)}
+.navlink.on{background:linear-gradient(90deg,rgba(34,211,238,.14),rgba(168,85,247,.08));
+  border-color:var(--line2); color:#fff}
+.navlink.on .n{color:var(--cy)}
+.navlink.on::before{content:""; position:absolute; left:-16px; top:8px; bottom:8px; width:3px;
+  border-radius:3px; background:linear-gradient(var(--cy),var(--vi)); box-shadow:0 0 10px var(--cy)}
+.rail .foot{margin-top:auto; padding:14px 10px 4px; font-size:10.5px; color:var(--dim); line-height:1.5}
+
+main{position:relative; min-width:0}
+.wrap{max-width:var(--maxw); margin:0 auto; padding:0 40px}
+section.page{min-height:100vh; padding:78px 0 96px; display:none; animation:fade .5s ease}
+section.page.on{display:block}
+@keyframes fade{from{opacity:0; transform:translateY(14px)}to{opacity:1; transform:none}}
+
+.kicker{font-family:var(--mono); font-size:11.5px; letter-spacing:.32em; text-transform:uppercase;
+  color:var(--cy); display:flex; align-items:center; gap:10px; margin-bottom:16px}
+.kicker::before{content:""; width:26px; height:1px; background:linear-gradient(90deg,var(--cy),transparent)}
+h1{font-size:clamp(30px,4.4vw,54px); line-height:1.06; margin:0 0 18px; font-weight:800; letter-spacing:-.02em}
+h2{font-size:clamp(24px,3vw,36px); margin:0 0 14px; font-weight:800; letter-spacing:-.02em}
+h3{font-size:17px; margin:0 0 8px; font-weight:700}
+.grad{background:linear-gradient(100deg,var(--cy),var(--vi) 55%,var(--mg));
+  -webkit-background-clip:text; background-clip:text; color:transparent}
+.lede{font-size:clamp(16px,1.7vw,19px); color:var(--mut); max-width:70ch}
+p{color:var(--mut)} p strong{color:var(--ink); font-weight:650}
+.small{font-size:13.5px}
+
+.panel{background:var(--panel); border:1px solid var(--line); border-radius:var(--r);
+  backdrop-filter:blur(10px); padding:22px 24px; position:relative; overflow:hidden}
+.panel.glow::after{content:""; position:absolute; inset:0; border-radius:var(--r); padding:1px;
+  background:linear-gradient(120deg,rgba(34,211,238,.5),transparent 40%,rgba(168,85,247,.4));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none}
+.grid{display:grid; gap:18px}
+.g2{grid-template-columns:1fr 1fr}
+.g3{grid-template-columns:repeat(3,1fr)}
+@media(max-width:900px){.g2,.g3{grid-template-columns:1fr}}
+
+.stage{position:relative; border:1px solid var(--line); border-radius:var(--r); overflow:hidden;
+  background:linear-gradient(180deg,rgba(6,10,22,.6),rgba(4,7,16,.75)); height:420px}
+.stage canvas{width:100%; height:100%; display:block}
+.stage .cap{position:absolute; left:16px; bottom:14px; right:16px; font-family:var(--mono);
+  font-size:12px; color:var(--mut); background:rgba(4,6,14,.6); border:1px solid var(--line);
+  border-radius:9px; padding:8px 12px; backdrop-filter:blur(6px)}
+.stage .tag{position:absolute; left:14px; top:13px; font-family:var(--mono); font-size:10.5px;
+  letter-spacing:.2em; color:var(--cy); text-transform:uppercase}
+
+.ctrl{display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin-top:14px}
+.btn{font-family:var(--mono); font-size:12px; letter-spacing:.06em; color:var(--ink); cursor:pointer;
+  background:rgba(120,150,220,.08); border:1px solid var(--line2); border-radius:10px; padding:9px 15px; transition:.15s}
+.btn:hover{background:rgba(34,211,238,.14); border-color:var(--cy); box-shadow:0 0 16px rgba(34,211,238,.25)}
+.btn.pri{background:linear-gradient(100deg,rgba(34,211,238,.9),rgba(168,85,247,.9)); color:#05070f; border:none; font-weight:700}
+.btn.mini{padding:6px 11px; font-size:11px}
+.seg{display:inline-flex; background:rgba(8,12,26,.7); border:1px solid var(--line); border-radius:11px; padding:4px; gap:3px}
+.seg button{font-family:var(--mono); font-size:12px; color:var(--mut); background:none; border:none;
+  padding:7px 14px; border-radius:8px; cursor:pointer; transition:.15s}
+.seg button.on{background:linear-gradient(100deg,rgba(34,211,238,.2),rgba(168,85,247,.16)); color:#fff}
+input[type=range]{-webkit-appearance:none; height:4px; border-radius:4px; background:var(--line2); outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:17px; height:17px; border-radius:50%;
+  background:linear-gradient(var(--cy),var(--vi)); cursor:pointer; box-shadow:0 0 12px rgba(34,211,238,.6)}
+.readout{font-family:var(--mono); font-size:12px; color:var(--cy)}
+
+.pill{display:inline-flex; align-items:center; gap:7px; font-family:var(--mono); font-size:11px;
+  letter-spacing:.05em; padding:5px 11px; border-radius:99px; border:1px solid var(--line2);
+  color:var(--mut); background:rgba(8,12,26,.5)}
+.dot{width:7px; height:7px; border-radius:50%; box-shadow:0 0 8px currentColor}
+.chips{display:flex; flex-wrap:wrap; gap:9px}
+
+.card{background:var(--panel2); border:1px solid var(--line); border-radius:14px; padding:18px 19px; transition:.2s}
+.card:hover{border-color:var(--line2); transform:translateY(-3px); box-shadow:0 18px 40px rgba(0,0,0,.35)}
+.card .ic{width:38px; height:38px; border-radius:10px; display:grid; place-items:center; margin-bottom:12px;
+  font-size:18px; background:rgba(34,211,238,.1); border:1px solid var(--line2)}
+
+table.mtx{width:100%; border-collapse:collapse; font-size:13.5px; overflow:hidden; border-radius:12px}
+table.mtx th,table.mtx td{text-align:left; padding:12px 14px; border-bottom:1px solid var(--line)}
+table.mtx th{font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--dim)}
+table.mtx tr:hover td{background:rgba(120,150,220,.05)}
+table.mtx .th{color:var(--ink); font-weight:600}
+.sub{font-family:var(--mono); font-size:11.5px; color:var(--vi)}
+
+.timeline{display:flex; flex-direction:column; gap:2px; margin-top:10px}
+.tl{display:grid; grid-template-columns:74px 1fr; gap:18px; padding:16px 0; border-bottom:1px solid var(--line)}
+.tl .m{font-family:var(--mono); font-size:12px; color:var(--cy); padding-top:2px}
+.tl h3{margin-bottom:5px}
+
+.decis{display:grid; gap:12px}
+.dec{display:grid; grid-template-columns:30px 1fr; gap:16px; padding:16px 18px; background:var(--panel2);
+  border:1px solid var(--line); border-left:2px solid var(--vi); border-radius:12px}
+.dec .k{font-family:var(--mono); color:var(--vi); font-size:13px}
+.dec b{color:var(--ink)}
+.warn{border-left-color:var(--am)} .warn .k{color:var(--am)}
+.good{border-left-color:var(--gr)} .good .k{color:var(--gr)}
+
+.pager{display:flex; justify-content:space-between; margin-top:44px; gap:12px}
+.pager .btn{flex:0 1 auto}
+.hero-emblem{position:relative; width:100%; height:clamp(420px,62vh,660px); margin:12px 0;
+  border:1px solid var(--line2); border-radius:22px; overflow:hidden;
+  background:radial-gradient(135% 105% at 50% 36%, rgba(24,32,62,.6), rgba(4,6,14,.92));
+  box-shadow:inset 0 0 100px rgba(8,12,28,.7), 0 34px 100px rgba(0,0,0,.5)}
+.hero-emblem canvas{position:absolute; inset:0; width:100%; height:100%; display:block}
+.hero-emblem .hud{position:absolute; top:16px; left:18px; font-family:var(--mono); font-size:10.5px;
+  letter-spacing:.24em; color:var(--cy); text-transform:uppercase; opacity:.85; pointer-events:none}
+.hero-emblem .hud2{position:absolute; top:16px; right:18px; font-family:var(--mono); font-size:10.5px;
+  letter-spacing:.18em; color:var(--dim); pointer-events:none}
+@media(max-width:820px){
+  .shell{grid-template-columns:1fr}
+  nav.rail{position:fixed; z-index:50; width:264px; left:-280px; transition:.28s; box-shadow:0 0 60px rgba(0,0,0,.6)}
+  nav.rail.open{left:0}
+  .wrap{padding:0 20px} section.page{padding:64px 0 80px}
+  #menu{display:grid}
+}
+#menu{display:none; position:fixed; z-index:55; top:14px; left:14px; width:44px; height:44px; place-items:center;
+  border-radius:12px; background:var(--panel); border:1px solid var(--line2); backdrop-filter:blur(8px); cursor:pointer}
+#menu span{width:18px; height:2px; background:var(--ink); box-shadow:0 6px 0 var(--ink),0 -6px 0 var(--ink)}
+.scrim{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:49; display:none}
+.scrim.on{display:block}
+.stat{display:flex; gap:26px; flex-wrap:wrap; margin-top:8px}
+.stat div b{display:block; font-size:26px; font-family:var(--mono);
+  background:linear-gradient(var(--cy),var(--vi)); -webkit-background-clip:text; background-clip:text; color:transparent}
+.stat div span{font-size:12px; color:var(--dim)}
+.note{font-size:12.5px; color:var(--dim); font-style:italic}
+/* honest status system — done / partial / open / cut */
+.st{display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10px;
+  letter-spacing:.1em; text-transform:uppercase; padding:3px 9px; border-radius:99px;
+  border:1px solid var(--line2); white-space:nowrap; vertical-align:middle}
+.st::before{content:""; width:7px; height:7px; border-radius:99px; background:currentColor; flex:none}
+.st-done{color:var(--gr); border-color:rgba(52,211,153,.4); background:rgba(52,211,153,.08)}
+.st-part{color:var(--am); border-color:rgba(251,191,36,.4); background:rgba(251,191,36,.08)}
+.st-open{color:var(--rd); border-color:rgba(251,113,133,.35); background:rgba(251,113,133,.07)}
+.st-cut{color:var(--dim); border-color:var(--line); background:rgba(120,150,220,.05); text-decoration:line-through}
+.stleg{display:flex; flex-wrap:wrap; gap:12px; margin:14px 0 4px}
+.tl .st{margin-left:10px}
+ul.clean{list-style:none; padding:0; margin:10px 0}
+ul.clean li{padding:7px 0 7px 24px; position:relative; color:var(--mut)}
+ul.clean li::before{content:"▹"; position:absolute; left:2px; color:var(--cy)}
+.two{display:grid; grid-template-columns:1fr 1fr; gap:14px} @media(max-width:760px){.two{grid-template-columns:1fr}}
+.flag{border-left:2px solid var(--rd); background:rgba(251,113,133,.06); border-radius:10px; padding:14px 16px}
+.flag .k{color:var(--rd); font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase}
+.crow{display:grid; grid-template-columns:132px 1fr auto; gap:12px; align-items:center; padding:8px 12px;
+  border:1px solid var(--line); border-radius:10px; background:var(--panel2); transition:.15s}
+.crow:hover{border-color:var(--line2); background:rgba(120,150,220,.06)}
+.crow .cn{font-family:var(--mono); font-size:12px; color:var(--ink)}
+.crow .cm{font-size:12.5px; color:var(--mut)}
+.cst{font-family:var(--mono); font-size:10.5px; padding:3px 9px; border-radius:99px; border:1px solid var(--line2); white-space:nowrap}
+.costpill{font-family:var(--mono); font-size:10px; letter-spacing:.05em; padding:4px 9px; border-radius:99px; border:1px solid var(--line2)}
+/* integrated pipeline diagram */
+.pipe{display:grid; grid-template-columns:1.6fr 1fr; gap:24px; align-items:start}
+@media(max-width:840px){.pipe{grid-template-columns:1fr}}
+.flow{position:relative; padding-left:24px}
+.flow::before{content:""; position:absolute; left:6px; top:12px; bottom:12px; width:2px; border-radius:2px;
+  background:linear-gradient(var(--cy),var(--vi),var(--mg)); opacity:.35}
+.flow .spark{position:absolute; left:1.5px; width:11px; height:11px; border-radius:50%; background:var(--cy);
+  box-shadow:0 0 16px 2px var(--cy); animation:sparkdown 7s linear infinite}
+@keyframes sparkdown{0%{top:8px; opacity:0}9%{opacity:1}90%{opacity:1}100%{top:calc(100% - 18px); opacity:0}}
+.layer{position:relative; display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:12px 16px; margin:10px 0; border:1px solid var(--line); border-radius:12px; background:var(--panel2); transition:.2s}
+.layer:hover{border-color:var(--line2); transform:translateX(3px)}
+.layer::before{content:""; position:absolute; left:-23px; top:50%; transform:translateY(-50%);
+  width:10px; height:10px; border-radius:50%; background:var(--bg2); border:2px solid var(--cy); box-shadow:0 0 8px rgba(34,211,238,.4)}
+.layer.add::before{border-color:var(--vi); box-shadow:0 0 9px rgba(168,85,247,.55)}
+.layer.opt{border-style:dashed; opacity:.9}
+.layer .lname{font-size:13px; color:var(--ink)}
+.layer .ltag{font-family:var(--mono); font-size:10px; padding:3px 9px; border-radius:99px; border:1px solid var(--line2); white-space:nowrap}
+.wirebar{margin:14px 0 0 24px; font-family:var(--mono); font-size:11px; color:var(--dim);
+  border-top:1px dashed var(--line2); padding-top:12px}
+.cplane{border:1px solid rgba(168,85,247,.3); border-radius:14px; background:rgba(168,85,247,.05); padding:18px 20px}
+.cplane .h{font-family:var(--mono); font-size:10.5px; letter-spacing:.22em; color:var(--vi); margin-bottom:6px}
+.citem{padding:13px 0; border-bottom:1px solid var(--line)}
+.citem:last-of-type{border-bottom:none}
+.citem b{color:var(--ink); font-size:13px}
+.citem .ct{font-family:var(--mono); font-size:10px; color:var(--vi); float:right; margin-top:2px}
+/* tech stack */
+.tspanel h3{display:flex; align-items:center; justify-content:space-between; gap:9px; margin-bottom:10px}
+.tspanel .badge{font-family:var(--mono); font-size:9.5px; letter-spacing:.06em; padding:3px 9px; border-radius:99px; border:1px solid var(--line2); color:var(--dim); white-space:nowrap}
+.tsrow{display:grid; grid-template-columns:172px 1fr; gap:14px; padding:9px 0; border-bottom:1px solid var(--line); align-items:baseline}
+.tsrow:last-child{border-bottom:none}
+.tsrow .tn{font-family:var(--mono); font-size:11.5px; color:var(--cy); line-height:1.45}
+.tsrow .tp{font-size:12.5px; color:var(--mut)}
+@media(max-width:560px){.tsrow{grid-template-columns:1fr; gap:2px}}
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<canvas id="bg-canvas"></canvas>
+<div id="menu"><span></span></div>
+<div class="scrim" id="scrim"></div>
+
+<div class="shell">
+  <nav class="rail" id="rail">
+    <div class="brand">
+      <div class="mark"></div>
+      <div><b>GYRE</b><span>PRIVACY · DEFENSE FABRIC</span></div>
+    </div>
+    <div class="navlink on" data-go="overview"><span class="n">00</span> Overview</div>
+    <div class="navlink" data-go="problem"><span class="n">01</span> Two Rotors</div>
+    <div class="navlink" data-go="ceiling"><span class="n">02</span> Threat Model</div>
+    <div class="navlink" data-go="myth"><span class="n">03</span> Rotation ≠ Anonymity</div>
+    <div class="navlink" data-go="crowd"><span class="n">04</span> Unlinkability + Crowd</div>
+    <div class="navlink" data-go="shield"><span class="n">05</span> Inbound Rotor · Shield</div>
+    <div class="navlink" data-go="mixer"><span class="n">06</span> Outbound Rotor · Mixer</div>
+    <div class="navlink" data-go="layering"><span class="n">07</span> Defense Matrix</div>
+    <div class="navlink" data-go="classes"><span class="n">08</span> Mechanism Classes</div>
+    <div class="navlink" data-go="priorart"><span class="n">09</span> What We Build On</div>
+    <div class="navlink" data-go="build"><span class="n">10</span> Engineering Roadmap</div>
+    <div class="navlink" data-go="capstone"><span class="n">11</span> Full Working</div>
+    <div class="navlink" data-go="decisions"><span class="n">12</span> Decisions Log</div>
+    <div class="navlink" data-go="edge"><span class="n">13</span> Positioning</div>
+    <div class="navlink" data-go="compare"><span class="n">14</span> Head-to-Head</div>
+    <div class="navlink" data-go="techstack"><span class="n">15</span> Tech Stack</div>
+    <div class="navlink" data-go="protects"><span class="n">16</span> Protection Model</div>
+    <div class="navlink" data-go="deploy"><span class="n">17</span> Where To Test</div>
+    <div class="navlink" data-go="status"><span class="n">18</span> Current Status</div>
+    <div class="foot">Privacy &amp; defense network fabric.<br/>Engineered honest — every claim measured against a baseline.</div>
+  </nav>
+
+  <main>
+  <div class="wrap">
+
+  <!-- 00 OVERVIEW -->
+  <section class="page on" id="overview">
+    <div class="kicker">Product Overview</div>
+    <h1>The <span class="grad">Gyre</span> Fabric</h1>
+    <p class="lede">Gyre is a privacy-and-defense network fabric that does two jobs at once. Outbound, it
+      <strong>dissolves a person into a crowd</strong> so no observer can link who you are to what you reach.
+      Inbound, it <strong>hides and shields a system</strong> so its origin can't be found, targeted, or flooded.
+      It builds on the field's strongest proven cores — the onion routing behind Tor, the mix strategy behind Nym —
+      and integrates them in a way no single tool ships today. Every page shows the mechanism running live and puts
+      it side-by-side with the industry system it improves on.</p>
+
+    <div class="hero-emblem">
+      <canvas id="c-hero"></canvas>
+      <div class="hud">◢ GYRE FABRIC · LIVE</div>
+      <div class="hud2">2 rotors · 13 dims · 6 additions</div>
+    </div>
+
+    <div class="grid g2" style="margin-top:8px">
+      <div class="panel glow">
+        <div class="pill"><span class="dot" style="color:var(--gr)"></span> INBOUND ROTOR</div>
+        <h2 style="margin-top:14px">Protect a system</h2>
+        <p>Traffic flows <strong>toward an asset you own</strong>, and the threats are recon, targeting, and floods.
+          Gyre never publishes the origin: clients reach it through a <strong>rendezvous relay</strong>, the
+          reachable address keeps <strong>moving on a keyed schedule</strong> only authorized clients can follow, and
+          admission is priced with proof-of-work so a flood gets expensive fast. Unlike a reverse-proxy CDN, no
+          intermediary ever terminates your encryption — only the origin does.</p>
+      </div>
+      <div class="panel glow">
+        <div class="pill"><span class="dot" style="color:var(--vi)"></span> OUTBOUND ROTOR</div>
+        <h2 style="margin-top:14px">Protect a person</h2>
+        <p>Traffic flows <strong>out toward services you don't own</strong>, watched by a capable observer.
+          Gyre breaks the link between you and your destination the way a mix network does — layered onion
+          encryption so no relay sees both ends, per-hop timing delays and shared cover traffic so an observer
+          can't line up entry with exit. Where Tor offers one fixed low-latency path, Gyre adds a
+          <strong>dial</strong>: spend a little latency for materially stronger timing resistance, only on the
+          flows that need it.</p>
+      </div>
+    </div>
+
+    <div class="stat">
+      <div><b>2</b><span>protection rotors, one fabric</span></div>
+      <div><b>0.06</b><span>optimal-attacker linkage at heavy mixing (from 1.00) — measured by <span class="mono">gyre-sim</span></span></div>
+      <div><b>3</b><span>onion hops — same as Tor, capped on purpose</span></div>
+      <div><b>15</b><span>Rust crates · 218 tests · measured</span></div>
+    </div>
+    <p class="note" style="margin-top:20px">Read top-to-bottom, or jump from the rail. Every page runs a live animation of the mechanism it describes, and the key ones carry the measured result. Use ← / → keys to move between pages.</p>
+    <div class="pager"><span></span><div class="btn pri" data-go="problem">Begin → Two Goals</div></div>
+  </section>
+
+  <!-- 01 PROBLEM -->
+  <section class="page" id="problem">
+    <div class="kicker">01 · Architecture</div>
+    <h2>Two directions of protection, <span class="grad">one fabric</span></h2>
+    <p class="lede">Gyre runs two rotors on one set of relays because protecting a <em>system</em> and protecting a
+      <em>person</em> are different machines — the traffic flows opposite ways, so the entry and exit rules differ.
+      Sharing one fabric isn't a gamble: it's exactly how Tor already runs client anonymity and onion-service
+      origin-hiding on a single network. Gyre ships both rotors as first-class, integrated products.</p>
+
+    <div class="stage" style="margin:22px 0">
+      <div class="tag">live · traffic directions</div>
+      <canvas id="c-problem"></canvas>
+      <div class="cap" id="cap-problem">Outbound: a person emits packets into the fabric toward services. Inbound: attackers approach a server and are absorbed by the shield.</div>
+    </div>
+    <div class="seg" id="seg-problem">
+      <button class="on" data-r="both">Both rotors</button>
+      <button data-r="out">Outbound only</button>
+      <button data-r="in">Inbound only</button>
+    </div>
+
+    <div class="grid g2" style="margin-top:22px">
+      <div class="panel"><h3>Proven at scale</h3><p>Tor already unifies both directions: clients get outbound anonymity, and
+        <strong>onion services</strong> hide a server inbound via rendezvous points. A dual fabric isn't speculative —
+        it's a pattern in production for millions of users. Gyre takes that pattern and tunes each rotor as its own product.</p></div>
+      <div class="panel"><h3>Why the rotors stay distinct</h3><p>The mechanisms that protect a server — move the target, price the flood —
+        would <em>hurt</em> a person, because address rotation links your sessions together. The mechanisms that hide a person — mix,
+        delay, split — add latency a public service can't wear. Same relays, deliberately different rules at each end.</p></div>
+    </div>
+    <div class="pager"><div class="btn" data-go="overview">← Overview</div><div class="btn pri" data-go="ceiling">Next → Physics Ceiling</div></div>
+  </section>
+
+  <!-- 02 CEILING -->
+  <section class="page" id="ceiling">
+    <div class="kicker">02 · Threat Model &amp; Scope</div>
+    <h2>The adversary we defend against — named up front</h2>
+    <p class="lede">Serious privacy engineering starts by naming its limits and its adversary — the discipline behind
+      Tor, Nym, and Signal alike. Gyre is explicit about three boundaries and the exact adversary it defends
+      against, so every capability that follows is a <strong>measurable</strong> claim, tested against a defined
+      threat — not a marketing one.</p>
+
+    <div class="grid g2" style="margin:22px 0; align-items:start">
+      <div class="stage" style="height:400px">
+        <div class="tag">interactive · the trilemma</div>
+        <canvas id="c-tri"></canvas>
+        <div class="cap">Drag the core. You can favour any corner — never all three at once.</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="panel"><h3>① The anonymity trilemma</h3><p><strong>Strong anonymity, low latency, low overhead — any system gets about two.</strong>
+          A proven result (2018), not a Gyre limitation: mixing that defeats correlation always costs latency or bandwidth. Our
+          answer is to make the trade-off a <strong>per-flow dial</strong> instead of one fixed setting. Drag the triangle to feel it.</p></div>
+        <div class="panel"><h3>② The all-seeing observer</h3><p>An adversary watching <em>both</em> ends at once correlates you by timing,
+          however many hops sit between — true for Tor, Nym, and every low-latency network. Gyre targets a realistic <strong>partial
+          observer</strong> (sees some links, not all), states it plainly, and measures exactly how it performs against that adversary.</p></div>
+        <div class="panel"><h3>③ The endpoint</h3><p>A login, a browser fingerprint, or what you access can identify you above the
+          network layer. No network fixes the endpoint — so Gyre ships <strong>endpoint hardening as part of the product</strong>
+          (Addition&nbsp;2), rather than pretending the network alone is enough.</p></div>
+      </div>
+    </div>
+    <div class="flag"><div class="k">Scope, stated up front</div><p style="margin:6px 0 0">Gyre does not claim to beat an all-seeing observer at low latency —
+      no low-latency system can. What it <em>does</em> claim, it measures. Everything past this page is a capability with a number attached and a
+      named adversary it was tested against. That honesty is the product's foundation, not a footnote.</p></div>
+    <div class="pager"><div class="btn" data-go="problem">← Architecture</div><div class="btn pri" data-go="myth">Next → Why Rotation Isn't Enough</div></div>
+  </section>
+
+  <!-- 03 MYTH -->
+  <section class="page" id="myth">
+    <div class="kicker">03 · Design Principle</div>
+    <h2>Why IP rotation <span class="grad">isn't</span> anonymity</h2>
+    <p class="lede">A common assumption is that cycling through thousands of IP addresses makes you untraceable. It
+      doesn't. Rotation defeats <strong>rate-limits and IP bans</strong> — genuinely useful — but it does nothing
+      against the attack that actually deanonymizes you: <strong>timing correlation</strong>. Gyre spends its
+      effort where it counts, and points rotation at the one place it truly helps: inbound defense (page 05).</p>
+
+    <div class="stage" style="margin:22px 0; height:400px">
+      <div class="tag">live · timing correlation</div>
+      <canvas id="c-myth"></canvas>
+      <div class="cap">The client's IP changes constantly (top). The adversary ignores it and matches the <em>rhythm</em> at entry and exit — correlation locks regardless.</div>
+    </div>
+    <div class="grid g3">
+      <div class="card"><div class="ic">🎯</div><h3>Correlation ignores IP</h3><p class="small">Timing and volume patterns match entry to exit. 10,000 IPs change none of it.</p></div>
+      <div class="card"><div class="ic">🔗</div><h3>Identity lives above IP</h3><p class="small">An account or cookie stitches all your rotating IPs into one profile — you've revealed more, not less.</p></div>
+      <div class="card"><div class="ic">🛡️</div><h3>Where rotation works</h3><p class="small">Pointed <em>inbound</em> as Moving Target Defense — legit clients follow a keyed hop, attackers can't. Page 05.</p></div>
+    </div>
+    <div class="pager"><div class="btn" data-go="ceiling">← Physics Ceiling</div><div class="btn pri" data-go="crowd">Next → The Crowd</div></div>
+  </section>
+
+  <!-- 04 CROWD -->
+  <section class="page" id="crowd">
+    <div class="kicker">04 · What Anonymity Requires</div>
+    <h2>Unlinkability + a <span class="grad">crowd</span></h2>
+    <p class="lede">Real anonymity has two ingredients, and neither is motion: <strong>no single party sees both ends</strong>,
+      and <strong>you blend into a large anonymity set</strong> of others doing the same thing. This is the number that
+      decides whether any anonymity network works — Gyre included — so we treat growing the crowd as a core part
+      of the product, not an afterthought.</p>
+
+    <div class="grid g2" style="margin:22px 0; align-items:start">
+      <div class="stage" style="height:400px">
+        <div class="tag">interactive · anonymity set</div>
+        <canvas id="c-crowd"></canvas>
+        <div class="cap" id="cap-crowd">Anonymity set k = 1</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="panel"><h3>Drag the crowd size</h3>
+          <input type="range" id="crowd-range" min="1" max="1200" value="1" style="width:100%"/>
+          <div class="readout" id="crowd-read" style="margin-top:8px">k = 1 &nbsp;·&nbsp; the reticle locks instantly</div>
+          <p class="small" style="margin-top:10px">At <strong>k=1</strong> you're the only mover — trivially tracked. As the crowd grows,
+            identical agents fill in and the tracker loses lock. Anonymity <em>is</em> the size of the crowd.</p></div>
+        <div class="panel glow"><h3>Why the crowd is the whole game</h3><p>A private network built for one person hides no one —
+          every packet it emits is "definitely that one user." <strong>An anonymity network of one is a contradiction.</strong>
+          So the hardest part isn't the code — it's the crowd. Gyre is engineered to borrow and grow one: uniform clients,
+          shared cover traffic, a k-anonymity admission governor, and an inbound product that seeds the same relays.</p></div>
+        <div class="panel"><h3>The industry proof point</h3><p>Tor deliberately <strong>pins</strong> your entry guard for months rather than
+          rotating it — because rotating the entrance raises your odds of eventually hitting a malicious one. The best engineering here
+          rotates <em>less</em>, not more. Gyre follows the same evidence.</p></div>
+      </div>
+    </div>
+
+    <h3 style="margin:12px 0 10px">Can't we just <em>fake</em> the crowd? — measured, in our own harness</h3>
+    <p class="small" style="margin-bottom:12px">The tempting shortcut is to inject synthetic traffic so a lone service <em>looks</em> busy. We tested it in <span class="mono">gyre-sim</span>. A crowd is <b>independent originators</b>, not traffic volume — and the two behave nothing alike:</p>
+    <div class="grid g2" style="align-items:start">
+      <div class="panel glow"><h3 style="color:var(--gr)">Real crowd → it works</h3>
+        <table class="mtx" style="font-size:12.5px"><thead><tr><th>real flows</th><th>deanon rate</th></tr></thead><tbody>
+          <tr><td class="th">150</td><td class="sub">0.027</td></tr>
+          <tr><td class="th">1,000</td><td class="sub">0.018</td></tr>
+          <tr><td class="th">3,000</td><td class="sub">0.011</td></tr>
+          <tr><td class="th">10,000</td><td class="sub" style="color:var(--gr)">0.006</td></tr>
+        </tbody></table>
+        <p class="small" style="margin-top:8px">Grow the independent population and the attacker's end-to-end success falls.</p></div>
+      <div class="panel"><h3 style="color:var(--rd)">Fake cover → it doesn't</h3>
+        <table class="mtx" style="font-size:12.5px"><thead><tr><th>cover / flow</th><th>accuracy</th><th>overhead</th></tr></thead><tbody>
+          <tr><td class="th">0</td><td class="sub">0.064</td><td class="sub">59.7×</td></tr>
+          <tr><td class="th">1</td><td class="sub">0.065</td><td class="sub">67.1×</td></tr>
+          <tr><td class="th">3</td><td class="sub" style="color:var(--rd)">0.064</td><td class="sub">82.0×</td></tr>
+        </tbody></table>
+        <p class="small" style="margin-top:8px">Self-generated cover moves the anonymity number by <b>nothing</b> — it just burns bandwidth. It loops back to you and an end-to-end observer excludes it.</p></div>
+    </div>
+    <div class="dec warn" style="margin-top:14px"><div class="k">!</div><div><b>You can fake volume; you cannot fake independence.</b> Fake "users" from one operator share an origin, an AS, correlated timing, one funder — an attributing adversary discounts them, and presenting them to real users as a crowd would be a <b>honeypot</b>. Cover traffic is still worth wiring for <em>unobservability</em> (hiding <em>when</em> you send), but that is a different property from the anonymity set. The crowd stays the one thing code can't manufacture.</div></div>
+    <div class="pager"><div class="btn" data-go="myth">← Rotation Myth</div><div class="btn pri" data-go="shield">Next → Inbound Shield</div></div>
+  </section>
+
+  <!-- 05 SHIELD -->
+  <section class="page" id="shield">
+    <div class="kicker">05 · Inbound Rotor</div>
+    <h2>The <span class="grad">Shield</span> — protect a system</h2>
+    <p class="lede">This is where rotation earns its keep. The origin is never exposed; the reachable surface keeps moving on a
+      keyed schedule that legitimate clients track and attackers can't; floods are priced out with proof-of-work. Where a CDN
+      defends a service by <em>fronting</em> it — terminating your traffic in its datacenters and seeing your plaintext — Gyre
+      defends by <strong>hiding</strong> it, so no intermediary ever holds your keys.</p>
+
+    <div class="stage" style="margin:22px 0; height:430px">
+      <div class="tag">live · moving target defense</div>
+      <canvas id="c-shield"></canvas>
+      <div class="cap" id="cap-shield">The real endpoint hops every tick. The keyed client always lands on it; the attacker sprays decoys and misses.</div>
+    </div>
+
+    <div class="grid g2">
+      <div class="two" style="display:grid; gap:14px">
+        <div class="card"><div class="ic">🫥</div><h3>Rendezvous <span class="st st-done">authenticated + pooled</span></h3><p class="small">Clients meet the service at a relay. The origin IP is never published — nothing to DDoS or target directly. Cookies are <b>authenticated</b> (mutual challenge–response, so a leaked bearer cookie can't hijack the session), and the origin can park across a <b>pool of k relays</b> so a relay-targeted flood dilutes instead of landing.</p></div>
+        <div class="card"><div class="ic">🔀</div><h3>Address hopping (MTD)</h3><p class="small">Entry addresses rotate via <span class="mono">HMAC(key, window)</span>. Legit clients derive the live one; scanners see a shifting field of decoys.</p></div>
+        <div class="card"><div class="ic">⛏️</div><h3>PoW admission <span class="st st-done">wired + live</span></h3><p class="small">A real <b>anti-replay gate</b> now fronts the rendezvous relay: the server issues a fresh, expiring, single-use challenge (stateless, so flooding the issuer costs nothing), and refuses anything unsolved before it can park or splice. Demonstrated live — <span class="mono">50/50</span> no-proof connections refused, legit client admitted, parking bound held.</p></div>
+        <div class="card"><div class="ic">🎟️</div><h3>Capability tokens</h3><p class="small">Blind-signed, unlinkable passes let pre-authorized clients skip the puzzle — revocable, without revealing who they are.</p></div>
+      </div>
+      <div class="panel glow">
+        <h3>Attacker cost under load</h3>
+        <p class="small">Watch the puzzle difficulty climb as attack volume rises — the legit user's cost stays flat.</p>
+        <canvas id="c-pow" style="width:100%; height:150px; display:block; margin-top:8px"></canvas>
+        <div class="ctrl"><button class="btn mini" id="pow-atk">▲ Raise attack volume</button><span class="readout" id="pow-read">load: low</span></div>
+      </div>
+    </div>
+    <div class="pager"><div class="btn" data-go="crowd">← The Crowd</div><div class="btn pri" data-go="mixer">Next → Outbound Mixer</div></div>
+  </section>
+
+  <!-- 06 MIXER -->
+  <section class="page" id="mixer">
+    <div class="kicker">06 · Outbound Rotor</div>
+    <h2>The <span class="grad">Mixer</span> — protect a person</h2>
+    <p class="lede">Four mechanisms, each covering a distinct threat. Switch between them — every tab is a live animation of that layer.
+      The onion core is the same idea Tor proved at scale; the mixing delay, shared cover traffic, and multipath split are precisely
+      what Tor's fixed low-latency design leaves on the table. Together they turn "you&nbsp;→&nbsp;destination" into something a partial
+      observer cannot reassemble.</p>
+
+    <div class="seg" id="seg-mixer" style="margin:20px 0 16px">
+      <button class="on" data-m="onion">Onion routing</button>
+      <button data-m="mix">Mixing delay</button>
+      <button data-m="cover">Cover traffic</button>
+      <button data-m="multi">Multipath split</button>
+    </div>
+    <div class="stage" style="height:420px">
+      <div class="tag" id="mixer-tag">live · onion routing</div>
+      <canvas id="c-mixer"></canvas>
+      <div class="cap" id="cap-mixer">Layered encryption — each relay peels exactly one layer and learns only its neighbours. No hop sees both ends.</div>
+    </div>
+
+    <div class="grid g2" style="margin-top:20px">
+      <div class="panel" id="mx-desc-onion"><h3>Separation of knowledge</h3><p>Three hops, three encryption layers. The guard knows you but not your
+        destination; the exit knows the destination but not you. We <strong>cap at 3</strong> on purpose — deeper adds latency and more chances to hit a bad relay, for near-zero gain.</p></div>
+      <div class="panel glow"><h3>The adaptive lever</h3><p>An interactive flow gets low delay + more paths; a messaging flow gets heavy mixing.
+        The client chooses, and the choice is sealed <em>inside</em> the onion so the network can't read the flow class. <strong>Spend the anonymity budget only where it's needed</strong> — this is where "better performance" actually comes from.</p></div>
+    </div>
+    <div class="pager"><div class="btn" data-go="shield">← Inbound Shield</div><div class="btn pri" data-go="layering">Next → Defense Matrix</div></div>
+  </section>
+
+  <!-- 07 LAYERING -->
+  <section class="page" id="layering">
+    <div class="kicker">07 · Combining Mechanisms</div>
+    <h2>A <span class="grad">matrix</span>, not a deep stack</h2>
+    <p class="lede">More layers is not more security. Layers only help when they're independent and cover <strong>different</strong>
+      threats; stacking same-threat mechanisms adds latency, bugs, and new leaks — not safety. Gyre is deliberately a
+      <strong>wide matrix</strong> of orthogonal defenses, each one the single best answer to a distinct threat, rather than a deep
+      stack of redundant ones.</p>
+
+    <div class="stage" style="margin:22px 0; height:360px">
+      <div class="tag">live · deep stack vs wide matrix</div>
+      <canvas id="c-layer"></canvas>
+      <div class="cap">Left: identical layers, one exploit drills straight through. Right: orthogonal defenses — the attack stalls, no single key opens them.</div>
+    </div>
+
+    <table class="mtx">
+      <thead><tr><th>Threat</th><th>The one mechanism that covers it</th><th>Rotor</th></tr></thead>
+      <tbody>
+        <tr><td class="th">A single relay sees both ends</td><td>Onion routing — separation of knowledge</td><td class="sub">outbound</td></tr>
+        <tr><td class="th">Timing correlation (partial observer)</td><td>Mixing delay + erasure-coded multipath</td><td class="sub">outbound</td></tr>
+        <tr><td class="th">Entry point compromised over time</td><td>Stable guard nodes — rotate <em>less</em></td><td class="sub">outbound</td></tr>
+        <tr><td class="th">Adversary runs many nodes (Sybil)</td><td>Staking / reputation / directory consensus</td><td class="sub">fabric</td></tr>
+        <tr><td class="th">Endpoint fingerprint / login</td><td>Hardened client — <em>outside</em> the network</td><td class="sub">endpoint</td></tr>
+        <tr><td class="th">Direct targeting of origin</td><td>Rendezvous — origin never exposed</td><td class="sub">inbound</td></tr>
+        <tr><td class="th">Flooding / DDoS</td><td>Proof-of-work admission, scales with load</td><td class="sub">inbound</td></tr>
+        <tr><td class="th">Recon / enumeration</td><td>MTD address-hopping + decoys</td><td class="sub">inbound</td></tr>
+      </tbody>
+    </table>
+    <div class="grid g2" style="margin-top:20px">
+      <div class="flag"><div class="k">Redundant ≠ layered</div><p style="margin:6px 0 0" class="small">Three mechanisms from the same class — say, three ways to obscure motion — are three locks that open with one key.
+        Gyre adds a layer only when it covers a threat nothing else does. The coverage map on the next page tracks exactly which dimensions are closed and which stay open.</p></div>
+      <div class="panel"><h3>The goal is cost, not "impossible"</h3><p class="small">Security is economics: raise the attacker's cost above the target's value, for a <em>defined</em> adversary.
+        Even Tor caps its onion at 3 hops for this reason. Fewer, orthogonal, auditable beats deep, redundant, slow — every time.</p></div>
+    </div>
+    <div class="pager"><div class="btn" data-go="mixer">← Outbound Mixer</div><div class="btn pri" data-go="classes">Next → Mechanism Classes</div></div>
+  </section>
+
+  <!-- 08 CLASSES -->
+  <section class="page" id="classes">
+    <div class="kicker">08 · Mechanism Classes</div>
+    <h2>Thirteen dimensions, <span class="grad">one class each</span></h2>
+    <p class="lede">Every privacy mechanism hides one dimension of the signal you emit — content, path, timing, appearance, and so on.
+      Two mechanisms are the same class when they hide the same thing. Gyre maps <strong>thirteen</strong> such dimensions and
+      covers them honestly. <b style="color:var(--gr)">Ten are covered</b> — built, tested, and wired into the running fabric (private PIR lookups; forward-secret,
+      per-context sessions). <b style="color:var(--cy)">One is partway</b>: steganography's transport is wired, but that is plumbing, not
+      deniability — real deniability needs a real cover the fabric can't supply. And <b>two, we will not pretend
+      to have closed</b>: the <b style="color:var(--am)">crowd</b> is a social/adoption constraint no code manufactures, and the
+      <b style="color:var(--rd)">endpoint</b> falls to a compromised device regardless of the network. Claiming those two would be the one
+      overclaim that discredits the honest twelve.</p>
+
+    <div class="grid g2" style="margin:22px 0; align-items:start">
+      <div class="stage" style="height:470px">
+        <div class="tag">live · coverage radar</div>
+        <canvas id="c-classes"></canvas>
+        <div class="cap">Green = covered · cyan = built library (not wired) · amber = the crowd · red = physics. Hover a row to locate its axis.</div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:7px">
+        <div class="crow" data-dim="0"><span class="cn">01 Content</span><span class="cm">Onion encryption</span><span class="cst" style="color:var(--gr)">covered</span></div>
+        <div class="crow" data-dim="1"><span class="cn">02 Path</span><span class="cm">Onion routing + rendezvous</span><span class="cst" style="color:var(--gr)">covered</span></div>
+        <div class="crow" data-dim="2"><span class="cn">03 Timing</span><span class="cm">Mixing (+ cover traffic)</span><span class="cst" style="color:var(--gr)">covered</span></div>
+        <div class="crow" data-dim="3"><span class="cn">04 Appearance</span><span class="cm">Obfuscation, wired to the wire</span><span class="cst" style="color:var(--gr)">covered</span></div>
+        <div class="crow" data-dim="4"><span class="cn">05 Existence</span><span class="cm">LSB stego, wired — but synthetic cover</span><span class="cst" style="color:var(--cy)">mechanism only</span></div>
+        <div class="crow" data-dim="5"><span class="cn">06 Wholeness</span><span class="cm">Erasure-coded multipath</span><span class="cst" style="color:var(--gr)">covered</span></div>
+        <div class="crow" data-dim="6"><span class="cn">07 Distinguishability</span><span class="cm">Anonymity-set / crowd</span><span class="cst" style="color:var(--am)">the crowd — can't code it</span></div>
+        <div class="crow" data-dim="7"><span class="cn">08 Access pattern</span><span class="cm">Private lookup, 2-server IT-PIR</span><span class="cst" style="color:var(--gr)">covered</span></div>
+        <div class="crow" data-dim="8"><span class="cn">09 Authorization</span><span class="cm">Capability token gates admission</span><span class="cst" style="color:var(--gr)">covered</span></div>
+        <div class="crow" data-dim="9"><span class="cn">10 Persistence</span><span class="cm">Forward-secret compartmentalized sessions</span><span class="cst" style="color:var(--gr)">covered</span></div>
+        <div class="crow" data-dim="10"><span class="cn">11 Trust locus</span><span class="cm">Threshold consensus + attestation</span><span class="cst" style="color:var(--gr)">covered</span></div>
+        <div class="crow" data-dim="11"><span class="cn">12 Endpoint</span><span class="cm">Hardware / execution isolation</span><span class="cst" style="color:var(--rd)">physics ceiling</span></div>
+        <div class="crow" data-dim="12"><span class="cn">13 Cost</span><span class="cm">Proof-of-work admission</span><span class="cst" style="color:var(--gr)">covered</span></div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:6px">The six additions, ranked by value-per-cost</h3>
+    <p class="small" style="margin:4px 0 10px">The remaining <b style="color:var(--cy)">library</b> dimensions above are these additions: built and unit-tested as crates, wired in per-adversary rather than by default (every addition costs latency and surface). "Library" is honest, not a euphemism — the code exists and passes tests; it just is not in the default data path yet. Obfuscation just graduated: it is now wired to the wire (<span class="mono">--obfs tls</span> on the client).</p>
+    <div class="stleg" style="margin-bottom:16px">
+      <span class="st st-done">Done</span><span class="st st-part">Partial / library</span><span class="st st-open">Open / design</span>
+      <span class="note" style="font-style:normal">Two dimensions are deliberately absent from the additions: the <b>crowd</b> (a social constraint, not a crate) and the <b>endpoint</b> (physics — a stolen device deanonymises regardless). No addition closes either, and the deck says so rather than coloring them green.</span>
+    </div>
+    <div class="grid g3">
+      <div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px"><div class="ic" style="margin:0">🕶️</div><span class="costpill" style="color:var(--gr)">cheap</span></div>
+        <h3>1 · Obfuscation / pluggable transport <span class="st st-done">wired</span></h3><p class="small">Make the fabric's traffic look like random noise or ordinary HTTPS, so an organization can't block or flag you just for <em>using</em> it. Fills <b>Appearance</b>.</p></div>
+      <div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px"><div class="ic" style="margin:0">🧩</div><span class="costpill" style="color:var(--gr)">cheap–moderate</span></div>
+        <h3>2 · Endpoint isolation + minimization <span class="st st-done">sessions wired</span></h3><p class="small">Forward-secret, per-context sessions now key real traffic (<span class="mono">--forward-secret --context</span>): a captured key reveals one message, and contexts are cryptographically unlinkable. That covers <b>Persistence</b>. It does <b>not</b> cover <b>Endpoint</b> — a compromised device reads plaintext regardless; isolation contains, it doesn't cure.</p></div>
+      <div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px"><div class="ic" style="margin:0">🎭</div><span class="costpill" style="color:var(--am)">moderate</span></div>
+        <h3>3 · Capability credentials <span class="st st-done">gates admission</span> <span class="st st-open">ZK upgrade open</span></h3><p class="small">The capability token now <b>gates real relay admission</b> — a pre-authorized client redeems one token to skip the PoW (issuance bound to work, F14 fixed). A zero-knowledge-credential upgrade would harden the Sybil story further. <b>Authorization: covered.</b></p></div>
+      <div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px"><div class="ic" style="margin:0">🌐</div><span class="costpill" style="color:var(--am)">moderate</span></div>
+        <h3>4 · Decentralization + attestation <span class="st st-done">done</span></h3><p class="small">No single coercible operator; verifiable proof relays run honest code. Answers "who runs the nodes?" Completes <b>Trust locus</b>.</p></div>
+      <div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px"><div class="ic" style="margin:0">🫥</div><span class="costpill" style="color:var(--vi)">situational</span></div>
+        <h3>5 · Deniability / steganography <span class="st st-part">mechanism wired</span></h3><p class="small">The LSB-stego transport now runs over a real socket (<span class="mono">--obfs stego</span>), but that is <b>plumbing, not deniability</b>: real deniability needs an innocuous <em>real</em> cover (a photo) the fabric does not carry, and LSB is detectable by steganalysis. So <b>Existence stays honestly uncovered</b> — the mechanism is wired, the goal is not met.</p></div>
+      <div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px"><div class="ic" style="margin:0">🔍</div><span class="costpill" style="color:var(--rd)">expensive</span></div>
+        <h3>6 · PIR <span class="st st-done">wired</span> · ORAM <span class="st st-open">open</span></h3><p class="small">Fetch a directory record without revealing <em>which</em> — now a real two-server IT-PIR lookup over sockets (<span class="mono">gyre-dir</span> + <span class="mono">gyre-lookup</span>). <b>Off by default</b>: a full signed-consensus download already leaks nothing and is cheaper, and privacy holds only if the two servers don't collude. <b>Access pattern: covered.</b></p></div>
+    </div>
+    <div class="pager"><div class="btn" data-go="layering">← Defense Matrix</div><div class="btn pri" data-go="priorart">Next → Prior Art</div></div>
+  </section>
+
+  <!-- 09 PRIOR ART -->
+  <section class="page" id="priorart">
+    <div class="kicker">09 · What We Build On</div>
+    <h2>Built on proven systems, <span class="grad">not from scratch</span></h2>
+    <p class="lede">Gyre doesn't invent new cryptography — it integrates the field's most studied systems and avoids their known
+      dead-ends. Each rotor reuses a battle-tested core; the value is in how they're combined. Here's the prior art we stand on.</p>
+    <div class="grid g3" style="margin-top:22px">
+      <div class="card"><div class="ic">🧅</div><h3>Tor — onion routing</h3><p class="small">3 fixed hops, layered encryption, volunteer relays across jurisdictions. Our separation-of-knowledge baseline.</p></div>
+      <div class="card"><div class="ic">🧄</div><h3>I2P — garlic routing</h3><p class="small">Separate inbound/outbound tunnels on different paths — closest to "branches that aren't connected."</p></div>
+      <div class="card"><div class="ic">🌀</div><h3>Mixnets — Chaum → Nym, Loopix</h3><p class="small">Batch, delay, reorder, cover traffic. <strong>The mixing strategy, done right</strong> — the honest price is latency. This is Gyre's outbound core.</p></div>
+      <div class="card"><div class="ic">💧</div><h3>CoinJoin — Samourai's "Whirlpool", Tornado</h3><p class="small">Pool many users, shuffle, break input→output linkage. These tools already took the "whirlpool" name in the privacy space — which is exactly why this project is <b>Gyre</b>.</p></div>
+      <div class="card"><div class="ic">🔁</div><h3>Rotating residential proxies</h3><p class="small">The "IP gyre" as it exists commercially — but sold for scraping, and the provider sees everything. Not anonymity.</p></div>
+      <div class="card"><div class="ic">🛰️</div><h3>Moving Target Defense / SDN</h3><p class="small">Address-shuffling to protect servers. The correct home for the rotation instinct — our inbound rotor.</p></div>
+    </div>
+    <div class="pager"><div class="btn" data-go="classes">← Mechanism Classes</div><div class="btn pri" data-go="build">Next → Build Plan</div></div>
+  </section>
+
+  <!-- 10 BUILD -->
+  <section class="page" id="build">
+    <div class="kicker">10 · Engineering Roadmap</div>
+    <h2>How it's built — <span class="grad">measured at every step</span></h2>
+    <p class="lede">Gyre rides proven transports, proves its <strong>one novel core</strong> against a baseline before trusting it,
+      ships the <strong>inbound rotor</strong> as a standalone product to seed the network, then layers the six additions by threat.
+      Every step ends with a number — if it doesn't beat baseline, we learned cheaply. The core data plane and both rotors are
+      <strong>already implemented and passing tests</strong>; what remains is scale, audit, and a crowd.</p>
+
+    <div class="grid g2" style="margin:22px 0; align-items:start">
+      <div class="timeline">
+        <div class="stleg">
+          <span class="st st-done">Done — built, tested, reachable</span>
+          <span class="st st-part">Partial — library only, or limited scale</span>
+          <span class="st st-open">Open — not built / design</span>
+          <span class="st st-cut">Cut — dropped, with reason</span>
+        </div>
+        <div class="tl"><div class="m">P0</div><div><h3>Core data plane <span class="st st-done">mostly done</span></h3><p class="small"><b>S0</b> Sphinx echo <span class="st st-done">done</span> · <b>S1</b> 3-hop onion → real dest <span class="st st-done">done</span> · <b>S2</b> Poisson mixing <span class="st st-done">done</span> + Loopix cover <span class="st st-part">unwired</span> · <b>S3</b> RS(m,k) multipath <span class="st st-done">done</span> · <b>S4</b> FAST/MIX lanes sealed in the onion <span class="st st-done">done</span>.</p></div></div>
+        <div class="tl"><div class="m" style="color:var(--am)">GATE</div><div><h3>Measure vs baseline <span class="st st-done">done</span></h3><p class="small">The adversary harness exists and runs — now the optimal-attacker <span class="mono">gyre-sim</span>, which superseded the original GATE and corrected its numbers by 4.5×. Partial-observer correlation vs latency/overhead, reproducible in one command.</p></div></div>
+        <div class="tl"><div class="m">P2</div><div><h3>Transport + inbound wedge <span class="st st-part">partial</span></h3><p class="small"><b>S5</b> QUIC <span class="st st-part">library only — not wired to a binary</span>, MASQUE <span class="st st-cut">cut</span> · <b>S6</b> inbound rotor: rendezvous <span class="st st-done">real</span>, MTD <span class="st st-part">not dialed</span>, PoW admission gate <span class="st st-done">wired &amp; refusing floods live</span>, deployable daemon + full DoS hardening — auth cookies, multi-relay pool, AIMD pricing, splice/parked timeouts <span class="st st-done">done</span>.</p></div></div>
+        <div class="tl"><div class="m">P3</div><div><h3>Orthogonal hardening <span class="st st-part">partial</span></h3><p class="small"><b>S7</b> obfuscation + endpoint <span class="st st-part">libraries</span> · <b>S8</b> capability credentials <span class="st st-done">done</span>, RLN nullifier <span class="st st-open">open</span> · <b>S9</b> threshold consensus + build attestation <span class="st st-done">done</span> · <b>S10</b> deniability + PIR <span class="st st-part">libraries, off by default</span>.</p></div></div>
+        <div class="tl"><div class="m">P4</div><div><h3>Scale + crowd <span class="st st-open">the binding constraint</span></h3><p class="small"><b>S11</b> container testnet <span class="st st-done">done</span> → Shadow sim <span class="st st-part">green at 8 hosts, not thousands</span> · <b>S12</b> incentive / staking / reputation <span class="st st-open">arithmetic only, not a real system</span> — the demand-side crowd problem is social, not code.</p></div></div>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="panel glow"><h3>Why this order</h3>
+          <ul class="clean">
+            <li><strong>Prove the novel core (S3) first</strong> — if multipath doesn't measurably help vs a partial observer, rework cheaply.</li>
+            <li><strong>Inbound wedge (S6) early</strong> — it protects one server with zero crowd, so it ships commercially and funds + seeds the network.</li>
+            <li><strong>Additions after the core is measured</strong>, each only when its threat is in scope — a matrix, not a deep stack.</li>
+            <li><strong>Crowd (S12) last to build, first in importance</strong> — a fast, clever network with 50 users protects no one.</li>
+          </ul></div>
+        <div class="panel"><h3>Stack</h3><p class="small mono" style="color:var(--mut)">Rust · Sphinx packet format · Noise / WireGuard + QUIC/MASQUE · reed-solomon-erasure · dalek / libsodium · Privacy-Pass / zkgroup · reproducible builds (Nix) · never roll your own crypto.</p></div>
+        <div class="panel"><h3>Ship gate</h3><p class="small">Nothing to real users until <b>S0–S6 measured</b>, the crypto <b>externally reviewed</b> (a copy-pasteable ask for the free venues now lives in <span class="mono">docs/REVIEW-ASK.md</span>), and the <b>crowd-bootstrap plan is real</b>.</p></div>
+      </div>
+    </div>
+    <div class="pager"><div class="btn" data-go="priorart">← Prior Art</div><div class="btn pri" data-go="capstone">Next → Full Working</div></div>
+  </section>
+
+  <!-- 11 CAPSTONE -->
+  <section class="page" id="capstone">
+    <div class="kicker">11 · The Complete Fabric</div>
+    <h2>The <span class="grad">final working</span> — all layers integrated</h2>
+    <p class="lede">Every mechanism and all six additions, composed. First the full stack a packet descends; then the whole thing
+      running end to end across both rotors, with the honest ceilings shown where they bite. Play it, or step stage by stage.</p>
+
+    <div class="panel glow" style="padding:24px 26px; margin:22px 0">
+      <div class="kicker" style="margin-bottom:20px">The complete mechanism · every layer + all six additions, in one pipeline</div>
+      <div class="pipe">
+        <div>
+          <div class="flow">
+            <div class="spark"></div>
+            <div class="layer"><span class="lname">App → local SOCKS5 / TUN</span><span class="ltag" style="color:var(--dim)">entry</span></div>
+            <div class="layer add"><span class="lname">Endpoint hardening · uniform fingerprint</span><span class="ltag" style="color:var(--gr)">Add 2</span></div>
+            <div class="layer"><span class="lname">FAST / MIX lane — sealed in the onion</span><span class="ltag" style="color:var(--cy)">D21</span></div>
+            <div class="layer add"><span class="lname">Anonymous-credential admission</span><span class="ltag" style="color:var(--vi)">Add 3</span></div>
+            <div class="layer"><span class="lname">Sphinx onion × 3 hops</span><span class="ltag" style="color:var(--cy)">class 1+2</span></div>
+            <div class="layer"><span class="lname">Erasure-coded multipath — middle-path</span><span class="ltag" style="color:var(--mg)">class 6</span></div>
+            <div class="layer"><span class="lname">Poisson mixing + Loopix cover</span><span class="ltag" style="color:var(--cy)">class 3</span></div>
+            <div class="layer add"><span class="lname">Pluggable-transport wrap · first hop</span><span class="ltag" style="color:var(--gr)">Add 1</span></div>
+            <div class="layer add opt"><span class="lname">Deniability carrier · optional</span><span class="ltag" style="color:var(--vi)">Add 5</span></div>
+          </div>
+          <div class="wirebar">▼ on the wire — indistinguishable from ordinary encrypted web traffic</div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:16px">
+          <div class="cplane">
+            <div class="h">CONTROL PLANE</div>
+            <div class="citem"><b>Decentralized directory</b><span class="ct">Add 4</span><br/><span class="small">Threshold-signed consensus + reproducible-build attestation — no single operator to trust or compel.</span></div>
+            <div class="citem"><b>PIR rendezvous lookup</b><span class="ct">Add 6</span><br/><span class="small">Fetch a protected service's descriptor without revealing which one.</span></div>
+            <div class="citem"><b>Publishes →</b><br/><span class="small mono" style="color:var(--mut)">relay set · keys · MTD params · PoW difficulty</span></div>
+          </div>
+          <div class="panel" style="padding:15px 17px"><p class="small" style="margin:0">The <b>inbound rotor</b> reuses these — rendezvous + MTD + PoW admission, with <b style="color:var(--vi)">Add&nbsp;3</b> tokens and <b style="color:var(--vi)">Add&nbsp;6</b> PIR. <b>All six additions are part of the one pipeline — not bolt-ons.</b></p></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage" style="margin:22px 0; height:440px">
+      <div class="tag" id="cap-stage-tag">stage 1 / 12</div>
+      <canvas id="c-cap"></canvas>
+      <div class="cap" id="cap-cap">Press play to run the full fabric, end to end.</div>
+    </div>
+    <div class="ctrl">
+      <button class="btn pri" id="cap-play">▶ Play</button>
+      <button class="btn mini" id="cap-prev">◀ Prev</button>
+      <button class="btn mini" id="cap-next">Next ▶</button>
+      <span style="flex:1"></span>
+      <span class="readout" id="cap-dots"></span>
+    </div>
+    <div class="pager"><div class="btn" data-go="build">← Build Plan</div><div class="btn pri" data-go="decisions">Next → Decisions Log</div></div>
+  </section>
+
+  <!-- 12 DECISIONS -->
+  <section class="page" id="decisions">
+    <div class="kicker">12 · Engineering Decisions</div>
+    <h2>Decisions <span class="grad">log</span></h2>
+    <p class="lede">Every significant call in the design and the reasoning behind it — including the places where adversarial review forced
+      us to <em>downgrade</em> a claim. This is the honest record. A credible security product shows its work, mistakes included.</p>
+    <div class="decis" style="margin-top:22px">
+      <div class="dec good"><div class="k">D1</div><div><b>Two rotors, not one box.</b> Inbound "protect a system" and outbound "protect a person" flow opposite ways and need different entry/exit rules. <span class="note">They share one fabric, proven possible by Tor onion services.</span></div></div>
+      <div class="dec warn"><div class="k">D2</div><div><b>Rotation is for defense, never anonymity.</b> IP rotation defeats bans and rate-limits, and powers inbound MTD. It does nothing against correlation and links your sessions — banned from the outbound rotor.</div></div>
+      <div class="dec"><div class="k">D3</div><div><b>Anonymity = unlinkability + crowd.</b> No hop sees both ends, and you hide in a large anonymity set. Motion is not an ingredient. A private network of one is a contradiction.</div></div>
+      <div class="dec warn"><div class="k">D4</div><div><b>Respect the trilemma; target a partial observer.</b> We can't beat a global observer at low latency, so we don't pretend to. Adversary named up front; every metric measured against it.</div></div>
+      <div class="dec"><div class="k">D5</div><div><b>Onion for separation of knowledge — capped at 3 hops.</b> Depth has diminishing returns and rising risk. The famous onion caps itself; so do we.</div></div>
+      <div class="dec"><div class="k">D6</div><div><b>Mixing + shared cover traffic fight correlation.</b> Poisson delays and dummy loops (users as each other's noise) break timing linkage — the honest latency cost we accept.</div></div>
+      <div class="dec warn"><div class="k">D7</div><div><b>Erasure-coded multipath = the "branches" — corrected.</b> Split each flow m-of-k across disjoint paths. <span class="note">Adversarial review downgraded this: it is <em>probabilistic middle-path hardening</em> vs a partial observer, NOT a reconstruction-threshold guarantee. An observer seeing 1..m−1 fragments still correlates by timing/volume/count without reconstructing, and disjoint paths widen endpoint exposure.</span></div></div>
+      <div class="dec good"><div class="k">D8</div><div><b>Adaptive per-flow mixing = the performance lever.</b> Latency-sensitive flows spend less budget; the choice is sealed inside the onion. Where "better performance" actually comes from.</div></div>
+      <div class="dec"><div class="k">D9</div><div><b>Inbound = rendezvous + MTD hopping + PoW + capability tokens.</b> Hide the origin, keep the surface moving, price the flood, admit the trusted unlinkably.</div></div>
+      <div class="dec warn"><div class="k">D10</div><div><b>Combine orthogonally — a matrix, not a deep stack.</b> One independent mechanism per distinct threat. "Impossible" is the wrong goal; raise attacker cost above target value for a defined adversary.</div></div>
+      <div class="dec good"><div class="k">D11</div><div><b>Don't build crypto/transport from scratch.</b> Ride WireGuard / Nym / Tor. Prototype one novel core, measure vs baseline, then expand.</div></div>
+      <div class="dec warn"><div class="k">D12</div><div><b>The crowd is the hardest problem.</b> Incentives + Sybil resistance decide whether it works at all. Treated as first-class, not an afterthought.</div></div>
+      <div class="dec good"><div class="k">D13</div><div><b>Add obfuscation / pluggable transport.</b> Covers the "appearance" dimension so the fabric's traffic looks like random or ordinary HTTPS — an org can't block or flag you for using it. Cheap, high value.</div></div>
+      <div class="dec good"><div class="k">D14</div><div><b>Endpoint isolation + data minimization.</b> Closes the Achilles' heel that defeats every network layer: compartmentalized per-context identities, ephemeral keys, a hardened client, optional TEE for key ops. Nearly free, and it improves efficiency.</div></div>
+      <div class="dec"><div class="k">D15</div><div><b>Zero-knowledge / anonymous credentials.</b> Upgrade capability tokens so clients prove authorization while revealing zero identity — unlinkable auth and a stronger Sybil story.</div></div>
+      <div class="dec"><div class="k">D16</div><div><b>Decentralization + attestation.</b> No single coercible operator, and verifiable proof relays run honest code — the trust-locus dimension.</div></div>
+      <div class="dec warn"><div class="k">D17</div><div><b>Deniability / steganography — situational.</b> Hides that you're using the fabric at all. Add only if the adversary punishes use itself; otherwise it's cost without benefit.</div></div>
+      <div class="dec warn"><div class="k">D18</div><div><b>PIR / ORAM for directory lookups — surgical.</b> Hides what you look up. <b>Default PIR OFF</b> — full signed-consensus download beats PIR at Tor scale; reserve PIR for the inbound rendezvous-descriptor lookup, whose target genuinely leaks.</div></div>
+      <div class="dec good"><div class="k">D19</div><div><b>Position as integration, not a record-holder.</b> Verified: we can't beat VPN on speed, Tor/Nym on crowd, or Cloudflare on capacity. The defensible niche is the <em>combination</em> — a Tor-competitive outbound rotor with an honest mixing dial + an inbound rotor none of them integrate.</div></div>
+      <div class="dec warn"><div class="k">D20</div><div><b>Crowd bootstrap is the critical path — not crypto.</b> Every competitor verdict is gated on concurrent set size. Levers: Loopix cover (effective set, mix-latency only), uniform client, k-anon governor, bridge-to-Tor to borrow a crowd, inbound-shield seeding. Cleverness never manufactures a crowd.</div></div>
+      <div class="dec good"><div class="k">D21</div><div><b>Speed = FAST/MIX lanes + QUIC/MASQUE + AS-aware paths.</b> An honest trilemma menu plus a near-Pareto transport win (kills cross-circuit head-of-line blocking). Honest verdict vs <em>modern</em> Tor (Conflux + congestion control already merged) is match / modest win, never "beat."</div></div>
+      <div class="dec good"><div class="k">D22</div><div><b>Cloudflare compete = trust topology, for closed/enterprise tunnels.</b> Win: no plaintext-terminating intermediary to compel. NOT open-web scrubbing — MTD ingress needs client-held keys so it only serves an authorized set, and we have zero L3/L4 volumetric defense.</div></div>
+    </div>
+    <p class="note" style="margin-top:24px">The full rationale, real-world citations, and honest ceilings behind every decision live in the project's research record.</p>
+    <div class="pager"><div class="btn" data-go="capstone">← Full Working</div><div class="btn pri" data-go="edge">Next → Positioning</div></div>
+  </section>
+
+  <!-- 13 EDGE -->
+  <section class="page" id="edge">
+    <div class="kicker">13 · Positioning</div>
+    <h2>Where Gyre <span class="grad">fits</span> — honestly</h2>
+    <p class="lede">Gyre is an integration play, not a record-holder. Against each category leader it competes on a
+      specific, defensible axis — and we're precise about where that advantage ends. Each verdict below survived an
+      adversarial review whose job was to strip overclaims, so "compete" means compete and "beat" means beat.</p>
+
+    <div class="flag" style="margin:20px 0"><div class="k">Positioning in one line</div><p style="margin:6px 0 0">
+      Gyre's edge is <b>integration</b>: a Tor-competitive outbound mixer with an <em>honest latency dial</em>, plus an
+      inbound server-protection rotor none of the anonymity networks offer — unified on one fabric. It competes on <b>trust and
+      completeness</b>, not raw speed or datacenter scale, and its real-world strength grows with the size of its crowd. That's a
+      focused, defensible place to stand — and the rest of this page maps it competitor by competitor.</p></div>
+
+    <div class="grid g2">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px"><h3 style="margin:0">vs VPN</h3><span class="costpill" style="color:var(--am)">beat-partially · 84%</span></div>
+        <div style="height:5px; border-radius:4px; background:var(--line2); margin-bottom:12px"><div style="height:100%; width:84%; border-radius:4px; background:linear-gradient(90deg,var(--cy),var(--vi))"></div></div>
+        <p class="small"><b style="color:var(--gr)">Edge:</b> distributed trust — 3-hop Sphinx, no single operator sees both ends or can be compelled; plus mixing + cover a VPN has zero of; plus an inbound rotor and a censorship-resistant transport.</p>
+        <p class="small"><b style="color:var(--rd)">Boundary:</b> a VPN still wins on latency, throughput, battery, and setup — that's the cost of three hops. Gyre competes on trust and correlation-resistance, not raw speed.</p>
+      </div>
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px"><h3 style="margin:0">vs Tor</h3><span class="costpill" style="color:var(--cy)">compete · 78%</span></div>
+        <div style="height:5px; border-radius:4px; background:var(--line2); margin-bottom:12px"><div style="height:100%; width:78%; border-radius:4px; background:linear-gradient(90deg,var(--cy),var(--vi))"></div></div>
+        <p class="small"><b style="color:var(--gr)">Edge:</b> an optional per-flow Poisson mixing dial (stronger vs the timing observer, at honest latency cost); QUIC/MASQUE transport + latency/AS-aware path selection close default-Tor's gap.</p>
+        <p class="small"><b style="color:var(--rd)">Boundary:</b> on speed we match or modestly edge <em>modern</em> Tor (which already merged Conflux + congestion control) — not "beat." Tor's crowd is its decisive advantage; we compete, we don't surpass it.</p>
+      </div>
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px"><h3 style="margin:0">vs Nym</h3><span class="costpill" style="color:var(--am)">beat-partially · 60%</span></div>
+        <div style="height:5px; border-radius:4px; background:var(--line2); margin-bottom:12px"><div style="height:100%; width:60%; border-radius:4px; background:linear-gradient(90deg,var(--cy),var(--vi))"></div></div>
+        <p class="small"><b style="color:var(--gr)">Edge:</b> the inbound server-protection rotor — Nym is outbound-only, so on inbound we win by default (rendezvous + MTD + PoW admission + tokens).</p>
+        <p class="small"><b style="color:var(--rd)">Boundary:</b> on pure outbound mixnet anonymity Nym leads today — live crowd, token incentives, mainnet, audits. Our win is the inbound rotor it lacks; on outbound we compete, and we corrected two claims (multipath, the sealed knob) early review overstated.</p>
+      </div>
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px"><h3 style="margin:0">vs Cloudflare</h3><span class="costpill" style="color:var(--am)">beat-partially · 74%</span></div>
+        <div style="height:5px; border-radius:4px; background:var(--line2); margin-bottom:12px"><div style="height:100%; width:74%; border-radius:4px; background:linear-gradient(90deg,var(--cy),var(--vi))"></div></div>
+        <p class="small"><b style="color:var(--gr)">Edge:</b> trust topology — TLS/Noise terminates only at the origin, so no intermediary sees plaintext or can be compelled; a reverse-proxy CDN structurally can't offer this. Plus origin-hiding + load-scaled PoW admission + Privacy-Pass tokens (SHA-256 default puzzle, with a memory-hard Equi-X option behind an opt-in feature).</p>
+        <p class="small"><b style="color:var(--rd)">Boundary:</b> Cloudflare's anycast scrubbing capacity is out of reach — Gyre offers no L3/L4 volumetric defense. Because MTD ingress needs client-held keys, it fits authenticated and enterprise tunnels, not open-web shielding.</p>
+      </div>
+    </div>
+
+    <h3 style="margin-top:26px">How we keep our claims honest <span class="note">— the discipline every statement in this deck is held to</span></h3>
+    <ul class="clean">
+      <li>Never say "beat Tor on speed" unqualified — say "match / modest win vs modern Tor."</li>
+      <li>Never sum inbound-protected clients into the outbound anonymity-set number.</li>
+      <li>Never quote a cover-inflated "effective set" as if it were concurrent real senders.</li>
+      <li>Loopix global-observer resistance holds <b>only at mix latency</b>, never low latency.</li>
+      <li>Multipath = probabilistic middle-path hardening, <b>not</b> a reconstruction threshold.</li>
+      <li>"Unblockable" is banned — obfuscation buys "costlier to block than the censor will pay today"; obfs4's random bytes are now a <em>positive</em> entropy-DPI fingerprint.</li>
+      <li>Anonymous credentials / staking add <b>zero</b> intrinsic Sybil resistance — the scarce resource (PoW / stake) does; staking = wealth concentration, not user-decentralization.</li>
+      <li>Reproducible builds prove binary = source, <b>not</b> that a relay actually runs that binary.</li>
+    </ul>
+    <p class="note" style="margin-top:16px">Full designs, real-world citations, and the honest boundary for every comparison live in the project's research record.</p>
+    <div class="pager"><div class="btn" data-go="decisions">← Decisions Log</div><div class="btn pri" data-go="compare">Next → Head-to-Head</div></div>
+  </section>
+
+  <!-- 14 HEAD-TO-HEAD -->
+  <section class="page" id="compare">
+    <div class="kicker">14 · Head-to-Head</div>
+    <h2>Tor does this. <span class="grad">Gyre</span> does this instead.</h2>
+    <p class="lede">The clearest way to understand Gyre is next to the system most people already know — Tor, the onion
+      network behind Tor Browser. They share the same DNA: three hops, layered encryption, distributed trust, no single relay
+      that sees both ends. Here's exactly where the two diverge — hop by hop, then mechanism by mechanism — and the measured
+      result of each change.</p>
+
+    <h3 style="margin-top:26px">What each hop sees — Tor vs Gyre</h3>
+    <p class="small" style="margin:4px 0 14px">A packet crosses three relays, and what each one learns is the whole game. The
+      knowledge boundary is identical in both systems; what changes is the <em>timing</em> a watcher can exploit.</p>
+    <table class="mtx">
+      <thead><tr><th>The hop</th><th>In Tor (onion routing)</th><th>In Gyre</th><th>What it buys</th></tr></thead>
+      <tbody>
+        <tr><td class="th">R1 · Guard / entry</td><td>Sees your real IP. Forwards fixed-size cells the instant they arrive — your entry rhythm is preserved intact.</td><td>Also sees your IP — but holds each packet a randomized Poisson delay and emits cover traffic identical on the wire. On the MIX lane the entry rhythm is erased.</td><td class="sub">An entry watcher can't line your timing up with the exit.</td></tr>
+        <tr><td class="th">R2 · Middle</td><td>Relays one cell per circuit along a single, fixed path.</td><td>The flow is optionally Reed–Solomon split m-of-k across <em>disjoint</em> middles, and every packet is re-delayed. A partial observer here sees fragments, not the flow.</td><td class="sub">Middle-path hardening + availability — any m fragments rebuild it.</td></tr>
+        <tr><td class="th">R3 · Exit</td><td>Sees the destination (and plaintext, if the site isn't HTTPS). Timing is untouched from entry.</td><td>Same knowledge boundary — the exit sees the destination, never you — but arrival timing is decorrelated, and your FAST/MIX choice was sealed inside the onion, so the network never learned your latency preference.</td><td class="sub">The exit can't profile you by timing or flow class.</td></tr>
+        <tr><td class="th">The observer</td><td>Tap entry + exit and correlate by timing — high accuracy, because low latency is the whole design.</td><td>The MIX lane collapses that correlation toward chance. Measured (<span class="mono">gyre-sim</span>, optimal attacker): <b style="color:var(--cy)">1.00 → 0.06</b> at 150&nbsp;ms/hop with a 150-flow crowd — the FAST lane stays 1.00.</td><td class="sub">The attack that actually deanonymizes real users is what the mixer targets.</td></tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin-top:28px">Mechanism by mechanism</h3>
+    <table class="mtx" style="margin-top:10px">
+      <thead><tr><th>Capability</th><th>Tor today</th><th>Gyre</th><th>The difference</th></tr></thead>
+      <tbody>
+        <tr><td class="th">Timing correlation</td><td>None by design — low-latency, constant-rate cells.</td><td>Optional per-hop Poisson mixing + Loopix cover traffic.</td><td class="sub">Measured 1.00 → 0.06 vs a partial observer at 150&nbsp;ms/hop (with a crowd), at an honest latency cost you opt into.</td></tr>
+        <tr><td class="th">Latency &amp; performance</td><td>Conflux multipath + congestion control (modern Tor).</td><td>QUIC/MASQUE transport, a per-flow FAST lane, AS-aware path selection.</td><td class="sub">Match or modest win on FAST; MIX spends latency for anonymity — your call, per flow.</td></tr>
+        <tr><td class="th">Path strategy</td><td>One fixed 3-hop circuit per stream.</td><td>3-hop onion, optionally split m-of-k across disjoint paths.</td><td class="sub">Availability + middle-path hardening. Honest: multipath widens endpoint exposure, so it's opt-in.</td></tr>
+        <tr><td class="th">Censorship resistance</td><td>Pluggable transports (obfs4, Snowflake) added around the core.</td><td>A pluggable-transport framework native to the fabric; the first hop can look like ordinary HTTPS / HTTP-3.</td><td class="sub">Agility is designed in, not retrofitted — swap the disguise without touching the core.</td></tr>
+        <tr><td class="th">Protecting a server (inbound)</td><td>Onion services — rendezvous origin-hiding.</td><td>Rendezvous + MTD address-hopping + PoW admission + unlinkable capability tokens.</td><td class="sub">A complete inbound product, not just origin-hiding — the piece no anonymity network ships.</td></tr>
+        <tr><td class="th">Admission &amp; Sybil cost</td><td>No client-side admission; relay trust via bandwidth measurement.</td><td>Proof-of-work admission that scales with load, plus a staking Sybil-pricing model.</td><td class="sub">Floods and fake identities are priced explicitly, not left to goodwill.</td></tr>
+        <tr><td class="th">Directory trust</td><td>Nine hard-coded directory authorities.</td><td>t-of-n threshold-signed consensus + reproducible-build attestation.</td><td class="sub">No single coercible authority; a lying directory leaves public cryptographic evidence.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="grid g2" style="margin-top:24px; align-items:start">
+      <div class="panel glow">
+        <div class="kicker" style="margin-bottom:12px">The measured result</div>
+        <p class="small" style="margin:0 0 12px"><span class="mono">gyre-sim</span> runs a partial-observer timing-correlation attack solved <em>optimally</em> (Hungarian assignment) over many concurrent flows and reports accuracy against chance. This is the go/no-go number the whole project is gated on — not a marketing figure, and deliberately the pessimistic strong-attacker version.</p>
+        <table class="mtx" style="font-size:12.5px">
+          <thead><tr><th>flows</th><th>mix / hop</th><th>optimal accuracy</th><th>chance</th></tr></thead>
+          <tbody>
+            <tr><td class="th">150</td><td>0 ms · FAST</td><td><b style="color:var(--rd)">1.000</b></td><td>0.0067</td></tr>
+            <tr><td class="th">150</td><td>50 ms · MIX</td><td><b style="color:var(--am)">0.497</b></td><td>0.0067</td></tr>
+            <tr><td class="th">150</td><td>150 ms · MIX</td><td><b style="color:var(--gr)">0.057</b></td><td>0.0067</td></tr>
+            <tr><td class="th">150</td><td>500 ms · MIX</td><td><b style="color:var(--gr)">0.021</b></td><td>0.0067</td></tr>
+            <tr><td class="th">4</td><td>150 ms · MIX</td><td><b style="color:var(--rd)">0.719</b></td><td>0.25</td></tr>
+          </tbody>
+        </table>
+        <p class="small" style="margin:12px 0 0">Read the last two rows together: at 150&nbsp;ms/hop a 150-flow crowd gives an attacker <span class="mono">0.057</span> — but just <b>4</b> flows at the identical mixing give <span class="mono">0.719</span>. Mixing is powerful only with a crowd; that is why the crowd, not the code, is the binding constraint. <span class="note" style="font-style:normal">These superseded an earlier harness that ran ~4.5× too optimistic; the honest end-to-end figure is the deanonymisation rate = coverage × accuracy.</span></p>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:14px">
+        <div class="panel"><h3>Where Tor still wins — and we say so</h3><p class="small">Tor's decisive advantage is its <strong>crowd</strong>: millions of daily users to blend into, years of audits, and a hardened browser. On real-world anonymity <em>today</em>, that crowd beats any clever mechanism — Gyre included — until Gyre has one of its own. We compete on the mixing dial and the inbound rotor; we don't pretend to have Tor's anonymity set yet.</p></div>
+        <div class="panel"><h3>The one-sentence summary</h3><p class="small">Same onion core as Tor, plus a timing-correlation defense Tor deliberately omits for speed, plus a server-protection rotor Tor only half-offers — combined on one fabric, with every claim measured. That combination <em>is</em> the product.</p></div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:28px">And beyond Tor</h3>
+    <p class="small" style="margin:4px 0 14px">The same honest, mechanism-first comparison against the other systems people reach for. Full detail lives on the <span class="mono">Positioning</span> page.</p>
+    <div class="grid g3">
+      <div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px"><h3 style="margin:0">vs a VPN</h3><span class="costpill" style="color:var(--cy)">trust</span></div>
+        <p class="small"><b style="color:var(--gr)">They:</b> one company you fully trust routes all your traffic — fast and simple, but it sees both ends.</p>
+        <p class="small"><b style="color:var(--cy)">Us:</b> three hops, no single operator sees both ends, plus mixing a VPN has none of. Slower; far harder to compel or correlate.</p></div>
+      <div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px"><h3 style="margin:0">vs Nym</h3><span class="costpill" style="color:var(--vi)">inbound</span></div>
+        <p class="small"><b style="color:var(--gr)">They:</b> a live, incentivized outbound mixnet with a real crowd and audits — strong where it overlaps us.</p>
+        <p class="small"><b style="color:var(--cy)">Us:</b> the same mix strategy outbound, plus an inbound server-protection rotor Nym doesn't offer at all.</p></div>
+      <div class="card"><div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px"><h3 style="margin:0">vs Cloudflare</h3><span class="costpill" style="color:var(--gr)">topology</span></div>
+        <p class="small"><b style="color:var(--gr)">They:</b> massive anycast capacity absorbs floods — but terminates your TLS and sees your plaintext.</p>
+        <p class="small"><b style="color:var(--cy)">Us:</b> hide the origin instead of fronting it; no intermediary holds your keys. No volumetric scrubbing, by design.</p></div>
+    </div>
+
+    <div class="pager"><div class="btn" data-go="edge">← Positioning</div><div class="btn pri" data-go="techstack">Next → Tech Stack</div></div>
+  </section>
+
+  <!-- 15 TECH STACK -->
+  <section class="page" id="techstack">
+    <div class="kicker">15 · Tech Stack</div>
+    <h2>Exact tools — and <span class="grad">what each is for</span></h2>
+    <p class="lede">Every risky part is established code we integrate, not invent (D11: never roll your own crypto or transport). <b style="color:var(--am)">"Established" is not "audited"</b> — see the provenance note below.
+      Each row names the real tool/crate, its purpose, and which rotor, layer, or addition uses it.</p>
+
+    <div class="grid g2" style="margin-top:22px">
+      <div class="panel tspanel"><h3>Core &amp; runtime <span class="badge">foundation</span></h3>
+        <div class="tsrow"><span class="tn">Rust</span><span class="tp">Memory-safe systems language — the whole node + client.</span></div>
+        <div class="tsrow"><span class="tn">tokio</span><span class="tp">Async runtime — concurrent connections, relaying, per-node queues.</span></div>
+        <div class="tsrow"><span class="tn">Nix / pinned Docker</span><span class="tp">Deterministic reproducible builds — prerequisite for Add 4 attestation.</span></div>
+      </div>
+      <div class="panel tspanel"><h3>Cryptography primitives <span class="badge">never hand-rolled</span></h3>
+        <div class="tsrow"><span class="tn">curve25519-dalek</span><span class="tp">X25519 DH, Ed25519 signatures, ristretto255 group for credentials.</span></div>
+        <div class="tsrow"><span class="tn">libsodium</span><span class="tp">Vetted AEAD / symmetric crypto for payload + link encryption.</span></div>
+        <div class="tsrow"><span class="tn" style="color:var(--dim)">— never hand-rolled —</span><span class="tp">All primitives come from established libraries. This is D11.</span></div>
+      </div>
+      <div class="panel tspanel"><h3>Packet format &amp; transport <span class="badge">data plane</span></h3>
+        <div class="tsrow"><span class="tn">Sphinx (sphinx-packet)</span><span class="tp">Compact, provably-secure onion mix packet; fixed cells + SURBs. Both rotors.</span></div>
+        <div class="tsrow"><span class="tn">Noise (snow)</span><span class="tp">Forward-secret link handshakes — relay↔relay, client↔guard.</span></div>
+        <div class="tsrow"><span class="tn">WireGuard</span><span class="tp">Kernel-fast encrypted tunnels between nodes.</span></div>
+        <div class="tsrow"><span class="tn">QUIC (quinn)</span><span class="tp">Cert-pinned transport. <b style="color:var(--am)">Library only — not yet reachable from any binary;</b> the head-of-line claim is withdrawn until wired in and measured.</span></div>
+        <div class="tsrow"><span class="tn">MASQUE (RFC 9298)</span><span class="tp"><b style="color:var(--rd)">Dropped.</b> Its only unique benefit is co-tenancy, which needs paid hosting — so the benefit is unreachable here. Framing alone is not censorship resistance.</span></div>
+      </div>
+      <div class="panel tspanel"><h3>Multipath &amp; mixing <span class="badge">novel core</span></h3>
+        <div class="tsrow"><span class="tn">reed-solomon-erasure</span><span class="tp">RS(m,k) fragment encoding for multipath — class 6, the novel core (S3).</span></div>
+        <div class="tsrow"><span class="tn">Loopix design</span><span class="tp">Poisson delay + cover loops for timing decorrelation — built on Sphinx (S2).</span></div>
+      </div>
+      <div class="panel tspanel"><h3>Obfuscation <span class="badge" style="color:var(--gr)">Add 1</span></h3>
+        <div class="tsrow"><span class="tn">Tor PT 2.0 / Arti</span><span class="tp">The swappable pluggable-transport framework / managed-proxy interface.</span></div>
+        <div class="tsrow"><span class="tn">obfs4 / lyrebird</span><span class="tp">Default "look-like-nothing" randomized transport.</span></div>
+        <div class="tsrow"><span class="tn">uTLS</span><span class="tp">Mimic a real browser's TLS 1.3 fingerprint — defeats entropy-DPI.</span></div>
+        <div class="tsrow"><span class="tn">Snowflake (WebRTC)</span><span class="tp">Bootstrap + last-resort under total IP blocking.</span></div>
+        <div class="tsrow"><span class="tn">Conjure / refraction</span><span class="tp">Decoy routing — roadmap; needs cooperating ISP/AS partners.</span></div>
+      </div>
+      <div class="panel tspanel"><h3>Endpoint hardening <span class="badge" style="color:var(--gr)">Add 2</span></h3>
+        <div class="tsrow"><span class="tn">libsignal</span><span class="tp">X3DH + Double Ratchet — ephemeral keys, forward secrecy, break-in recovery.</span></div>
+        <div class="tsrow"><span class="tn">Qubes / Whonix model</span><span class="tp">Compartmentalized identities; gateway IP-leak containment.</span></div>
+        <div class="tsrow"><span class="tn">Tails model</span><span class="tp">Amnesic, stateless-by-default runtime.</span></div>
+        <div class="tsrow"><span class="tn">mlock / MADV_DONTDUMP</span><span class="tp">Keep keys out of swap / core dumps; zeroize on use.</span></div>
+        <div class="tsrow"><span class="tn">SGX / TrustZone</span><span class="tp">Optional enclave for key ops — a cost-raiser, NOT a trust anchor.</span></div>
+      </div>
+      <div class="panel tspanel"><h3>Anonymous credentials <span class="badge" style="color:var(--vi)">Add 3</span></h3>
+        <div class="tsrow"><span class="tn">Privacy Pass (voprf)</span><span class="tp">Unlinkable single-use admission tokens (VOPRF, RFC 9578).</span></div>
+        <div class="tsrow"><span class="tn">Signal zkgroup (KVAC)</span><span class="tp">Attribute-carrying, multi-show unlinkable credentials; relay membership.</span></div>
+        <div class="tsrow"><span class="tn">BBS+ (blst)</span><span class="tp">Third-party-verifiable credentials (verifier ≠ issuer). Optional.</span></div>
+        <div class="tsrow"><span class="tn">RLN (arkworks)</span><span class="tp">Rate-Limiting Nullifier — the actual Sybil-<em>bounding</em> layer.</span></div>
+      </div>
+      <div class="panel tspanel"><h3>Decentralization &amp; attestation <span class="badge" style="color:var(--vi)">Add 4</span></h3>
+        <div class="tsrow"><span class="tn">Tendermint / HotStuff</span><span class="tp">BFT consensus committee for the hourly relay/params document.</span></div>
+        <div class="tsrow"><span class="tn">threshold-BLS</span><span class="tp">t-of-n co-signing — no single load-bearing directory key.</span></div>
+        <div class="tsrow"><span class="tn">drand</span><span class="tp">Public randomness beacon → relay-selection seed.</span></div>
+        <div class="tsrow"><span class="tn">Sigstore + in-toto / SLSA</span><span class="tp">Transparency log + supply-chain provenance attestations.</span></div>
+        <div class="tsrow"><span class="tn">EquiX (Tor prop-327)</span><span class="tp">Memory-hard admission puzzle — wired through the live gate behind the opt-in <span class="mono">equix</span> feature (LGPL, isolated); SHA-256 is the pure-MIT default. Inbound (D9).</span></div>
+        <div class="tsrow"><span class="tn">sbws / FlashFlow</span><span class="tp">Adversary-resistant relay bandwidth measurement.</span></div>
+      </div>
+      <div class="panel tspanel"><h3>Private lookups <span class="badge" style="color:var(--rd)">Add 6</span></h3>
+        <div class="tsrow"><span class="tn">Full consensus + diffs</span><span class="tp"><b>Default — PIR OFF.</b> All clients fetch the same object → total access-pattern privacy.</span></div>
+        <div class="tsrow"><span class="tn">SimplePIR / Spiral</span><span class="tp">Single-server CPIR — no non-collusion assumption. Large directories only.</span></div>
+        <div class="tsrow"><span class="tn">Percy++ / DPF-PIR</span><span class="tp">Cheap multi-server IT-PIR — needs non-colluding replicas.</span></div>
+        <div class="tsrow"><span class="tn">DP5 design</span><span class="tp">Private rendezvous-descriptor lookup — where PIR earns its cost.</span></div>
+      </div>
+      <div class="panel tspanel"><h3>Client, testing &amp; simulation <span class="badge">verify</span></h3>
+        <div class="tsrow"><span class="tn">SOCKS5 / TUN</span><span class="tp">Local entry point so ordinary apps route through the fabric.</span></div>
+        <div class="tsrow"><span class="tn">Shadow</span><span class="tp">Discrete-event network simulator — thousands of virtual nodes, deterministic.</span></div>
+        <div class="tsrow"><span class="tn">Docker / Linux netns</span><span class="tp">Local isolated devnet of N nodes + synthetic load generator.</span></div>
+        <div class="tsrow"><span class="tn">tc / NetEm</span><span class="tp">Inject latency / loss / jitter to emulate real networks.</span></div>
+        <div class="tsrow"><span class="tn">Adversary harness</span><span class="tp">Partial-observer correlation attack — the go/no-go metric (the GATE).</span></div>
+      </div>
+    </div>
+    <div class="flag" style="margin-top:20px"><div class="k">Audit provenance — stated exactly</div>
+      <p class="small" style="margin-top:8px">This deck previously said these crates were "audited". Checked in August 2026, that was wrong, and the correction is kept in public rather than edited away.
+      <b style="color:var(--rd)">No crate in the cryptographic path is audited at the version we use.</b>
+      <span class="mono">voprf</span> has no published audit at all — the claim came from confusing it with NCC Group's 2021 <span class="mono">opaque-ke</span> review, which covered a version that did not depend on it.
+      <span class="mono">sphinx-packet</span> is the one partial exception: its <em>repository</em> was named in the scope of a real 2021 review by JP Aumasson, but that predates the crate's first release by 17 months and three cryptographic changes, including a payload-key-derivation redesign. We run 0.7.0.
+      And the Sphinx <em>format</em> is <b>peer-reviewed</b> (Danezis &amp; Goldberg, IEEE S&amp;P 2009) — peer review of a paper is not a code audit of a crate.</p>
+      <p class="small" style="margin-top:8px; color:var(--mut)">The dependency choices do not change: these remain the best-reviewed implementations available, and D11 still says use them over anything we would write. Only the word was wrong — and a project whose whole claim is honesty does not get to use words its evidence will not carry.</p></div>
+    <div class="pager"><div class="btn" data-go="compare">← Head-to-Head</div><div class="btn pri" data-go="protects">Next → Protection Model</div></div>
+  </section>
+
+  <!-- 16 PROTECTS -->
+  <section class="page" id="protects">
+    <div class="kicker">16 · Protection Model</div>
+    <h2>What it protects — and <span class="grad">for whom</span></h2>
+    <p class="lede">The two rotors look symmetrical on an architecture diagram. They are not. One of them has a security
+      argument that survives having zero users; the other is worth almost nothing without a crowd. That asymmetry is the single
+      most important fact for anyone deciding where this can be tested, and it comes from the project's own measurements rather
+      than from a preference.</p>
+
+    <div class="grid g2" style="margin:22px 0">
+      <div class="panel glow"><h3 style="color:var(--gr)">Inbound · protect a <em>system</em></h3>
+        <p class="small">Security comes from <b>cost and topology</b> — an unpublished origin, a keyed schedule, a puzzle price.
+          None of those mechanisms mentions an anonymity set.</p>
+        <p class="small" style="margin-top:10px"><b style="color:var(--gr)">Crowd dependency: none.</b> The proof-of-work asymmetry is a
+          property of SHA-256; it is identical for one client and one million. The origin's IP is unpublished because it only ever
+          dials <em>out</em> — a topological fact, true with exactly one user.</p></div>
+      <div class="panel"><h3 style="color:var(--am)">Outbound · protect a <em>person</em></h3>
+        <p class="small">Security comes from <b>being indistinguishable from other people</b>. There is no substitute, and no
+          amount of code manufactures one.</p>
+        <p class="small" style="margin-top:10px"><b style="color:var(--am)">Crowd dependency: total.</b> Measured: at 4 concurrent flows,
+          even the strongest usable mixing leaves an optimal attacker at <span class="mono">0.719</span> accuracy. The mechanism is
+          not weak — the haystack is.</p></div>
+    </div>
+
+    <div class="dec warn"><div class="k">!</div><div><b>Why growing the crowd does not fix the mixer.</b> Between 4 and 150 concurrent
+      flows at identical 150&nbsp;ms/hop mixing, attacker accuracy falls <span class="mono">0.719 → 0.063</span> — an 11× improvement that
+      looks like progress. But chance falls <span class="mono">0.25 → 0.0067</span>, a 37× improvement. The <em>ratio</em> of accuracy to
+      chance does not fall; it rises, <span class="mono">2.9× → 9.5×</span>, then flattens. The attacker stays roughly an order of magnitude
+      better than guessing at <em>every</em> crowd size measured. <b>Mixing changes how hard each guess is. Only a crowd changes how many
+      guesses there are.</b> The code supplies the first; it cannot supply the second.</div></div>
+
+    <h3 style="margin:30px 0 12px">Named attacks, and what actually stands between them and you</h3>
+    <table class="mtx">
+      <thead><tr><th>Attack</th><th>Mechanism</th><th>Protects</th><th>Status today</th></tr></thead>
+      <tbody>
+        <tr><td class="th">Origin-IP discovery — finding the real server behind the proxy</td><td>Rendezvous: the origin binds no inbound listener at all; it dials out and parks behind a cookie</td><td>a system</td><td class="sub" style="color:var(--gr)">Real, end to end. Real sockets, real splice.</td></tr>
+        <tr><td class="th">Issuer-side deanonymisation — a credential issuer tagging each client with its own key</td><td>RFC&nbsp;9497 VOPRF + DLEQ proof verified against a key pinned from threshold-signed consensus</td><td>an individual</td><td class="sub" style="color:var(--gr)">Real and tested. Was broken (5/5 linked), now 0/5, with a negative control.</td></tr>
+        <tr><td class="th">Traffic-correlation — linking sender to destination by timing</td><td>Sphinx onion + sealed per-hop Loopix delays</td><td>an individual</td><td class="sub" style="color:var(--am)">Real in the data plane — but only as strong as the crowd. See below.</td></tr>
+        <tr><td class="th">Application-layer resource exhaustion (L7 flood)</td><td>Anti-replay admission gate fronting the rendezvous relay: server-issued, expiring, single-use puzzle, difficulty scaled by load; parking map bounded</td><td>a system</td><td class="sub" style="color:var(--gr)"><b>Wired &amp; demonstrated live.</b> A flood of unsolved connections is refused (<span class="mono">gyre-shield::admission</span> + guarded relay); a client that solves the puzzle gets through.</td></tr>
+        <tr><td class="th">Endpoint enumeration / pre-targeting a known address</td><td>MTD: ingress = <span class="mono">HMAC(key, window)</span></td><td>a system</td><td class="sub" style="color:var(--rd)">Library only. Returns a 32-byte <em>label</em>. <b>Nothing dials it.</b></td></tr>
+      </tbody>
+    </table>
+
+    <h3 style="margin:30px 0 12px">"What about DDoS?" — the honest taxonomy</h3>
+    <p class="small" style="margin-bottom:14px">This is the most common question and the most common way privacy tools overclaim. DoS is not one attack — it is a stack, and Gyre sits at a specific, defensible layer of it. Told straight:</p>
+    <table class="mtx">
+      <thead><tr><th>Attack class</th><th>Example</th><th>Can Gyre help?</th></tr></thead>
+      <tbody>
+        <tr><td class="th">Volumetric flood (L3/L4)</td><td>UDP/SYN/amplification — saturate the pipe</td><td class="sub" style="color:var(--rd)"><b>No, and never.</b> This is capacity — anycast scrubbing. A full pipe is physics; no proof-of-work changes it. That is Cloudflare / AWS Shield, not us (<b>D22</b>).</td></tr>
+        <tr><td class="th">Targeted flood at your origin</td><td>Attacker found your server IP and floods it directly</td><td class="sub" style="color:var(--gr)"><b>Yes — by removing the target.</b> The origin publishes no inbound address, so there is nothing to aim at. The flood must hit a fungible relay you can replace, not the one server you cannot. This is the onion-service model.</td></tr>
+        <tr><td class="th">Application-layer flood (L7)</td><td>HTTP hammering, expensive-query abuse, connection exhaustion</td><td class="sub" style="color:var(--gr)"><b>Yes — by pricing admission, and it runs.</b> Each admission costs the attacker real work; the server checks it in one HMAC + one hash. The gate fronts the rendezvous relay and refuses a flood live — <span class="mono">50/50</span> unsolved connections dropped.</td></tr>
+        <tr><td class="th">Sybil / registration flood</td><td>Mass fake identities to drown a system</td><td class="sub" style="color:var(--am)"><b>Priced, not prevented.</b> PoW + capability tokens raise the cost of an identity. They never make identities scarce — only a scarce resource does that.</td></tr>
+      </tbody>
+    </table>
+    <div class="dec good" style="margin-top:16px"><div class="k">→</div><div><b>The one sentence to say out loud.</b> "Gyre is not a DDoS scrubber and never will be — a saturated link is physics. What it does is <em>remove the origin as a target</em> and <em>price the requests that arrive</em>. That is the onion-service posture, and it <em>complements</em> a scrubber for a service that can't afford one — it does not replace it." Say that, and a senior engineer trusts the rest of the deck. Claim "DDoS protection" unqualified, and they stop trusting all of it.</div></div>
+
+    <h3 style="margin:30px 0 12px">Defense-in-depth, by layer <span class="st st-done">L7 gate deployable</span> <span class="st st-open">volumetric never</span></h3>
+    <p class="small" style="margin-bottom:12px">The full layer-by-layer plan — every mechanism tagged built / needed / never, effort-estimated, modeled on how Tor onion services defend — lives in <span class="mono">docs/DOS.md</span>. The shape of it:</p>
+    <table class="mtx">
+      <thead><tr><th>Layer</th><th>Gyre's move</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="th">L3/L4 volumetric</td><td>Remove the origin as a target; sit behind a scrubber</td><td class="sub" style="color:var(--rd)"><b>never absorbs</b> — D22, physics</td></tr>
+        <tr><td class="th">L4 slowloris / connection-slot</td><td>Handshake timeout + in-flight cap + parked cap + cookie cap</td><td class="sub" style="color:var(--gr)"><b>built &amp; tested</b> (guarded relay)</td></tr>
+        <tr><td class="th">L4 connection lifetime</td><td>Parked-TTL reaper + splice-lifetime timeout — a stuck or squatting pair can't hold a slot forever</td><td class="sub" style="color:var(--gr)"><b>built &amp; tested</b></td></tr>
+        <tr><td class="th">L7 admission flood</td><td>Stateless, single-use, load-scaled PoW; verify in one hash</td><td class="sub" style="color:var(--gr)"><b>built, wired, demonstrated live</b></td></tr>
+        <tr><td class="th">L7 hardening — rate-adaptive pricing</td><td>AIMD effort controller: prices a flood that never parks by watching attempt <em>rate</em>, not just occupancy (duty-cycle-resistant)</td><td class="sub" style="color:var(--gr)"><b>built &amp; tested</b> — self-escalates, then drains</td></tr>
+        <tr><td class="th">Session hijack (leaked bearer cookie)</td><td>Authenticated rendezvous — relay matches on HMAC(cookie); a mutual challenge–response proves cookie knowledge end to end</td><td class="sub" style="color:var(--gr)"><b>built &amp; tested</b> — closes the arrive-second race</td></tr>
+        <tr><td class="th">Relay-targeted flood</td><td>Multi-relay pool — origin parks on k relays, client fails over; per-relay opaque IDs so colluders can't correlate</td><td class="sub" style="color:var(--gr)"><b>built &amp; tested</b> — dilutes ~linearly by k (not elimination)</td></tr>
+        <tr><td class="th">Malicious relay pins a client in an unbounded solve</td><td>Client caps accepted difficulty (≤24 bits) and time-bounds the park dial</td><td class="sub" style="color:var(--gr)"><b>fixed</b> — surfaced by an adversarial review of this code</td></tr>
+        <tr><td class="th">L7 hardening — memory-hard puzzle</td><td>Equi-X (Tor prop-327) so GPUs/ASICs lose their edge over SHA-256</td><td class="sub" style="color:var(--gr)"><b>done &amp; operator-selectable</b> — a pluggable <span class="mono">PowAlgorithm</span> trait threaded through the live gate and the daemon: <span class="mono">gyre-rendezvous --pow equix</span> runs a memory-hard gate (demonstrated across real processes — a client solves Equi-X and is admitted). Algorithm bound into the challenge tag, fail-closed on unsupported. Ships behind <span class="mono">--features equix</span>, LGPL isolated to opt-in builds; SHA-256 stays the pure-MIT default. Adversarially reviewed (5 lenses, 0 findings).</td></tr>
+        <tr><td class="th">Sybil / registration</td><td>Price identities with PoW + capability tokens</td><td class="sub" style="color:var(--gr)"><b>bound &amp; single-use</b> — one solved puzzle mints ≤1 token (F14 fixed); price is a tunable knob</td></tr>
+      </tbody>
+    </table>
+    <p class="note" style="margin-top:10px">Maturity: the guarded relay now ships as a deployable daemon — <span class="mono">gyre-rendezvous</span> + <span class="mono">gyre-origin</span> + <span class="mono">gyre-reach</span>. Run <span class="mono">./scripts/rendezvous.sh</span> to watch the gate refuse a flood across real processes (observed: legit client admitted, 40/40 no-proof connections refused). The Sphinx <em>mix</em> relay is a separate component and remains ungated — an anonymity-path matter, not this one.</p>
+
+    <div class="flag" style="margin-top:22px"><div class="k">The line we will not cross</div>
+      <p class="small" style="margin-top:8px"><b>One of the four inbound mechanisms is still not wired: MTD.</b> Rendezvous, the PoW admission gate,
+        and capability-token admission now all run inside the deployable guarded daemon; MTD address-hopping remains a tested library that
+        returns a 32-byte label nothing dials — called out here, the same shape of gap that forced the QUIC retraction. The honest sentence
+        is now: <em>"the inbound rotor is the only half whose security argument survives zero users — and, for everything but MTD, it is
+        deployable today."</em></p>
+      <p class="small" style="margin-top:10px">Still absent, by design and by physics: <b>no volumetric L3/L4 DDoS defence of any kind</b>
+        (decision D22) — a flood that saturates the link wins before any puzzle is read. MTD serves a <b>closed, authorized</b> client set only,
+        so it can never front an open web service. The <em>default</em> puzzle is <b>SHA-256</b>, the most ASIC/GPU-friendly choice — but the
+        memory-hard <b>Equi-X</b> alternative Tor deployed for exactly this reason is now <b>wired through the gate</b> behind an opt-in <span class="mono">--features equix</span>
+        (its LGPL isolated to builds that enable it; the pure-MIT default is untouched), and an adversarial review of the wiring found nothing. <b>The puzzle is also a real admission
+        protocol</b>, not just a cost function: server-issued, expiring, single-use — a replayed solution is refused (shown live above).</p></div>
+
+    <div class="pager"><div class="btn" data-go="techstack">← Tech Stack</div><div class="btn pri" data-go="deploy">Next → Where To Test</div></div>
+  </section>
+
+  <!-- 17 DEPLOY -->
+  <section class="page" id="deploy">
+    <div class="kicker">17 · Deployment &amp; The Ask</div>
+    <h2>Where this can <span class="grad">honestly</span> be tested</h2>
+    <p class="lede">The instinct is to ask for a big server and "run the network on it." That instinct produces a demo that
+      measures nothing, and a senior engineer will see through it in one question. The useful ask is different, smaller, and
+      defensible — and it starts by conceding the point before it is made.</p>
+
+    <div class="dec warn" style="margin:20px 0"><div class="k">✕</div><div><b>One machine can never be a deployment.</b> Onion routing's only
+      security assumption is that no single party holds every relay's key. Co-locating every relay collapses that to one party with root, so
+      anonymity against that operator is not <em>degraded</em> — it is <b>zero, by construction</b>, at any mixing setting. Three things in this
+      codebase make that concrete rather than theoretical: the per-hop delay is a <b>sealed instruction the relay decrypts and obeys</b>, so anyone
+      reading process memory reads the whole schedule; cover traffic is the literal ASCII string <span class="mono">gyre-cover-loop</span>; and in the
+      shipped testnet binaries <b>every relay secret key is derivable from its public label</b> with a published salt. And to an external observer, one
+      host means one interface emitting and receiving — the guard/exit distinction collapses and coverage is <span class="mono">1.0</span> for free,
+      which is the worst row in our own table.</div></div>
+
+    <div class="dec good"><div class="k">✓</div><div><b>But that is exactly what makes it a legitimate simulator host.</b> Under a simulator the
+      co-location is irrelevant — <em>the adversary is simulated too</em>. A result from it is a claim about <b>the design</b>, not about a running
+      system. That single distinction is the difference between a credible ask and a laughable one, and it should be said out loud, first, unprompted.</div></div>
+
+    <div class="grid g2" style="margin-top:24px">
+      <div class="panel"><h3>What the field does at scale</h3>
+        <p class="small">Published Shadow simulations of Tor, for calibration — these are the numbers that justify wanting a machine at all.</p>
+        <table class="mtx" style="font-size:12.5px; margin-top:10px">
+          <thead><tr><th>Simulated network</th><th>RAM</th><th>Wall time</th></tr></thead>
+          <tbody>
+            <tr><td class="th">1% of Tor</td><td>35 GiB</td><td class="sub">4.8 h</td></tr>
+            <tr><td class="th">10% of Tor</td><td>355 GiB</td><td class="sub">19.4 h</td></tr>
+            <tr><td class="th">100% — 6,489 relays, 792k users</td><td>3.9 TiB</td><td class="sub">8 d 6 h, 144 cores</td></tr>
+          </tbody>
+        </table>
+        <p class="note" style="margin-top:10px">Jansen, Tracey &amp; Goldberg, USENIX Security 2021. Shadow has no GPU path anywhere in its design.</p></div>
+      <div class="panel glow"><h3>Where Gyre actually is</h3>
+        <table class="mtx" style="font-size:12.5px">
+          <tbody>
+            <tr><td class="th">Shadow experiment</td><td><b>8 hosts</b> — 3 relays, 4 clients, 1 sink</td></tr>
+            <tr><td class="th">Correlation harness</td><td><b>up to 10,000 flows</b> · realistic mixed traffic</td></tr>
+            <tr><td class="th">Cores used</td><td><b>all available</b> — runs parallelise across seeds now</td></tr>
+            <tr><td class="th">Report runtime</td><td><b>~60 s</b> end to end, incl. the 10k-flow row</td></tr>
+          </tbody>
+        </table>
+        <p class="small" style="margin-top:12px">Published mixnet simulation work sweeps the user axis from 10² to 10⁵. <b style="color:var(--gr)">The testbed now runs to 10⁴</b>
+          on a laptop — the crowd curve is measured, not asserted. Reaching 10⁵ and wider all-watched sweeps (where the O(n³) matcher bites) is what still wants hardware.</p></div>
+    </div>
+
+    <div class="panel" style="margin-top:20px"><h3>The ask, stated as arithmetic</h3>
+      <p class="small">The harness cost fits <span class="mono">t(n) = 7.81 ms·n + 0.573 ns·n³</span> to within 1% at every measured point — the linear term is
+        real Sphinx crypto, the cubic term is the Hungarian solver. So the request is not a vibe, it is a division:</p>
+      <div class="stat" style="margin-top:14px">
+        <div><b>10⁴</b><span>flows — demonstrated today (partial observer, ~1 min)</span></div>
+        <div><b>10⁵</b><span>the next target — the axis published work reaches</span></div>
+        <div><b>O(n³)</b><span>the Hungarian matcher — all-watched at 10⁵ is where cores earn their keep</span></div>
+        <div><b>~26 GB</b><span>RAM for many concurrent large runs</span></div>
+      </div>
+      <p class="small" style="margin-top:14px"><b>Ask for CPU cores and system RAM on a Linux box. Explicitly not GPU time.</b> A DGX is a GPU machine, and the
+        workload here is Shadow's syscall interception plus X25519 and ChaCha — none of which has a GPU path. Asking for a DGX cluster to run this would
+        itself be the kind of overclaim the whole project exists to avoid. The split is simple: <span class="mono">gyre-sim</span> wants <b>cores</b>;
+        Shadow wants <b>RAM</b>, cores second.</p></div>
+
+    <div class="grid g2" style="margin-top:20px">
+      <div class="card"><div class="ic">✓</div><h3>What to promise</h3>
+        <p class="small">Simulation scale, and a published number with error bars that a third party can reproduce in one command. A regression gate that
+          catches an anonymity change before it ships.</p></div>
+      <div class="card"><div class="ic">✕</div><h3>What never to claim</h3>
+        <p class="small">Anonymity, protection of anything real, or that the machine "runs the network." Nothing on that box is reachable from outside, and
+          nothing it produces is a security result about a deployed system.</p></div>
+    </div>
+
+    <div class="dec good" style="margin-top:20px"><div class="k">→</div><div><b>The sentence that makes the ask work.</b> "A mixnet on one machine has zero
+      anonymity against that machine's operator — which is exactly why the machine can only ever be a simulator. I'm not asking to deploy anything. I'm asking
+      to measure at scale — the testbed already runs a realistic crowd to 10⁴ flows across cores, and I want to reach 10⁵ — against an attacker I already built and
+      verified against brute force. It already told me my own published headline was 4.5× too optimistic, and I retracted it."</div></div>
+
+    <div class="pager"><div class="btn" data-go="protects">← Protection Model</div><div class="btn pri" data-go="status">Next → Current Status</div></div>
+  </section>
+
+  <!-- 18 CURRENT STATUS -->
+  <section class="page" id="status">
+    <div class="kicker">18 · Where It Stands Today</div>
+    <h2>The honest <span class="grad">scorecard</span></h2>
+    <p class="lede">Everything on one page, told straight: what was asked for and how much is built, what it
+      actually defends and where it wins, what still underperforms, and what would make it stronger — plus the two
+      ceilings that will never move. <b>15 product crates · 225 tests</b> (default) + 76 more under the memory-hard
+      <span class="mono">equix</span> feature; every claim measured, nothing rounded up.</p>
+
+    <h3 style="margin:22px 0 10px">1 · What was asked for → what's done</h3>
+    <table class="mtx">
+      <thead><tr><th>Workstream</th><th>Status</th><th>Implemented</th></tr></thead>
+      <tbody>
+        <tr><td class="th">Two-rotor core (outbound mixer + inbound shield, S0–S12)</td><td class="sub" style="color:var(--gr)">built, tested, measured</td><td><b>~95%</b></td></tr>
+        <tr><td class="th">"Make the partial/open dimensions fully covered" (13 privacy dims)</td><td class="sub" style="color:var(--gr)">10 covered · 1 mechanism-only · 2 uncoverable-by-code</td><td><b>10/13</b> coverable</td></tr>
+        <tr><td class="th">DoS/DDoS defense ("defend all attacks")</td><td class="sub" style="color:var(--gr)">L7 roadmap complete; volumetric = never</td><td><b>100%</b> of L7</td></tr>
+        <tr><td class="th">Equi-X memory-hard puzzle</td><td class="sub" style="color:var(--gr)">done, operator-selectable (<span class="mono">--pow equix</span>), reviewed</td><td><b>100%</b></td></tr>
+        <tr><td class="th">Artificial crowd</td><td class="sub" style="color:var(--gr)">honest version built (synthetic testbed, crowd curve to 10⁴)</td><td><b>100%</b> honest scope</td></tr>
+        <tr><td class="th">Community crypto review</td><td class="sub" style="color:var(--am)"><span class="mono">REVIEW-ASK.md</span> ready; the <em>send</em> is a human step</td><td><b>~80%</b></td></tr>
+        <tr><td class="th">MASQUE</td><td class="sub" style="color:var(--vi)">researched → recommended against (co-tenancy needs paid hosting)</td><td><b>cut</b>, with reason</td></tr>
+        <tr><td class="th">QUIC</td><td class="sub" style="color:var(--am)">library-only, not wired to a binary (claim retracted)</td><td><b>~40%</b></td></tr>
+        <tr><td class="th">Measurement (gyre-sim + Shadow)</td><td class="sub" style="color:var(--gr)">both run; sim to 10⁴ flows, Shadow at 8 hosts</td><td><b>~85%</b></td></tr>
+        <tr><td class="th">Deck + docs</td><td class="sub" style="color:var(--gr)">complete, kept honest and current</td><td><b>~95%</b></td></tr>
+      </tbody>
+    </table>
+    <p class="note" style="margin-top:10px">Unfinished &amp; code-buildable: wire <b>MTD</b> (still returns a label nothing dials — the one unwired inbound mechanism), wire <b>QUIC</b> to a binary, give <b>stego</b> a real cover carrier, and the <b>external review send</b>. Everything else is done or deliberately cut with a reason.</p>
+
+    <h3 style="margin:30px 0 10px">2 · What it defends — and where it's superior</h3>
+    <div class="grid g2" style="align-items:start">
+      <div class="panel glow"><h3 style="color:var(--gr)">Protect a system (inbound) — wired &amp; live</h3>
+        <ul class="clean small">
+          <li><b>Origin discovery / targeted origin flood</b> → no inbound address; the target is removed</li>
+          <li><b>L7 application flood</b> → server-issued, expiring, single-use, load-scaled PoW (SHA-256 default, <b>Equi-X opt-in</b>)</li>
+          <li><b>Slowloris, slot exhaustion, squatting</b> → handshake timeout + in-flight cap + cookie cap + parked-TTL reaper + splice timeout</li>
+          <li><b>Floods that never park</b> → AIMD attempt-rate pricing</li>
+          <li><b>Session hijack (leaked cookie)</b> → authenticated rendezvous</li>
+          <li><b>Relay-targeted flood</b> → multi-relay pool (dilutes ~linearly by k)</li>
+          <li><b>Sybil / registration</b> → priced via PoW + one-token-per-puzzle (F14)</li>
+          <li><b>Malicious relay pinning a client</b> → client difficulty cap</li>
+        </ul></div>
+      <div class="panel"><h3 style="color:var(--vi)">Protect a person (outbound) — built &amp; measured</h3>
+        <p class="small">Ten covered dimensions: Content (onion), Path (routing+rendezvous), Timing (mixing), Appearance (obfuscation), Wholeness (erasure multipath), Access (2-server PIR), Authorization (capability tokens), Persistence (forward-secret sessions), Trust locus (threshold consensus), Cost (PoW).</p>
+        <p class="small" style="margin-top:10px"><b style="color:var(--am)">Crowd-gated:</b> only as strong as the real, independent population — which is ~0 today.</p></div>
+    </div>
+    <div class="dec good" style="margin-top:16px"><div class="k">★</div><div><b>Where it genuinely wins.</b> (1) <b>The CDN-bypass / origin-leak class</b> — a dial-out origin has no inbound address to leak, so a scrubber in front becomes un-bypassable; a reverse-proxy CDN structurally can't offer this. (2) <b>Timing-correlation resistance with a dial</b> — the mixing Tor omits for speed (measured 1.00 → 0.06 at 150 ms/hop, with a crowd). (3) <b>Both rotors on one fabric</b> — no single tool ships inbound origin-hiding <em>and</em> outbound mixing. (4) <b>Honesty as a feature</b> — measured against an <em>optimal</em> attacker; it corrected its own 4.5×-optimistic headline rather than shipping it.</div></div>
+
+    <h3 style="margin:30px 0 10px">3 · What still underperforms</h3>
+    <div class="grid g2" style="align-items:start">
+      <div class="flag"><div class="k">The binding constraint</div><p class="small" style="margin-top:6px">The <b>crowd</b> — and we proved you can't fake it. Outbound anonymity is only as strong as the real, independent population, ~0 today. This gates the entire person-protection half; it is adoption, not engineering.</p></div>
+      <div class="panel"><h3>The rest, told straight</h3>
+        <ul class="clean small">
+          <li><b>Not deployed</b> — localhost/sim only; no free UDP host exists. The path is your own two machines over native IPv6.</li>
+          <li><b>No external crypto review yet</b> — package ready, needs a human to send it.</li>
+          <li><b>MTD unwired, QUIC library-only, stego mechanism-only</b> — built but not fully real.</li>
+          <li><b>Scale</b> — sim to 10⁴, published work to 10⁵; no Shadow-vs-Tor run yet.</li>
+          <li><b>Memory-hard PoW still loses to a large botnet of ordinary CPUs</b> — it kills hardware amplification, not scale.</li>
+        </ul></div>
+    </div>
+
+    <h3 style="margin:30px 0 10px">4 · What would make it stronger (ranked)</h3>
+    <div class="grid g3">
+      <div class="card"><div class="ic">📮</div><h3>1 · Send the crypto review</h3><p class="small">Highest leverage, zero cost — unblocks external trust. A human-send step.</p></div>
+      <div class="card"><div class="ic">👥</div><h3>2 · Grow / borrow a crowd</h3><p class="small">The only thing that moves outbound anonymity. Inbound rotor as a zero-crowd wedge, or bridge-to-Tor.</p></div>
+      <div class="card"><div class="ic">🚀</div><h3>3 · Actually deploy</h3><p class="small">Own two machines over native IPv6 → the inbound rotor becomes a running system, not a demo.</p></div>
+      <div class="card"><div class="ic">🔀</div><h3>4 · Wire MTD</h3><p class="small">Close the last unwired inbound mechanism (today it returns a label nothing dials).</p></div>
+      <div class="card"><div class="ic">📈</div><h3>5 · Scale to 10⁵ + vs-Tor</h3><p class="small">Needs Linux cores/RAM (explicitly not GPU). Publishable numbers at real scale.</p></div>
+      <div class="card"><div class="ic">🛡️</div><h3>6 · Harden further</h3><p class="small">ZK credentials / RLN nullifiers; stego over a real cover; per-context ORAM; hybrid post-quantum key exchange (X25519 + ML-KEM).</p></div>
+    </div>
+
+    <div class="dec warn" style="margin-top:22px"><div class="k">∞</div><div><b>The two ceilings that never move — and are never claimed.</b> <b>Volumetric L3/L4 DDoS</b> is physics (a saturated pipe); scrubber territory (D22) — Gyre complements one, never replaces it. <b>Endpoint compromise</b> — a stolen or keylogged device deanonymises regardless of the network. The whole project's credibility rests on <em>not</em> painting these green.</div></div>
+
+    <div class="dec good" style="margin-top:16px"><div class="k">→</div><div><b>Bottom line.</b> The inbound/DoS half is as complete as code can honestly make it — the deployable, superior part today. The outbound/anonymity half is fully built and measured but gated on a real crowd, which is adoption, not engineering. The biggest unlocks left aren't more code: they're the <b>external review</b>, a <b>crowd</b>, and a <b>real deployment</b>.</div></div>
+
+    <div class="pager"><div class="btn" data-go="deploy">← Where To Test</div><div class="btn" data-go="overview">↑ Back to top</div></div>
+  </section>
+
+
+  </div>
+  </main>
+</div>
+
+<script>
+"use strict";
+const qs=(s,r=document)=>r.querySelector(s), qsa=(s,r=document)=>[...r.querySelectorAll(s)];
+const TAU=Math.PI*2, rnd=(a,b)=>a+Math.random()*(b-a), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+/* ---------- canvas controller ---------- */
+function Canvas(el){
+  const ctx=el.getContext('2d'); let W=0,H=0,dpr=1,raf=0,running=false,t0=0,frameFn=null,setupFn=null;
+  function resize(){
+    dpr=Math.min(window.devicePixelRatio||1,2);
+    const r=el.getBoundingClientRect(); W=Math.max(1,Math.round(r.width)); H=Math.max(1,Math.round(r.height));
+    el.width=W*dpr; el.height=H*dpr; ctx.setTransform(dpr,0,0,dpr,0,0);
+    if(setupFn) setupFn(W,H);
+  }
+  function loop(ts){ if(!running) return; if(!t0)t0=ts; const t=(ts-t0)/1000;
+    ctx.clearRect(0,0,W,H); if(frameFn) frameFn(ctx,W,H,t); raf=requestAnimationFrame(loop); }
+  const api={ el,ctx, setup(f){setupFn=f;return api;}, frame(f){frameFn=f;return api;},
+    play(){ if(running)return; resize(); running=true; t0=0; raf=requestAnimationFrame(loop); ACTIVE.add(api); },
+    stop(){ running=false; if(raf)cancelAnimationFrame(raf); raf=0; ACTIVE.delete(api); },
+    get W(){return W;}, get H(){return H;}, resize };
+  return api;
+}
+const ACTIVE=new Set();
+let rt=null; addEventListener('resize',()=>{clearTimeout(rt); rt=setTimeout(()=>ACTIVE.forEach(c=>c.resize()),140);});
+
+/* helpers */
+function node(ctx,x,y,r,col,glow=12){ ctx.save(); ctx.shadowColor=col; ctx.shadowBlur=glow;
+  ctx.fillStyle=col; ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill(); ctx.restore(); }
+function line(ctx,x1,y1,x2,y2,col,w=1){ ctx.strokeStyle=col; ctx.lineWidth=w; ctx.beginPath();
+  ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); }
+const COL={cy:'#22d3ee',vi:'#a855f7',mg:'#f472b6',gr:'#34d399',am:'#fbbf24',rd:'#fb7185',dim:'#5f6d92',ink:'#e8ecf8'};
+
+/* ---------- global background mesh ---------- */
+(function(){
+  const el=qs('#bg-canvas'); const c=Canvas(el); let P=[];
+  c.setup((W,H)=>{ const n=Math.min(70,Math.floor(W*H/16000)); P=[]; for(let i=0;i<n;i++)
+    P.push({x:rnd(0,W),y:rnd(0,H),vx:rnd(-.12,.12),vy:rnd(-.12,.12)}); });
+  c.frame((ctx,W,H)=>{
+    for(const p of P){ p.x=(p.x+p.vx+W)%W; p.y=(p.y+p.vy+H)%H; }
+    for(let i=0;i<P.length;i++){ for(let j=i+1;j<P.length;j++){
+      const a=P[i],b=P[j],dx=a.x-b.x,dy=a.y-b.y,d=Math.hypot(dx,dy);
+      if(d<130){ ctx.strokeStyle='rgba(120,150,220,'+(0.10*(1-d/130))+')'; ctx.lineWidth=1;
+        ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); } } }
+    for(const p of P){ ctx.fillStyle='rgba(120,160,230,.5)'; ctx.beginPath(); ctx.arc(p.x,p.y,1.3,0,TAU); ctx.fill(); }
+  });
+  c.play();
+})();
+
+/* ---------- registry of section demos ---------- */
+const DEMOS={}; function reg(sec,ctrl){ (DEMOS[sec]=DEMOS[sec]||[]).push(ctrl); }
+let curControllers=[];
+function stopAll(){ curControllers.forEach(c=>c.stop()); curControllers=[]; }
+function startSection(id){
+  stopAll();
+  if(id==='mixer'){ startMixerTab(currentMixerTab); return; }
+  (DEMOS[id]||[]).forEach(c=>{ c.play(); curControllers.push(c); });
+}
+
+/* ================= HERO — the gyre fabric (both rotors) ================= */
+(function(){
+  const c=Canvas(qs('#c-hero'));
+  let stars=[], spir=[], frags=[], atk=[]; const RINGS=7;
+  const fcols=[COL.cy,COL.vi,COL.mg,COL.gr,COL.am];
+  c.setup((W,H)=>{ stars=[]; const n=Math.min(140,Math.floor(W*H/8000));
+    for(let i=0;i<n;i++) stars.push({x:rnd(0,W),y:rnd(0,H),z:rnd(.2,1),vx:rnd(-.05,.05),vy:rnd(-.05,.05)});
+    spir=[]; frags=[]; atk=[]; });
+  c.frame((ctx,W,H,t)=>{
+    const cx=W*0.5, cy=H*0.5, R=Math.min(W*0.60,H)*0.44;
+
+    // 1 — starfield
+    for(const s of stars){ s.x=(s.x+s.vx+W)%W; s.y=(s.y+s.vy+H)%H;
+      ctx.fillStyle='rgba(150,175,235,'+(0.08+s.z*0.16)+')'; ctx.beginPath(); ctx.arc(s.x,s.y,s.z*1.3,0,TAU); ctx.fill(); }
+
+    // 2 — vortex rings of relay nodes + proximity mesh
+    const pts=[];
+    for(let r=0;r<RINGS;r++){ const rad=R*(0.30+r*0.108), count=8+r*4, dir=r%2?-1:1, spd=0.10+r*0.014;
+      const hue=r/RINGS, col=hue<0.45?COL.cy:(hue<0.78?COL.vi:COL.mg);
+      ctx.strokeStyle='rgba(120,150,220,'+(0.05+0.03*Math.sin(t+r))+')'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.ellipse(cx,cy,rad*1.34,rad,0,0,TAU); ctx.stroke();
+      for(let i=0;i<count;i++){ const a=(i/count)*TAU + t*spd*dir + r*0.5, wob=Math.sin(t*1.2+i+r)*3;
+        const x=cx+Math.cos(a)*(rad+wob)*1.34, y=cy+Math.sin(a)*(rad+wob);
+        pts.push({x,y}); node(ctx,x,y,1.2+2.2*(1-r/RINGS),col,8); } }
+    for(let i=0;i<pts.length;i++){ for(let j=i+1;j<pts.length;j++){ const a=pts[i],b=pts[j];
+      const dx=a.x-b.x,dy=a.y-b.y,d2=dx*dx+dy*dy;
+      if(d2<3400){ ctx.strokeStyle='rgba(120,160,230,'+(0.09*(1-d2/3400))+')'; ctx.lineWidth=.7;
+        ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); } } }
+
+    // 3 — onion core: 3 pulsing layers + bright core
+    for(let L=0;L<3;L++){ const rr=R*(0.11+L*0.055), pulse=0.35+0.3*Math.sin(t*2-L);
+      ctx.strokeStyle=['rgba(34,211,238,','rgba(168,85,247,','rgba(244,114,182,'][L]+pulse+')'; ctx.lineWidth=1.6;
+      ctx.beginPath(); ctx.arc(cx,cy,rr,0,TAU); ctx.stroke(); }
+    node(ctx,cx,cy,5+Math.sin(t*3)*2,COL.ink,30);
+
+    // 4 — spiral packets (dim cover + bright real) diving through the vortex
+    if(Math.random()<0.55) spir.push({p:0,a0:rnd(0,TAU),real:Math.random()<0.24,spin:rnd(4,7)});
+    spir=spir.filter(s=>s.p<1);
+    for(const s of spir){ s.p+=0.008; const rr=R*1.5*Math.abs(0.5-s.p)*1.8+R*0.09, ang=s.a0+s.p*s.spin+t*0.3;
+      node(ctx,cx+Math.cos(ang)*rr*1.28,cy+Math.sin(ang)*rr, s.real?3.2:1.5, s.real?COL.mg:'rgba(120,160,230,.55)', s.real?12:5); }
+
+    // 5 — OUTBOUND: person (left) → erasure-coded multipath fan into the core
+    const px=W*0.075, py=cy; node(ctx,px,py,7,COL.vi,16);
+    ctx.strokeStyle='rgba(168,85,247,.35)'; ctx.setLineDash([3,4]); line(ctx,px,py,cx-R*0.4,cy,'rgba(168,85,247,.25)',1); ctx.setLineDash([]);
+    if(Math.random()<0.28) frags.push({p:0,lane:Math.floor(rnd(0,5))});
+    frags=frags.filter(f=>f.p<1);
+    for(const f of frags){ f.p+=0.012; const spread=(f.lane-2)*42;
+      node(ctx,lerp(px,cx,f.p), lerp(py,cy,f.p)+Math.sin(f.p*Math.PI)*spread, 2.6, fcols[f.lane],9); }
+
+    // 6 — INBOUND: server (right) inside a rotating MTD hop-ring, attackers deflected
+    const sx=W*0.925, sy=cy;
+    for(let i=0;i<10;i++){ const a=t*0.8+i/10*TAU, on=(i===Math.floor((t*0.8)%10));
+      node(ctx,sx+Math.cos(a)*28,sy+Math.sin(a)*28, on?4:1.6, on?COL.gr:'rgba(52,211,153,.4)', on?12:4); }
+    node(ctx,sx,sy,7,COL.gr,16);
+    if(Math.random()<0.12) atk.push({p:0,y:sy+rnd(-46,46)});
+    atk=atk.filter(a=>a.p<1);
+    for(const a of atk){ a.p+=0.02; const x=lerp(W,sx+36,a.p), blocked=a.p>0.82;
+      node(ctx,x,a.y+Math.sin(a.p*6)*10*(1-a.p),2.2, blocked?COL.rd:COL.am,8);
+      if(blocked&&a.p<0.87){ ctx.strokeStyle='rgba(251,113,133,.5)'; ctx.lineWidth=1; ctx.beginPath(); ctx.arc(sx+36,sy,20,0,TAU); ctx.stroke(); } }
+
+    // 7 — HUD: labels, scan sweep, corner ticks
+    const sa=(t*0.4)%TAU; ctx.strokeStyle='rgba(34,211,238,.10)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+Math.cos(sa)*R*1.5,cy+Math.sin(sa)*R); ctx.stroke();
+    ctx.font='10px ui-monospace'; ctx.textAlign='left'; ctx.fillStyle='rgba(168,85,247,.75)'; ctx.fillText('OUTBOUND · MIXER',W*0.055,H-18);
+    ctx.textAlign='right'; ctx.fillStyle='rgba(52,211,153,.75)'; ctx.fillText('INBOUND · SHIELD',W*0.945,H-18);
+    ctx.textAlign='center'; ctx.fillStyle='rgba(232,236,248,.45)'; ctx.font='11px ui-monospace'; ctx.fillText('GYRE FABRIC',cx,cy+R*1.16+6);
+    ctx.strokeStyle='rgba(120,150,220,.22)'; ctx.lineWidth=1.4; const m=16,ln=20;
+    [[m,m,1,1],[W-m,m,-1,1],[m,H-m,1,-1],[W-m,H-m,-1,-1]].forEach(q=>{ ctx.beginPath();
+      ctx.moveTo(q[0],q[1]+q[3]*ln); ctx.lineTo(q[0],q[1]); ctx.lineTo(q[0]+q[2]*ln,q[1]); ctx.stroke(); });
+  });
+  reg('overview',c);
+})();
+
+/* ================= 01 PROBLEM ================= */
+(function(){
+  const c=Canvas(qs('#c-problem')); let mode='both'; let pk=[];
+  qsa('#seg-problem button').forEach(b=>b.onclick=()=>{ qsa('#seg-problem button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); mode=b.dataset.r;
+    qs('#cap-problem').textContent = mode==='out'
+      ? 'Outbound rotor: the person’s packets enter the fabric and scatter — the destination link is dissolved.'
+      : mode==='in' ? 'Inbound rotor: attackers approach the server but meet a rendezvous shield and a moving surface.'
+      : 'Both rotors on one fabric — opposite directions, shared infrastructure.'; });
+  c.frame((ctx,W,H,t)=>{
+    const cx=W/2, cy=H/2, R=Math.min(W,H)*0.22;
+    // central fabric swirl
+    for(let i=0;i<40;i++){ const a=(i/40)*TAU+t*0.4; const rr=R*(0.5+0.5*Math.sin(t+i));
+      node(ctx,cx+Math.cos(a)*rr*1.4,cy+Math.sin(a)*rr,1.5,i%2?COL.cy:COL.vi,8); }
+    ctx.strokeStyle='rgba(120,150,220,.18)'; ctx.lineWidth=1; ctx.beginPath(); ctx.ellipse(cx,cy,R*1.6,R,0,0,TAU); ctx.stroke();
+    ctx.fillStyle=COL.dim; ctx.font='11px ui-monospace'; ctx.textAlign='center';
+    ctx.fillText('GYRE FABRIC',cx,cy-R-14);
+    // person left, server right
+    const px=60, sy=cy, sx=W-60;
+    node(ctx,px,sy,10,COL.vi,18); ctx.fillStyle=COL.ink; ctx.textAlign='left'; ctx.fillText('person',px-16,sy+26);
+    node(ctx,sx,sy,10,COL.gr,18); ctx.textAlign='right'; ctx.fillText('server',sx+16,sy+26);
+    if(Math.random()<0.18) pk.push({x:0,from:'p',prog:0});
+    if(Math.random()<0.14) pk.push({x:0,from:'a',prog:0});
+    pk=pk.filter(p=>p.prog<1);
+    for(const p of pk){
+      p.prog+=0.012;
+      if(p.from==='p' && mode!=='in'){ // outbound person -> into fabric -> scatter
+        const seg=p.prog;
+        let x,y;
+        if(seg<0.5){ x=lerp(px,cx,seg/0.5); y=lerp(sy,cy+rnd(-2,2),seg/0.5); }
+        else { const a=(p.x||0); x=lerp(cx,cx+Math.cos(a)*R*1.5,(seg-0.5)/0.5); y=lerp(cy,cy+Math.sin(a)*R,(seg-0.5)/0.5); }
+        if(!p.a){p.a=rnd(0,TAU); p.x=p.a;}
+        node(ctx,x,y,2.4,COL.mg,10);
+      }
+      if(p.from==='a' && mode!=='out'){ // inbound attacker -> server, absorbed at shield
+        const x=lerp(0,sx-40,p.prog); const y=sy+Math.sin(p.prog*8)*30*(1-p.prog);
+        const blocked=p.prog>0.72;
+        node(ctx,x,y,2.4,blocked?COL.rd:COL.am,10);
+        if(blocked && p.prog<0.76){ ctx.strokeStyle='rgba(251,113,133,.5)'; ctx.beginPath(); ctx.arc(sx-40,sy,18,0,TAU); ctx.stroke(); }
+      }
+    }
+    if(mode!=='out'){ ctx.strokeStyle='rgba(52,211,153,.35)'; ctx.setLineDash([4,4]); ctx.beginPath(); ctx.arc(sx,sy,34,0,TAU); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle=COL.gr; ctx.textAlign='right'; ctx.fillText('shield',sx+16,sy-40); }
+  });
+  reg('problem',c);
+})();
+
+/* ================= 02 TRILEMMA ================= */
+(function(){
+  const c=Canvas(qs('#c-tri')); let pt={x:.5,y:.5}, drag=false, verts=[];
+  function setV(W,H){ const cx=W/2, cy=H/2+16, R=Math.min(W,H)*0.34;
+    verts=[{x:cx,y:cy-R,l:'STRONG ANONYMITY',c:COL.vi},
+           {x:cx-R*0.87,y:cy+R*0.5,l:'LOW LATENCY',c:COL.cy},
+           {x:cx+R*0.87,y:cy+R*0.5,l:'LOW OVERHEAD',c:COL.mg}]; }
+  c.setup(setV);
+  function corePos(){ const b=bary(); return {x:verts[0].x*b[0]+verts[1].x*b[1]+verts[2].x*b[2],
+    y:verts[0].y*b[0]+verts[1].y*b[1]+verts[2].y*b[2]}; }
+  let bw=[.34,.33,.33];
+  function bary(){ return bw; }
+  function setFromXY(mx,my){
+    // solve barycentric of point in triangle, clamp to inside
+    const [A,B,C]=verts; const v0={x:B.x-A.x,y:B.y-A.y}, v1={x:C.x-A.x,y:C.y-A.y}, v2={x:mx-A.x,y:my-A.y};
+    const d00=v0.x*v0.x+v0.y*v0.y, d01=v0.x*v1.x+v0.y*v1.y, d11=v1.x*v1.x+v1.y*v1.y,
+          d20=v2.x*v0.x+v2.y*v0.y, d21=v2.x*v1.x+v2.y*v1.y, den=d00*d11-d01*d01;
+    let v=(d11*d20-d01*d21)/den, w=(d00*d21-d01*d20)/den, u=1-v-w;
+    u=clamp(u,0,1); v=clamp(v,0,1); w=clamp(w,0,1); const s=u+v+w; bw=[u/s,v/s,w/s];
+  }
+  const el=c.el;
+  function xy(e){ const r=el.getBoundingClientRect(); const p=e.touches?e.touches[0]:e; return {x:p.clientX-r.left,y:p.clientY-r.top}; }
+  el.addEventListener('pointerdown',e=>{drag=true; const m=xy(e); setFromXY(m.x,m.y);});
+  addEventListener('pointermove',e=>{ if(drag){ const m=xy(e); setFromXY(m.x,m.y); }});
+  addEventListener('pointerup',()=>drag=false);
+  c.frame((ctx,W,H,t)=>{
+    const [A,B,C]=verts;
+    ctx.strokeStyle='rgba(120,150,220,.3)'; ctx.lineWidth=1.5; ctx.beginPath();
+    ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.lineTo(C.x,C.y); ctx.closePath(); ctx.stroke();
+    const b=bary();
+    verts.forEach((v,i)=>{ const w=b[i]; node(ctx,v.x,v.y,5+w*10,v.c,10+w*20);
+      ctx.fillStyle='rgba(232,236,248,'+(0.5+w*0.5)+')'; ctx.font='11px ui-monospace';
+      ctx.textAlign=i===0?'center':(i===1?'right':'left'); const oy=i===0?-16:20; const ox=i===1?-8:(i===2?8:0);
+      ctx.fillText(v.l,v.x+ox,v.y+oy); ctx.textAlign='center';
+      ctx.fillStyle=v.c; ctx.fillText((w*100).toFixed(0)+'%',v.x+(i===1?-26:i===2?26:0),v.y+(i===0?8:38)); });
+    // fill weighted
+    ctx.fillStyle='rgba(168,85,247,.06)'; ctx.beginPath(); ctx.moveTo(A.x,A.y); ctx.lineTo(B.x,B.y); ctx.lineTo(C.x,C.y); ctx.fill();
+    const p=corePos(); ctx.save(); ctx.shadowColor='#fff'; ctx.shadowBlur=24; ctx.fillStyle='#fff';
+    ctx.beginPath(); ctx.arc(p.x,p.y,7,0,TAU); ctx.fill(); ctx.restore();
+    ctx.strokeStyle='rgba(255,255,255,.25)'; [A,B,C].forEach(v=>{ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(v.x,v.y);ctx.stroke();});
+  });
+  reg('ceiling',c);
+})();
+
+/* ================= 03 MYTH correlation ================= */
+(function(){
+  const c=Canvas(qs('#c-myth')); const ips=['185.44.2.19','92.118.7.3','45.9.altitude','203.0.113.7','198.51.100.4'];
+  let pulses=[]; let ipIdx=0, ipTimer=0;
+  c.frame((ctx,W,H,t)=>{
+    const yTop=H*0.32, yBot=H*0.70, x0=70, x1=W-70;
+    ipTimer+=1; if(ipTimer>42){ipTimer=0; ipIdx=(ipIdx+1)%ips.length;}
+    // spawn synced pulses
+    if(Math.random()<0.05) pulses.push({p:0, jitter:rnd(-0.02,0.02)});
+    pulses=pulses.filter(p=>p.p<1.05);
+    // rails
+    ctx.strokeStyle='rgba(120,150,220,.18)'; line(ctx,x0,yTop,x1,yTop,'rgba(120,150,220,.18)',1); line(ctx,x0,yBot,x1,yBot,'rgba(120,150,220,.18)',1);
+    ctx.fillStyle=COL.dim; ctx.font='11px ui-monospace'; ctx.textAlign='left';
+    ctx.fillText('ENTRY  (your traffic, rotating IP)',x0,yTop-16);
+    ctx.fillText('EXIT   (destination-side)',x0,yBot-16);
+    // rotating IP badge
+    ctx.fillStyle=COL.mg; ctx.font='13px ui-monospace'; ctx.textAlign='right';
+    ctx.fillText('src IP → '+ips[ipIdx],x1,yTop-16);
+    for(const p of pulses){
+      const xe=lerp(x0,x1,p.p), xx=lerp(x0,x1,p.p+p.jitter);
+      node(ctx,xe,yTop,4,COL.cy,12); node(ctx,xx,yBot,4,COL.cy,12);
+      if(p.p>0.15 && p.p<1){ ctx.strokeStyle='rgba(52,211,153,'+(0.35)+')'; ctx.setLineDash([3,4]);
+        line(ctx,xe,yTop,xx,yBot,'rgba(52,211,153,.35)',1); ctx.setLineDash([]); }
+    }
+    // adversary + lock
+    ctx.textAlign='center'; ctx.fillStyle=COL.rd; ctx.font='12px ui-monospace';
+    const lock='🔒 CORRELATED — same rhythm at both ends';
+    ctx.fillText(lock,W/2,H-24);
+  });
+  reg('myth',c);
+})();
+
+/* ================= 04 CROWD ================= */
+(function(){
+  const c=Canvas(qs('#c-crowd')); let agents=[], k=1, target=null;
+  const range=qs('#crowd-range'), read=qs('#crowd-read'), cap=qs('#cap-crowd');
+  function build(W,H){ agents=[]; const n=k; for(let i=0;i<n;i++)
+    agents.push({x:rnd(20,W-20),y:rnd(20,H-20),vx:rnd(-.5,.5),vy:rnd(-.5,.5),ph:rnd(0,TAU)});
+    target=agents[0]; }
+  c.setup((W,H)=>build(W,H));
+  function setK(v){ k=clamp(v|0,1,1200); build(c.W||600,c.H||400);
+    read.innerHTML='k = '+k+' &nbsp;·&nbsp; '+(k<=1?'the reticle locks instantly':(k<20?'still easy to single out':(k<200?'blending in':'lost in the crowd')));
+    cap.textContent='Anonymity set k = '+k; }
+  range.addEventListener('input',()=>setK(+range.value));
+  let lockX=0,lockY=0;
+  c.frame((ctx,W,H,t)=>{
+    for(const a of agents){ a.x+=a.vx; a.y+=a.vy; if(a.x<12||a.x>W-12)a.vx*=-1; if(a.y<12||a.y>H-12)a.vy*=-1;
+      a.x=clamp(a.x,12,W-12); a.y=clamp(a.y,12,H-12); }
+    for(const a of agents){ if(a!==target||k>1) node(ctx,a.x,a.y,2.4, k>60?'rgba(120,150,220,.5)':'rgba(140,170,230,.7)',4); }
+    // target
+    if(target){ const conf=clamp(1-(k-1)/40,0,1); // tracker confidence
+      // reticle aims at target when k small, drifts to random when large
+      let tx=target.x,ty=target.y;
+      if(k>1){ const a=agents[(Math.floor(t*0.6)%agents.length)]; tx=lerp(target.x,a.x,1-conf); ty=lerp(target.y,a.y,1-conf); }
+      lockX=lerp(lockX||tx,tx,0.08); lockY=lerp(lockY||ty,ty,0.08);
+      node(ctx,target.x,target.y,3.4,COL.vi,14);
+      // reticle
+      ctx.strokeStyle=conf>0.5?'rgba(251,113,133,.9)':'rgba(251,191,36,.7)'; ctx.lineWidth=1.4;
+      ctx.beginPath(); ctx.arc(lockX,lockY,14,0,TAU); ctx.stroke();
+      line(ctx,lockX-20,lockY,lockX-14,lockY,ctx.strokeStyle); line(ctx,lockX+14,lockY,lockX+20,lockY,ctx.strokeStyle);
+      line(ctx,lockX,lockY-20,lockX,lockY-14,ctx.strokeStyle); line(ctx,lockX,lockY+14,lockX,lockY+20,ctx.strokeStyle);
+      ctx.fillStyle=conf>0.5?COL.rd:COL.am; ctx.font='11px ui-monospace'; ctx.textAlign='left';
+      ctx.fillText(conf>0.5?'TRACKING':'lock lost',lockX+22,lockY+4);
+    }
+    ctx.fillStyle=COL.dim; ctx.textAlign='right'; ctx.font='11px ui-monospace'; ctx.fillText('k = '+k, W-14,20);
+  });
+  reg('crowd',c); setK(1);
+})();
+
+/* ================= 05 SHIELD MTD ================= */
+(function(){
+  const c=Canvas(qs('#c-shield')); const cols=9, rows=5; let real=0, tick=0, atk=[], hitC=0, missC=0, clientOK=0;
+  function grid(W,H){ const gw=W*0.62, gh=H*0.7, ox=W*0.06, oy=H*0.16, cw=gw/cols, ch=gh/rows;
+    return {gw,gh,ox,oy,cw,ch}; }
+  c.frame((ctx,W,H,t)=>{
+    const g=grid(W,H);
+    tick+=1; if(tick>70){ tick=0; real=(Math.floor(Math.random()*cols*rows)); clientOK++; }
+    for(let i=0;i<cols*rows;i++){ const cxi=i%cols, cyi=(i/cols)|0;
+      const x=g.ox+cxi*g.cw+g.cw/2, y=g.oy+cyi*g.ch+g.ch/2;
+      const isReal=i===real;
+      ctx.strokeStyle= isReal?'rgba(52,211,153,.9)':'rgba(120,150,220,.14)';
+      ctx.lineWidth=isReal?2:1; ctx.strokeRect(g.ox+cxi*g.cw+3,g.oy+cyi*g.ch+3,g.cw-6,g.ch-6);
+      if(isReal){ node(ctx,x,y,6+Math.sin(t*4)*1.5,COL.gr,18); }
+      else { node(ctx,x,y,1.6,'rgba(120,150,220,.3)',3); }
+    }
+    // client follows
+    const rcx=g.ox+(real%cols)*g.cw+g.cw/2, rcy=g.oy+((real/cols)|0)*g.ch+g.ch/2;
+    ctx.strokeStyle='rgba(34,211,238,.9)'; ctx.lineWidth=1.6; ctx.setLineDash([4,3]);
+    ctx.beginPath(); ctx.arc(rcx,rcy,13,0,TAU); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle=COL.cy; ctx.font='10px ui-monospace'; ctx.textAlign='center'; ctx.fillText('keyed client',rcx,rcy-18);
+    // attacker sprays
+    if(Math.random()<0.22){ const i=Math.floor(Math.random()*cols*rows); atk.push({i,life:1,hit:i===real}); if(i===real)hitC++; else missC++; }
+    atk=atk.filter(a=>a.life>0);
+    for(const a of atk){ a.life-=0.03; const cxi=a.i%cols, cyi=(a.i/cols)|0;
+      const x=g.ox+cxi*g.cw+g.cw/2, y=g.oy+cyi*g.ch+g.ch/2;
+      ctx.strokeStyle=a.hit?'rgba(251,113,133,'+a.life+')':'rgba(251,191,36,'+(a.life*0.7)+')';
+      ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(x-6,y-6); ctx.lineTo(x+6,y+6); ctx.moveTo(x+6,y-6); ctx.lineTo(x-6,y+6); ctx.stroke(); }
+    // side panel readout
+    const px=g.ox+g.gw+30, py=g.oy+10;
+    ctx.textAlign='left'; ctx.font='12px ui-monospace';
+    ctx.fillStyle=COL.gr; ctx.fillText('client hops in sync',px,py); ctx.fillStyle=COL.ink; ctx.fillText('success: 100%',px,py+20);
+    ctx.fillStyle=COL.am; ctx.fillText('attacker sprays decoys',px,py+52);
+    const rate=(hitC+missC)?(100*hitC/(hitC+missC)):0;
+    ctx.fillStyle=COL.rd; ctx.fillText('attacker hit-rate:',px,py+72); ctx.fillText(rate.toFixed(1)+'%',px,py+92);
+    ctx.fillStyle=COL.dim; ctx.font='10px ui-monospace'; ctx.fillText('HMAC(key, window) → live cell',px,py+124);
+  });
+  reg('shield',c);
+  // PoW meter
+  const pc=Canvas(qs('#c-pow')); let load=0.15, atkBoost=0;
+  qs('#pow-atk').onclick=()=>{ atkBoost=1; };
+  pc.frame((ctx,W,H,t)=>{
+    atkBoost*=0.985; load=clamp(0.15+atkBoost*0.8,0.15,1);
+    qs('#pow-read').textContent='load: '+(load<0.3?'low':load<0.6?'rising':'under flood');
+    const baseY=H-18;
+    // attacker cost curve (exponential with load)
+    ctx.strokeStyle=COL.rd; ctx.lineWidth=2; ctx.beginPath();
+    for(let x=0;x<=W;x+=4){ const l=x/W; const diff=Math.pow(1+l*load*6,2); const y=baseY-Math.min(baseY-8,diff*4);
+      x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);} ctx.stroke();
+    // legit flat
+    ctx.strokeStyle=COL.gr; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(0,baseY-10); ctx.lineTo(W,baseY-10); ctx.stroke();
+    ctx.fillStyle=COL.rd; ctx.font='10px ui-monospace'; ctx.textAlign='left'; ctx.fillText('attacker cost ∝ load²',8,16);
+    ctx.fillStyle=COL.gr; ctx.fillText('legit user: flat',8,30);
+    ctx.strokeStyle='rgba(251,191,36,.6)'; ctx.setLineDash([3,3]); const lx=load*W; line(ctx,lx,8,lx,baseY,'rgba(251,191,36,.6)'); ctx.setLineDash([]);
+  });
+  reg('shield',pc);
+})();
+
+/* ================= 06 MIXER (tabbed) ================= */
+let currentMixerTab='onion'; const mixerCtrls={};
+(function(){
+  const cap=qs('#cap-mixer'), tag=qs('#mixer-tag');
+  const CAPS={ onion:['live · onion routing','Layered encryption — each relay peels exactly one layer and learns only its neighbours. No hop sees both ends.'],
+    mix:['live · mixing delay','Packets enter in order and leave reordered after random dwell — an observer can’t match input to output by timing.'],
+    cover:['live · cover traffic','Every client emits steady dummy loops. The real packet is injected and becomes indistinguishable — users are each other’s noise.'],
+    multi:['live · multipath split','One flow → k erasure-coded fragments across disjoint paths. Any m-of-k rebuilds it; a partial observer on a few paths cannot.'] };
+  qsa('#seg-mixer button').forEach(b=>b.onclick=()=>{ qsa('#seg-mixer button').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on'); currentMixerTab=b.dataset.m; tag.textContent=CAPS[currentMixerTab][0]; cap.textContent=CAPS[currentMixerTab][1];
+    startMixerTab(currentMixerTab); });
+
+  const el=qs('#c-mixer');
+  // ---- ONION ----
+  const onion=Canvas(el); { let pk=[];
+    onion.frame((ctx,W,H,t)=>{
+      const y=H/2, xs=[70, W*0.32, W*0.55, W*0.78, W-60];
+      const labels=['you','guard','relay','exit','dest']; const cols=[COL.vi,COL.cy,COL.cy,COL.cy,COL.gr];
+      for(let i=0;i<xs.length;i++){ if(i<xs.length-1) line(ctx,xs[i],y,xs[i+1],y,'rgba(120,150,220,.2)',1);
+        node(ctx,xs[i],y,7,cols[i],14); ctx.fillStyle=COL.dim; ctx.font='11px ui-monospace'; ctx.textAlign='center'; ctx.fillText(labels[i],xs[i],y+30);
+        if(i>0&&i<4){ctx.fillStyle='rgba(95,109,146,.8)'; ctx.font='9px ui-monospace'; ctx.fillText('knows ⟵ ⟶ only',xs[i],y-24);} }
+      if(Math.random()<0.03&&pk.length<3) pk.push({seg:0});
+      pk=pk.filter(p=>p.seg<4);
+      for(const p of pk){ p.seg+=0.012; const i=Math.floor(p.seg); const f=p.seg-i;
+        const x=lerp(xs[i],xs[Math.min(i+1,4)],f), yy=y;
+        const layers=Math.max(0,3-i);
+        for(let L=0;L<layers;L++){ ctx.strokeStyle=['rgba(168,85,247,.8)','rgba(34,211,238,.7)','rgba(244,114,182,.6)'][L];
+          ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(x,yy,7+L*5,0,TAU); ctx.stroke(); }
+        node(ctx,x,yy,3,COL.ink,10);
+        if(f<0.12&&i>0){ ctx.fillStyle='rgba(244,114,182,.9)'; ctx.font='10px ui-monospace'; ctx.fillText('− peel',x,yy-34); }
+      }
+    }); }
+  mixerCtrls.onion=onion;
+
+  // ---- MIXING ----
+  const mix=Canvas(el); { let inq=[], out=[], counter=0;
+    mix.frame((ctx,W,H,t)=>{
+      const mx=W/2, my=H/2, boxR=54;
+      ctx.strokeStyle='rgba(168,85,247,.5)'; ctx.lineWidth=1.5; ctx.strokeRect(mx-boxR,my-boxR,boxR*2,boxR*2);
+      ctx.fillStyle=COL.vi; ctx.font='11px ui-monospace'; ctx.textAlign='center'; ctx.fillText('MIX NODE',mx,my-boxR-10);
+      ctx.fillStyle=COL.dim; ctx.textAlign='left'; ctx.fillText('in order →',30,my-70); ctx.textAlign='right'; ctx.fillText('← reordered out',W-30,my-70);
+      if(Math.random()<0.03){ counter++; inq.push({id:counter,x:0,state:'in',dwell:rnd(0.6,2.2),held:0,y:my+rnd(-30,30)}); }
+      for(const p of inq){
+        if(p.state==='in'){ p.x+=0.010; const x=lerp(40,mx-boxR,p.x); if(p.x>=1){p.state='hold';}
+          drawPk(ctx,x,p.y,p.id); }
+        else if(p.state==='hold'){ p.held+=1/60; const jx=mx+rnd(-boxR*0.5,boxR*0.5)*0, jy=my+((p.id*37)%80-40);
+          drawPk(ctx,mx+Math.sin(p.id+t)*20,my+Math.cos(p.id*1.3+t)*20,p.id);
+          if(p.held>p.dwell){ p.state='out'; p.x=0; p.oy=my+rnd(-30,30); } }
+        else { p.x+=0.012; const x=lerp(mx+boxR,W-40,p.x); drawPk(ctx,x,p.oy,p.id); }
+      }
+      inq=inq.filter(p=>!(p.state==='out'&&p.x>=1));
+    });
+    function drawPk(ctx,x,y,id){ node(ctx,x,y,7,COL.cy,10); ctx.fillStyle='#05070f'; ctx.font='9px ui-monospace'; ctx.textAlign='center'; ctx.fillText(id%9,x,y+3); }
+  }
+  mixerCtrls.mix=mix;
+
+  // ---- COVER ----
+  const cover=Canvas(el); { let pk=[]; const lanes=5;
+    cover.frame((ctx,W,H,t)=>{
+      for(let l=0;l<lanes;l++){ const y=H*(0.18+l*0.16); line(ctx,50,y,W-50,y,'rgba(120,150,220,.10)',1);
+        node(ctx,50,y,5,COL.dim,6); node(ctx,W-50,y,5,COL.dim,6);
+        if(Math.random()<0.05) pk.push({l,x:0,real:Math.random()<0.16}); }
+      pk=pk.filter(p=>p.x<1);
+      for(const p of pk){ p.x+=0.006; const y=H*(0.18+p.l*0.16); const x=lerp(50,W-50,p.x);
+        if(p.real){ node(ctx,x,y,4.5,COL.mg,14); } else { node(ctx,x,y,3,'rgba(120,160,230,.55)',6); } }
+      ctx.fillStyle=COL.dim; ctx.font='11px ui-monospace'; ctx.textAlign='left'; ctx.fillText('dummy loop',60,H-40);
+      ctx.fillStyle=COL.mg; ctx.fillText('● real message — hidden in the noise',150,H-40);
+    }); }
+  mixerCtrls.cover=cover;
+
+  // ---- MULTIPATH ----
+  const multi=Canvas(el); { let frags=[], dropSet=new Set(), dropT=0; const K=5, M=3;
+    multi.frame((ctx,W,H,t)=>{
+      const sx=64, sy=H/2, dx=W-64, dy=H/2; const cols=[COL.cy,COL.vi,COL.mg,COL.gr,COL.am];
+      // define 5 arced paths
+      function pathY(i,f){ const midX=lerp(sx,dx,0.5); const spread=(i-(K-1)/2)*46; const arc=Math.sin(f*Math.PI)*spread;
+        return sy+arc; }
+      dropT+=1; if(dropT>170){ dropT=0; dropSet=new Set(); while(dropSet.size<K-M) dropSet.add(Math.floor(Math.random()*K)); }
+      // adversary zone covers paths 0..1
+      ctx.fillStyle='rgba(251,113,133,.07)'; ctx.fillRect(W*0.4,0,W*0.2,H*0.42);
+      ctx.strokeStyle='rgba(251,113,133,.4)'; ctx.setLineDash([4,4]); ctx.strokeRect(W*0.4,6,W*0.2,H*0.42-6); ctx.setLineDash([]);
+      ctx.fillStyle=COL.rd; ctx.font='10px ui-monospace'; ctx.textAlign='center'; ctx.fillText('partial observer',W*0.5,H*0.42+16);
+      for(let i=0;i<K;i++){ const dropped=dropSet.has(i);
+        ctx.strokeStyle=dropped?'rgba(120,150,220,.08)':'rgba(120,150,220,.22)'; ctx.lineWidth=1; ctx.beginPath();
+        for(let f=0;f<=1;f+=0.02){ const x=lerp(sx,dx,f), y=pathY(i,f); f===0?ctx.moveTo(x,y):ctx.lineTo(x,y); } ctx.stroke();
+      }
+      node(ctx,sx,sy,10,COL.vi,16); node(ctx,dx,dy,10,COL.gr,16);
+      ctx.fillStyle=COL.dim; ctx.textAlign='center'; ctx.font='11px ui-monospace'; ctx.fillText('you',sx,sy+28); ctx.fillText('dest',dx,dy+28);
+      if(Math.random()<0.04){ for(let i=0;i<K;i++) if(!dropSet.has(i)) frags.push({i,f:0}); }
+      frags=frags.filter(p=>p.f<1);
+      let seenByAdv=0;
+      for(const p of frags){ p.f+=0.008; const x=lerp(sx,dx,p.f), y=pathY(p.i,p.f);
+        node(ctx,x,y,4,cols[p.i],10);
+        if(x>W*0.4&&x<W*0.6&&y<H*0.42&&p.i<2){ } }
+      ctx.fillStyle=COL.ink; ctx.font='11px ui-monospace'; ctx.textAlign='left';
+      ctx.fillText('scheme: '+M+'-of-'+K+' fragments rebuild the flow',20,H-18);
+      ctx.fillStyle=COL.rd; ctx.textAlign='right'; ctx.fillText('observer sees ≤2 paths → cannot reconstruct',W-20,H-18);
+      ctx.fillStyle=COL.gr; ctx.textAlign='center'; ctx.fillText('dropped '+(K-M)+' paths, still delivered ✓',W/2,H-40);
+    }); }
+  mixerCtrls.multi=multi;
+})();
+function startMixerTab(tab){ Object.values(mixerCtrls).forEach(c=>c.stop()); const c=mixerCtrls[tab]; if(c){ c.play(); curControllers=[c]; } }
+
+/* ================= 07 LAYERING ================= */
+(function(){
+  const c=Canvas(qs('#c-layer')); let probe=0;
+  c.frame((ctx,W,H,t)=>{
+    const midX=W/2;
+    ctx.fillStyle=COL.dim; ctx.font='12px ui-monospace'; ctx.textAlign='center';
+    ctx.fillText('DEEP STACK — same threat, one key', W*0.26, 26);
+    ctx.fillText('WIDE MATRIX — orthogonal defenses', W*0.74, 26);
+    ctx.strokeStyle='rgba(120,150,220,.12)'; line(ctx,midX,10,midX,H-10,'rgba(120,150,220,.12)');
+    // left stack
+    const lx=W*0.26, lw=W*0.30; const layers=5; const top=54, lh=(H-110)/layers;
+    probe+=0.006; const pp=(probe%1);
+    for(let i=0;i<layers;i++){ const y=top+i*lh; const pierced=pp> (i+1)/(layers+1);
+      ctx.strokeStyle=pierced?'rgba(251,113,133,.8)':'rgba(120,150,220,.35)'; ctx.lineWidth=1.4;
+      ctx.fillStyle=pierced?'rgba(251,113,133,.08)':'rgba(120,150,220,.05)';
+      ctx.fillRect(lx-lw/2,y,lw,lh-8); ctx.strokeRect(lx-lw/2,y,lw,lh-8);
+      ctx.fillStyle='rgba(150,170,220,.6)'; ctx.font='10px ui-monospace'; ctx.fillText('obfuscation layer '+(i+1),lx,y+lh/2); }
+    // drill
+    const drillY=top+pp*(H-110); node(ctx,lx,drillY,5,COL.rd,16);
+    ctx.fillStyle=COL.rd; ctx.font='10px ui-monospace'; ctx.fillText('one exploit',lx,top-8);
+    if(pp>0.9){ ctx.fillStyle=COL.rd; ctx.fillText('▼ drilled through all — same failure mode',lx,H-22); }
+    // right matrix 3x3
+    const rx=W*0.74, gw=W*0.30, gh=H-110, gtop=54, cw=gw/3, ch=gh/3; const cols=[COL.cy,COL.vi,COL.mg,COL.gr,COL.am,COL.cy,COL.vi,COL.mg,COL.gr];
+    for(let i=0;i<9;i++){ const cxi=i%3, cyi=(i/3)|0; const x=rx-gw/2+cxi*cw, y=gtop+cyi*ch;
+      ctx.strokeStyle='rgba(120,150,220,.3)'; ctx.strokeRect(x+3,y+3,cw-6,ch-6);
+      node(ctx,x+cw/2,y+ch/2,3,cols[i],6); }
+    // attacker path stalls
+    const step=Math.floor((t*1.2)%4); const path=[[0,2],[1,2],[1,1]];
+    for(let s=0;s<=Math.min(step,path.length-1);s++){ const[cxi,cyi]=path[s]; const x=rx-gw/2+cxi*cw+cw/2, y=gtop+cyi*ch+ch/2;
+      node(ctx,x,y,5,COL.am,12); if(s>0){const[px,py]=path[s-1]; line(ctx,rx-gw/2+px*cw+cw/2,gtop+py*ch+ch/2,x,y,'rgba(251,191,36,.5)',1.4);} }
+    if(step>=path.length-1){ const[cxi,cyi]=path[path.length-1]; const x=rx-gw/2+cxi*cw+cw/2, y=gtop+cyi*ch+ch/2;
+      ctx.strokeStyle=COL.rd; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(x,y,12,0,TAU); ctx.stroke();
+      ctx.fillStyle=COL.rd; ctx.font='10px ui-monospace'; ctx.fillText('stalled ✕',rx,H-22); }
+  });
+  reg('layering',c);
+})();
+
+/* ================= 11 END-TO-END (12 stages, all additions) ================= */
+(function(){
+  const c=Canvas(qs('#c-cap')); let stage=0, playing=false, stageT=0;
+  const STAGES=[
+    ['Hardened endpoint','A compartmentalized client with ephemeral keys and ONE uniform fingerprint — identical to every other client, which is what feeds the crowd. [Add 2]'],
+    ['Pick a lane','FAST (interactive, onion-only, Tor-class latency) or MIX (bulk/sensitive, full Poisson delay). The choice is sealed inside the onion. [D21]'],
+    ['Admitted, not identified','An unlinkable Privacy-Pass token proves the client paid admission — the network lets it in without learning who it is. [Add 3]'],
+    ['Onion wrap','Payload wrapped in 3 Sphinx layers to a stable guard. Guard knows you-not-destination; exit knows destination-not-you. [class 1+2]'],
+    ['Disguised on the wire','The first hop is wrapped in a pluggable transport — the censoring ISP sees looks-like-nothing or HTTPS/HTTP-3, never “Gyre”. [Add 1]'],
+    ['Multipath split','Erasure-coded into k fragments over disjoint paths. HONEST: this hardens the middle path only — NOT a reconstruction threshold, and endpoints stay exposed. [class 6]'],
+    ['Mix & cover','Each hop applies its lane’s Poisson delay and emits Loopix cover loops; on the MIX lane an observer can’t match input to output by timing. [class 3]'],
+    ['Partial observer','An observer on a couple of paths sees fragments it can’t rebuild — but the honest risk was never the middle, it’s the endpoints and the crowd size.'],
+    ['Reassembly','Any m-of-k fragments rebuild the flow at the exit / rendezvous. Dropped paths cost nothing.'],
+    ['Private lookup','To reach a protected service, the client fetches its rendezvous descriptor via PIR — the directory never learns which service. [Add 6]'],
+    ['Inbound shield','Origin never published; reached via a rendezvous relay that sees only ciphertext; ingress hops on HMAC(key,window); floods priced out by PoW. [inbound]'],
+    ['Delivered — honestly','No hop saw both ends; no partial observer could correlate the middle; the origin was never exposed. Ceilings still bind: crowd-gated, not global-observer-proof.']
+  ];
+  const dots=qs('#cap-dots'), tagEl=qs('#cap-stage-tag'), capEl=qs('#cap-cap');
+  function setStage(s){ stage=(s+STAGES.length)%STAGES.length; stageT=0; tagEl.textContent='stage '+(stage+1)+' / '+STAGES.length;
+    capEl.innerHTML='<b style="color:var(--ink)">'+STAGES[stage][0]+'</b> — '+STAGES[stage][1];
+    dots.textContent=STAGES.map((_,i)=>i===stage?'●':'·').join(''); }
+  qs('#cap-play').onclick=function(){ playing=!playing; this.textContent=playing?'❚❚ Pause':'▶ Play'; };
+  qs('#cap-prev').onclick=()=>{playing=false; qs('#cap-play').textContent='▶ Play'; setStage(stage-1);};
+  qs('#cap-next').onclick=()=>{playing=false; qs('#cap-play').textContent='▶ Play'; setStage(stage+1);};
+  const cols=[COL.cy,COL.vi,COL.mg,COL.gr,COL.am];
+  c.frame((ctx,W,H,t)=>{
+    stageT+=1/60; if(playing && stageT>3.6) setStage(stage+1);
+    const you={x:66,y:H/2}, dest={x:W-66,y:H/2}, p=clamp(stageT/2.4,0,1);
+    const guardX=W*0.26, exitX=W*0.74;
+    line(ctx,you.x,you.y,dest.x,dest.y,'rgba(120,150,220,.10)',1);
+    node(ctx,you.x,you.y,10,COL.vi,16); node(ctx,dest.x,dest.y,10,COL.gr,16);
+    ctx.fillStyle=COL.dim; ctx.font='11px ui-monospace'; ctx.textAlign='center'; ctx.textBaseline='alphabetic';
+    ctx.fillText('you',you.x,you.y+28); ctx.fillText('service',dest.x,dest.y+28);
+    function annot(s,col){ ctx.fillStyle=col||'#93a0c4'; ctx.font='12px ui-monospace'; ctx.textAlign='center'; ctx.fillText(s,W/2,32); }
+    const K=5, drop=new Set([1,4]);
+    function fan(dim){ for(let i=0;i<K;i++){ const spread=(i-2)*40, dead=dim&&drop.has(i);
+      ctx.strokeStyle=dead?'rgba(120,150,220,.08)':'rgba(120,150,220,.2)'; ctx.lineWidth=1; ctx.beginPath();
+      for(let f=0;f<=1;f+=0.02){ const x=lerp(you.x,dest.x,f), y=you.y+Math.sin(f*Math.PI)*spread; f===0?ctx.moveTo(x,y):ctx.lineTo(x,y);} ctx.stroke(); } }
+    function frags(dim){ const prog=(t*0.16)%1; for(let i=0;i<K;i++){ if(dim&&drop.has(i))continue; const spread=(i-2)*40, f=(prog+i*0.13)%1;
+      node(ctx,lerp(you.x,dest.x,f),you.y+Math.sin(f*Math.PI)*spread,4,cols[i],10); } }
+
+    if(stage===0){ ctx.strokeStyle='rgba(52,211,153,.7)'; ctx.lineWidth=1.4; ctx.beginPath(); ctx.arc(you.x,you.y,17+Math.sin(t*3)*3,0,TAU); ctx.stroke();
+      annot('endpoint hardened · uniform fingerprint',COL.gr); }
+    else if(stage===1){ line(ctx,you.x,you.y-16,dest.x,you.y-16,'rgba(34,211,238,.5)',1.4); line(ctx,you.x,you.y+16,dest.x,you.y+16,'rgba(168,85,247,.5)',1.4);
+      ctx.fillStyle=COL.cy; ctx.font='10px ui-monospace'; ctx.textAlign='left'; ctx.fillText('FAST · onion only',you.x+12,you.y-22);
+      ctx.fillStyle=COL.vi; ctx.fillText('MIX · full Poisson',you.x+12,you.y+30); annot('per-flow lane, sealed in the onion',COL.ink); }
+    else if(stage===2){ node(ctx,guardX,you.y,7,COL.cy,12); const x=lerp(you.x,guardX,p);
+      ctx.fillStyle=COL.vi; ctx.font='13px ui-monospace'; ctx.textAlign='center'; ctx.fillText('◆',x,you.y-13); annot('Privacy-Pass token · admitted, not identified',COL.vi); }
+    else if(stage===3){ node(ctx,guardX,you.y,7,COL.cy,12); ctx.fillStyle=COL.dim; ctx.font='11px ui-monospace'; ctx.textAlign='center'; ctx.fillText('guard',guardX,you.y+24);
+      const x=lerp(you.x,guardX,p); for(let Lr=0;Lr<3;Lr++){ ctx.strokeStyle=cols[Lr]; ctx.lineWidth=1.5; ctx.beginPath(); ctx.arc(x,you.y,7+Lr*5,0,TAU); ctx.stroke(); }
+      annot('3-layer Sphinx onion → guard',COL.ink); }
+    else if(stage===4){ ctx.strokeStyle='rgba(52,211,153,.55)'; ctx.lineWidth=6; ctx.beginPath(); ctx.moveTo(you.x,you.y); ctx.lineTo(guardX,you.y); ctx.stroke();
+      node(ctx,guardX,you.y,7,COL.cy,12); node(ctx,lerp(you.x,guardX,(t*0.4)%1),you.y,3,COL.ink,8); annot('first hop wrapped — looks like HTTPS / HTTP-3',COL.gr); }
+    else if(stage===5){ fan(false); frags(false); annot('split into k fragments — middle-path hardening only',COL.mg); }
+    else if(stage===6){ fan(false); frags(false);
+      for(let l=0;l<4;l++){ const y=H*0.2+l*0.2*H; for(let k=0;k<6;k++) node(ctx,lerp(110,W-110,(k+(t*0.1)%1)/6),y,1.5,'rgba(120,160,230,.4)',3); }
+      annot('Poisson delay + Loopix cover — timing unlinkable',COL.cy); }
+    else if(stage===7){ fan(true); frags(true);
+      ctx.fillStyle='rgba(251,113,133,.08)'; ctx.fillRect(W*0.42,0,W*0.16,H*0.52);
+      ctx.strokeStyle='rgba(251,113,133,.4)'; ctx.setLineDash([4,4]); ctx.strokeRect(W*0.42,6,W*0.16,H*0.52-6); ctx.setLineDash([]);
+      ctx.fillStyle=COL.rd; ctx.font='11px ui-monospace'; ctx.textAlign='center'; ctx.fillText('partial observer: middle only',W*0.5,H*0.52+16);
+      annot('middle safe — but endpoints are the real risk',COL.rd); }
+    else if(stage===8){ fan(false); frags(false); node(ctx,exitX,you.y,7,COL.cy,12);
+      ctx.fillStyle=COL.gr; ctx.font='11px ui-monospace'; ctx.textAlign='center'; ctx.fillText('m-of-k reassembled ✓',exitX,you.y-46); annot('any m fragments rebuild the flow',COL.gr); }
+    else if(stage===9){ ctx.strokeStyle='rgba(168,85,247,.6)'; ctx.setLineDash([3,3]); ctx.beginPath(); ctx.arc(dest.x,dest.y,30,0,TAU); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle=COL.vi; ctx.font='10px ui-monospace'; ctx.textAlign='center'; ctx.fillText('PIR: which service = hidden',dest.x,dest.y-40); annot('private rendezvous lookup',COL.vi); }
+    else if(stage===10){ ctx.strokeStyle='rgba(52,211,153,.7)'; ctx.setLineDash([4,3]); ctx.beginPath(); ctx.arc(dest.x,dest.y,26,0,TAU); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle=COL.gr; ctx.font='10px ui-monospace'; ctx.textAlign='center'; ctx.fillText('rendezvous · origin hidden · MTD · PoW',dest.x,dest.y-40); annot('inbound shield — ciphertext-only intermediary',COL.gr); }
+    else { ctx.save(); ctx.shadowColor=COL.gr; ctx.shadowBlur=30; ctx.strokeStyle=COL.gr; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(dest.x,dest.y,20,0,TAU); ctx.stroke(); ctx.restore();
+      node(ctx,lerp(you.x,dest.x,(t*0.3)%1),you.y,3,COL.ink,8); annot('delivered — crowd-gated, not global-observer-proof',COL.gr); }
+  });
+  setStage(0); reg('capstone',c);
+})();
+
+/* ================= 08 CLASSES coverage radar ================= */
+(function(){
+  const cv=qs('#c-classes'); if(!cv) return; const c=Canvas(cv);
+  const V=[1,1,1,1,.62,1,.5,1,1,1,1,.4,1];
+  // status per dim: covered / library (built, not wired) / crowd (binding constraint) / physics (uncoverable)
+  const S=['cov','cov','cov','cov','lib','cov','crowd','cov','cov','cov','cov','phys','cov'];
+  const L=['Content','Path','Timing','Appear','Exist','Whole','Crowd','Access','Auth','Persist','Trust','Endpt','Cost'];
+  const N=V.length; window._clsHi=-1;
+  const STCOL={cov:COL.gr, lib:COL.cy, crowd:COL.am, phys:COL.rd};
+  const colFor=(v,i)=>STCOL[S[i]];
+  qsa('.crow').forEach(r=>{ r.addEventListener('mouseenter',()=>window._clsHi=+r.dataset.dim);
+    r.addEventListener('mouseleave',()=>window._clsHi=-1); });
+  c.frame((ctx,W,H,t)=>{
+    const cx=W/2, cy=H/2+4, R=Math.min(W,H)*0.33;
+    for(let g=1;g<=4;g++){ ctx.strokeStyle='rgba(120,150,220,.09)'; ctx.lineWidth=1; ctx.beginPath();
+      for(let i=0;i<=N;i++){ const a=-Math.PI/2+(i%N)*TAU/N, r=R*g/4, x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r; i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);} ctx.closePath(); ctx.stroke(); }
+    for(let i=0;i<N;i++){ const a=-Math.PI/2+i*TAU/N, x=cx+Math.cos(a)*R, y=cy+Math.sin(a)*R;
+      line(ctx,cx,cy,x,y,'rgba(120,150,220,.10)',1);
+      const hi=window._clsHi===i, lx=cx+Math.cos(a)*(R+20), ly=cy+Math.sin(a)*(R+20);
+      ctx.fillStyle=hi?COL.ink:'rgba(147,160,196,.8)'; ctx.font=(hi?'bold ':'')+'10px ui-monospace';
+      ctx.textAlign=Math.abs(Math.cos(a))<0.3?'center':(Math.cos(a)>0?'left':'right'); ctx.fillText(L[i],lx,ly+3); }
+    ctx.beginPath(); for(let i=0;i<=N;i++){ const j=i%N, a=-Math.PI/2+j*TAU/N, r=R*V[j], x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r; i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);} ctx.closePath();
+    ctx.fillStyle='rgba(34,211,238,.09)'; ctx.fill(); ctx.strokeStyle='rgba(34,211,238,.5)'; ctx.lineWidth=1.5; ctx.stroke();
+    for(let i=0;i<N;i++){ const a=-Math.PI/2+i*TAU/N, r=R*V[i], x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r, col=colFor(V[i]);
+      const pulse=S[i]==='cov'?1+Math.sin(t*3+i)*0.3:1; node(ctx,x,y,3.2*pulse,col,10);
+      if(window._clsHi===i){ ctx.strokeStyle=col; ctx.lineWidth=1.6; ctx.beginPath(); ctx.arc(x,y,9,0,TAU); ctx.stroke(); } }
+    const sa=(t*0.5)%TAU; line(ctx,cx,cy,cx+Math.cos(sa)*R,cy+Math.sin(sa)*R,'rgba(168,85,247,.22)',1.5);
+    ctx.textAlign='left'; ctx.font='10px ui-monospace';
+    ctx.fillStyle=COL.gr; ctx.fillText('● covered',12,H-12); ctx.fillStyle=COL.cy; ctx.fillText('● library',92,H-12); ctx.fillStyle=COL.am; ctx.fillText('● crowd',176,H-12); ctx.fillStyle=COL.rd; ctx.fillText('● physics',252,H-12);
+  });
+  reg('classes',c);
+})();
+
+/* ================= NAV / ROUTER ================= */
+const railEl=qs('#rail'), scrim=qs('#scrim');
+function go(id){
+  qsa('section.page').forEach(s=>s.classList.toggle('on',s.id===id));
+  qsa('.navlink').forEach(n=>n.classList.toggle('on',n.dataset.go===id));
+  const idx=SECTIONS.indexOf(id); qs('#progress').style.width=((idx)/(SECTIONS.length-1)*100)+'%';
+  window.scrollTo({top:0,behavior:'instant'});
+  startSection(id);
+  railEl.classList.remove('open'); scrim.classList.remove('on');
+  history.replaceState(null,'','#'+id);
+}
+// Derived from the DOM, not hardcoded: a hardcoded list silently desynchronises the
+// moment a page is added — arrow-key nav skips it and the progress bar reads short.
+const SECTIONS=qsa('section.page').map(s=>s.id);
+qsa('[data-go]').forEach(b=>b.addEventListener('click',()=>go(b.dataset.go)));
+qs('#menu').onclick=()=>{ railEl.classList.toggle('open'); scrim.classList.toggle('on'); };
+scrim.onclick=()=>{ railEl.classList.remove('open'); scrim.classList.remove('on'); };
+addEventListener('keydown',e=>{ if(e.target.tagName==='INPUT')return; const i=SECTIONS.indexOf(qsa('section.page.on')[0].id);
+  if(e.key==='ArrowRight'&&i<SECTIONS.length-1) go(SECTIONS[i+1]);
+  if(e.key==='ArrowLeft'&&i>0) go(SECTIONS[i-1]); });
+
+// boot
+const start=(location.hash||'#overview').slice(1);
+go(SECTIONS.includes(start)?start:'overview');
+</script>
+</body>
+</html>
