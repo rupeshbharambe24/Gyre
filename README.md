@@ -451,6 +451,7 @@ bearing on anonymity properties.
 
 | Document | What's in it |
 |---|---|
+| [`docs/Gyre-Technical-Report.docx`](docs/Gyre-Technical-Report.docx) | **Complete technical documentation** (Word): 35 sections across 9 parts + appendices, 8 figures, 14 tables, 27 references — the whole project in one document, and the basis for a research paper |
 | [`docs/DESIGN.md`](docs/DESIGN.md) | The full design, the decisions log (D1–D22), and the honest ceilings |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | How the crates fit together and data flows through the fabric |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Milestone history and what "complete" means for each phase |
