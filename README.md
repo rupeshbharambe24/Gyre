@@ -17,9 +17,9 @@ can host both — client anonymity *and* onion-service origin-hiding.
 > [!WARNING]
 > **Early research. Experimental. Unaudited.** Do **not** rely on Gyre for
 > real anonymity or safety yet. It is being built in the open, milestone by
-> milestone, and every claim is *measured* before it is trusted. The one
-> hand-built cryptographic construction (the VOPRF capability token) is an
-> unaudited prototype — treated as such wherever it appears.
+> milestone, and every claim is *measured* before it is trusted. The VOPRF
+> capability token uses the maintained `voprf` crate (RFC 9497), but the
+> integration around it is an **unaudited** prototype — treated as such wherever it appears.
 
 ---
 

@@ -428,6 +428,20 @@ hash-to-group sound?), Q3 (is the transcript complete?) and Q6 (should we adopt 
 are all resolved by using the RFC implementation. What remains is narrower and, we think,
 more answerable:
 
+> [!NOTE]
+> **External confirmation (2026-11-17) — the `voprf` maintainer on the pinning pattern.**
+> In response to a question on the upstream crate ([`facebook/voprf#158`](https://github.com/facebook/voprf/issues/158)),
+> **Kevin Lewi** — author of `voprf` and a co-author of RFC 9497 — confirmed the design this
+> package depends on:
+> > "out-of-band pinning is the intended pattern, since voprf doesn't authenticate the public key. If the pinned key and the server's actual key disagree, finalize returns an error."
+>
+> This directly supports **Q-A** (that `finalize` is the proof-verifying call and fails closed on a
+> key mismatch — no silent, linkable success) and **Q-C** (that out-of-band pinning of `Y` is the
+> intended way to defeat issuer key-partitioning). It confirms the *pattern and correct library
+> usage*, from the library's own author — it is **not** an audit of Gyre's surrounding plumbing
+> (key provenance, single-use set, epoch rotation, wire encodings), which remains unreviewed. The
+> questions below still stand.
+
 1. **Q-A — Is the library used correctly?** Ciphersuite choice, argument order, that
    `finalize` really is the proof-verifying call, and that the same input reaches both
    `blind` and `finalize`. A mismatch would produce tokens that silently never verify.

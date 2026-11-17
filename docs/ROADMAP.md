@@ -67,17 +67,18 @@ Milestone by milestone, with the one-line result that closed it:
 | [x] | **Inbound rotor** | `gyre-shield` (11 tests) | MTD address hopping via `HMAC(key, time_window)`, PoW admission, rendezvous origin-hiding, and unlinkable VOPRF capability tokens. |
 | [x] | **P3 · obfuscation** | `gyre-obfs` | Pluggable-transport framework + transports + an entropy meter — **appearance only, zero anonymity effect.** |
 | [x] | **P3 · endpoint** | `gyre-endpoint` | Forward-secret ratchet, compartmentalised personas, one **uniform client fingerprint** so real users blend. |
-| [x] | **P3 · anonymous credentials** | `gyre-shield` | Delivered **as** the VOPRF capability token (RFC 9497 *shape*, hand-built **prototype, UNAUDITED**) — proves "authorised" with zero identity. |
+| [x] | **P3 · anonymous credentials** | `gyre-shield` | Delivered **as** the VOPRF capability token (the maintained `voprf` crate, RFC 9497; surrounding integration **UNAUDITED**) — proves "authorised" with zero identity. |
 | [x] | **P3 · directory** | `gyre-directory` | Threshold-signed consensus, equivocation detection, and build attestation — **detection, not prevention.** |
 | [x] | **P3 · PIR** | `gyre-pir` | 2-server IT-PIR for directory retrieval, **default OFF** — a full signed download is leak-free and cheaper at this scale. |
 | [x] | **P3 · steganography** | `gyre-stego` | LSB steganography for deniability — **situational; trivially detectable**, stated in the crate's own output. |
 | [x] | **P4 · crowd / incentives** | `gyre-crowd` | k-anonymity admission governor + a staking Sybil-*pricing* model (staking adds no intrinsic Sybil resistance — the scarce resource does). |
 
 > [!NOTE]
-> **VOPRF caveat, restated wherever tokens appear:** the capability-token
-> construction is a hand-built prototype on `curve25519-dalek` primitives in the
-> RFC 9497 shape. It has **not** been externally audited. Treat it as a research
-> artifact, not a deployable credential system.
+> **VOPRF caveat, restated wherever tokens appear:** the capability token is built
+> on the maintained `voprf` crate (RFC 9497 `ristretto255-SHA512`). What is Gyre's
+> own is the plumbing around it — key pinning, single-use set, epoch rotation, wire
+> format — and that integration has **not** been externally audited. Treat it as a
+> research artifact, not a deployable credential system.
 
 ### The GATE: the go/no-go number
 
@@ -169,7 +170,8 @@ merged in a pull request:
    of the concurrent anonymity set; the GATE proved that a tiny crowd defeats even
    correct mixing (`5 flows → 0.44`). No code manufactures this number.
 2. **External crypto audits** — independent review of the integration, and
-   especially of the hand-built VOPRF capability-token prototype.
+   especially of the VOPRF capability-token plumbing (key pinning, single-use set,
+   epoch rotation) around the `voprf` crate.
 
 Below are the **honest crowd levers** the codebase actually ships. Each helps at the
 margin. **None of them manufactures a real concurrent sender** — and the roadmap
@@ -197,8 +199,8 @@ Non-promissory by design: these are the conditions that *would* move Gyre from
 requirements, not as a schedule.
 
 - **External security audit.** Independent review of the whole integration, with the
-  hand-built **VOPRF capability-token prototype** as the first target. Until then,
-  "UNAUDITED" stands.
+  **VOPRF capability-token plumbing** (around the maintained `voprf` crate) as the
+  first target. Until then, "UNAUDITED" stands.
 - **A live crowd.** Real concurrent senders at mix latency — the single number no
   code change can fake, and the one the GATE says everything depends on.
 - **A live QUIC deployment.** The transport is implemented and authenticated, but has only

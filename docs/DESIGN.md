@@ -150,8 +150,8 @@ manufactures a crowd (decisions [D3](#appendix-a--decisions-log-d1-d22),
   closed/authorised client set — not arbitrary open-web clients.)
 - **Proof-of-work admission** that scales with load: prices out floods.
 - **Unlinkable capability tokens**: fast-path trusted clients without identity.
-  The token construction is a hand-built **prototype** (RFC 9497-shaped VOPRF on
-  `curve25519-dalek` primitives) and is **UNAUDITED**.
+  The token uses the maintained `voprf` crate (RFC 9497 `ristretto255-SHA512`); the
+  integration around it (key pinning, single-use set, rotation) is **UNAUDITED**.
 
 Honest limit: this hides the origin and prices admission, but offers **no L3/L4
 volumetric defence** and depends on a healthy relay crowd (decisions

@@ -94,9 +94,9 @@ flowchart TB
   *authorized* without revealing *who* it is. The holder redeems it for fast-path
   access; the issuer cannot connect the redemption back to the issuance.
   - _In Gyre:_ implemented as a VOPRF token in `gyre-shield`
-    (`blind` → `issue` → `unblind` → `verify`/`redeem`). Honest ceiling: this is a
-    hand-built **prototype** on `curve25519-dalek` primitives (RFC 9497 shape) and
-    is **unaudited**. Anonymous credentials also add *zero* intrinsic Sybil
+    (`blind` → `issue` → `unblind` → `verify`/`redeem`). Honest ceiling: this uses the
+    maintained `voprf` crate (RFC 9497 shape); the integration around it is
+    **unaudited**. Anonymous credentials also add *zero* intrinsic Sybil
     resistance — the scarce resource (proof-of-work / stake) does; see **VOPRF**.
 
 - **Cover traffic (Loopix loops)** — Decoy messages that look exactly like real
@@ -354,8 +354,8 @@ flowchart TB
   a client gets the output of a keyed function on its input *without* the server
   learning the input, and can *verify* the server used the right key. It's the
   engine behind unlinkable, verifiable capability tokens (the Privacy-Pass shape).
-  - _In Gyre:_ the `gyre-shield` capability token is a hand-built VOPRF
-    **prototype** on `curve25519-dalek` (RFC 9497 shape) — and it is **unaudited**.
+  - _In Gyre:_ the `gyre-shield` capability token is built on the maintained `voprf`
+    crate (RFC 9497 shape); the integration around it is **unaudited**.
     Say so wherever tokens are mentioned. It provides unlinkable authorization, not
     Sybil resistance (see **Sybil attack**, **Proof-of-work admission**).
 
