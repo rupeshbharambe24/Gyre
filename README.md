@@ -278,7 +278,7 @@ cargo run -p gyre-stego       # LSB steganography (situational)
 
 ## Crate map
 
-Fifteen crates, 171 tests, all green.
+Fifteen crates, 225 tests passing, all green.
 
 | Crate | Purpose | Tests |
 |---|---|:--:|
@@ -299,9 +299,9 @@ Fifteen crates, 171 tests, all green.
 | `gyre-cli` | Standalone `gyre-relay` / `gyre-client` / `gyre-sink` binaries — real processes on real sockets | 4 |
 | **Total (unit tests in this table)** | | **140** |
 
-> The workspace total is **172** passing tests — this column counts only the unit tests
-> per crate, and excludes integration suites, property tests and doc-tests. Verify with
-> `cargo test --workspace`.
+> This column sums to **140** — the per-crate unit tests only. A full `cargo test --workspace`
+> run (unit + integration + property + doc-tests) reports **225 passing, 0 failed** — the number
+> in the badge above, verified 2026-11-24. Reproduce with `cargo test --workspace`.
 
 ---
 
